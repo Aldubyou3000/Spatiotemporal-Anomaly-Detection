@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
+import folium
+from streamlit_folium import st_folium
 
 from zone.zone_a import zone_a_linear_interpolation
 from zone.zone_b import zone_b_haversine_grouping
@@ -36,21 +37,6 @@ st.markdown("""
         color: #888;
         margin-bottom: 2rem;
     }
-    .metric-card {
-        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
-        padding: 1.2rem;
-        border-radius: 10px;
-        text-align: center;
-    }
-    .metric-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #fff;
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #aaa;
-    }
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
@@ -66,16 +52,55 @@ st.markdown("""
 # HELPER FUNCTIONS
 # ============================================================================
 
-def load_sample_data():
-    """Load sample CSV data."""
-    df = pd.read_csv('prototypes/qc_aws_dummy_data.csv')
-    df['date'] = pd.to_datetime(df['date'])
-    return df
-
-
 def convert_df_to_csv(df):
     """Convert DataFrame to CSV bytes for download."""
     return df.to_csv(index=False).encode('utf-8')
+
+
+def create_station_map(stations_df):
+    """Create a Folium map with station markers.
+
+    Parameters:
+    -----------
+    stations_df : pd.DataFrame
+        DataFrame with 'latitude' and 'longitude' columns
+
+    Returns:
+    --------
+    folium.Map
+        A Folium map object with markers for each station
+    """
+    if len(stations_df) == 0:
+        return None
+
+    # Calculate map center
+    center_lat = stations_df['latitude'].mean()
+    center_lon = stations_df['longitude'].mean()
+
+    # Create map
+    map_obj = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=11,
+        tiles="OpenStreetMap"
+    )
+
+    # Add markers for each station
+    for idx, row in stations_df.iterrows():
+        station_id = row.get('station_id', f'Station {idx}')
+        folium.CircleMarker(
+            location=[row['latitude'], row['longitude']],
+            radius=8,
+            popup=folium.Popup(
+                f"<b>Station ID:</b> {station_id}", max_width=300),
+            tooltip=station_id,
+            color='#0066FF',
+            fill=True,
+            fillColor='#0066FF',
+            fillOpacity=0.7,
+            weight=2
+        ).add_to(map_obj)
+
+    return map_obj
 
 
 def create_station_chart(station_data, anomaly_dates):
@@ -119,7 +144,8 @@ def create_station_chart(station_data, anomaly_dates):
         legend=dict(orientation='h', yanchor='bottom', y=1.02),
         xaxis=dict(title=''),
         yaxis=dict(title='Temp (C)', side='left', color='#4ECDC4'),
-        yaxis2=dict(title='Humidity (%)', side='right', overlaying='y', color='#45B7D1'),
+        yaxis2=dict(title='Humidity (%)', side='right',
+                    overlaying='y', color='#45B7D1'),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(size=11)
@@ -182,24 +208,19 @@ with st.sidebar:
 # MAIN CONTENT
 # ============================================================================
 
-st.markdown('<p class="main-header">AWS Quality Control Pipeline</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Automated Weather Station Data Processing & Anomaly Detection</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">AWS Quality Control Pipeline</p>',
+            unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Automated Weather Station Data Processing & Anomaly Detection</p>',
+            unsafe_allow_html=True)
 
 # Data loading section
 st.markdown("### Data Input")
 
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    uploaded_file = st.file_uploader(
-        "Upload your CSV file",
-        type=['csv'],
-        help="CSV must contain: station_id, date, latitude, longitude, temperature, humidity"
-    )
-
-with col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    use_sample = st.button("Load Sample Data", use_container_width=True)
+uploaded_file = st.file_uploader(
+    "Upload your CSV file",
+    type=['csv'],
+    help="CSV must contain: station_id, date, latitude, longitude, temperature, humidity"
+)
 
 # Initialize session state
 if 'raw_data' not in st.session_state:
@@ -213,13 +234,9 @@ if 'current_file_name' not in st.session_state:
 if uploaded_file is not None:
     if st.session_state.current_file_name != uploaded_file.name:
         st.session_state.raw_data = pd.read_csv(uploaded_file)
-        st.session_state.raw_data['date'] = pd.to_datetime(st.session_state.raw_data['date'])
+        st.session_state.raw_data['date'] = pd.to_datetime(
+            st.session_state.raw_data['date'])
         st.session_state.current_file_name = uploaded_file.name
-        st.session_state.processed = False
-elif use_sample:
-    if st.session_state.current_file_name != 'sample_data':
-        st.session_state.raw_data = load_sample_data()
-        st.session_state.current_file_name = 'sample_data'
         st.session_state.processed = False
 
 # Display and process data
@@ -233,13 +250,15 @@ if st.session_state.raw_data is not None:
     with col2:
         st.metric("Stations", raw_data['station_id'].nunique())
     with col3:
-        missing = raw_data['temperature'].isna().sum() + raw_data['humidity'].isna().sum()
+        missing = raw_data['temperature'].isna().sum() + \
+            raw_data['humidity'].isna().sum()
         st.metric("Missing Values", missing)
 
     st.markdown("---")
 
     # Run pipeline button
-    run_pipeline = st.button("Run Pipeline", type="primary", use_container_width=True)
+    run_pipeline = st.button(
+        "Run Pipeline", type="primary", use_container_width=True)
 
     if run_pipeline:
         with st.spinner("Processing data through Zone A -> Zone B -> Zone C..."):
@@ -247,7 +266,8 @@ if st.session_state.raw_data is not None:
             cleaned_data = zone_a_linear_interpolation(raw_data)
 
             # Zone B: Haversine Grouping
-            neighbors = zone_b_haversine_grouping(cleaned_data, distance_threshold)
+            neighbors = zone_b_haversine_grouping(
+                cleaned_data, distance_threshold)
 
             # Zone C: LOF Anomaly Detection
             flagged_data, anomaly_summary = zone_c_lof_anomaly_detection(
@@ -315,8 +335,14 @@ if st.session_state.raw_data is not None:
 
         # Station map
         st.markdown("### Station Locations")
-        stations = flagged_data[['station_id', 'latitude', 'longitude']].drop_duplicates()
-        st.map(stations, latitude='latitude', longitude='longitude', size=50)
+        stations = flagged_data[['station_id',
+                                 'latitude', 'longitude']].drop_duplicates()
+
+        if len(stations) > 0:
+            station_map = create_station_map(stations)
+            st_folium(station_map, width=1300, height=500)
+        else:
+            st.warning("No station data available for map visualization.")
 
         st.markdown("---")
 
@@ -338,18 +364,23 @@ if st.session_state.raw_data is not None:
 
             col1, col2 = st.columns([1, 4])
             with col1:
-                raw_page = st.selectbox("Page", options=range(1, total_pages + 1), key="raw_page")
+                raw_page = st.selectbox("Page", options=range(
+                    1, total_pages + 1), key="raw_page")
             with col2:
-                st.markdown(f"<br>*Showing rows {(raw_page-1)*page_size + 1} - {min(raw_page*page_size, len(raw_data))} of {len(raw_data)}*", unsafe_allow_html=True)
+                st.markdown(
+                    f"<br>*Showing rows {(raw_page-1)*page_size + 1} - {min(raw_page*page_size, len(raw_data))} of {len(raw_data)}*", unsafe_allow_html=True)
 
-            st.dataframe(paginate_dataframe(raw_data, page_size, raw_page), hide_index=True, use_container_width=True)
+            st.dataframe(paginate_dataframe(raw_data, page_size,
+                         raw_page), hide_index=True, use_container_width=True)
 
             st.markdown("#### Missing Value Statistics")
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Missing Temperature", raw_data['temperature'].isna().sum())
+                st.metric("Missing Temperature",
+                          raw_data['temperature'].isna().sum())
             with col2:
-                st.metric("Missing Humidity", raw_data['humidity'].isna().sum())
+                st.metric("Missing Humidity",
+                          raw_data['humidity'].isna().sum())
 
         # Tab 2: Cleaned Data
         with tab2:
@@ -357,52 +388,101 @@ if st.session_state.raw_data is not None:
 
             # Pagination
             page_size = 10
-            total_pages_cleaned = max(1, (len(cleaned_data) + page_size - 1) // page_size)
+            total_pages_cleaned = max(
+                1, (len(cleaned_data) + page_size - 1) // page_size)
 
             col1, col2 = st.columns([1, 4])
             with col1:
-                cleaned_page = st.selectbox("Page", options=range(1, total_pages_cleaned + 1), key="cleaned_page")
+                cleaned_page = st.selectbox("Page", options=range(
+                    1, total_pages_cleaned + 1), key="cleaned_page")
             with col2:
-                st.markdown(f"<br>*Showing rows {(cleaned_page-1)*page_size + 1} - {min(cleaned_page*page_size, len(cleaned_data))} of {len(cleaned_data)}*", unsafe_allow_html=True)
+                st.markdown(
+                    f"<br>*Showing rows {(cleaned_page-1)*page_size + 1} - {min(cleaned_page*page_size, len(cleaned_data))} of {len(cleaned_data)}*", unsafe_allow_html=True)
 
-            st.dataframe(paginate_dataframe(cleaned_data, page_size, cleaned_page), hide_index=True, use_container_width=True)
+            st.dataframe(paginate_dataframe(cleaned_data, page_size,
+                         cleaned_page), hide_index=True, use_container_width=True)
 
             st.markdown("#### After Zone A Processing")
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Missing Temperature", cleaned_data['temperature'].isna().sum())
+                st.metric("Missing Temperature",
+                          cleaned_data['temperature'].isna().sum())
             with col2:
-                st.metric("Missing Humidity", cleaned_data['humidity'].isna().sum())
+                st.metric("Missing Humidity",
+                          cleaned_data['humidity'].isna().sum())
 
         # Tab 3: Neighbor Groups
         with tab3:
             st.markdown("#### Station Neighbor Groups")
-            st.markdown(f"*Stations within {distance_threshold} km of each other*")
+            st.markdown(
+                f"*Stations within {distance_threshold} km of each other*")
 
             for station_id in sorted(neighbors.keys()):
                 neighbor_list = neighbors[station_id]
                 with st.expander(f"{station_id} ({len(neighbor_list)} neighbors)"):
                     if neighbor_list:
                         for n in neighbor_list:
-                            st.markdown(f"- **{n['neighbor_id']}** - {n['distance_km']} km")
+                            st.markdown(
+                                f"- **{n['neighbor_id']}** - {n['distance_km']} km")
 
                         # Per-group map visualization
                         st.markdown("##### Neighbor Visualization")
 
-                        # Get current station coordinates
-                        current_station = stations[stations['station_id'] == station_id].copy()
-                        current_station['color'] = '#0066FF'
-                        current_station['size'] = 80
+                        # Get current station and neighbor coordinates
+                        neighbor_ids = [n['neighbor_id']
+                                        for n in neighbor_list]
+                        map_data = stations[stations['station_id'].isin(
+                            [station_id] + neighbor_ids)].copy()
 
-                        # Get neighbor coordinates
-                        neighbor_ids = [n['neighbor_id'] for n in neighbor_list]
-                        neighbor_stations = stations[stations['station_id'].isin(neighbor_ids)].copy()
-                        neighbor_stations['color'] = '#FF4444'
-                        neighbor_stations['size'] = 40
+                        if len(map_data) > 0:
+                            # Create map with current station and neighbors
+                            center_lat = map_data['latitude'].mean()
+                            center_lon = map_data['longitude'].mean()
 
-                        # Combine for map
-                        map_data = pd.concat([current_station, neighbor_stations], ignore_index=True)
-                        st.map(map_data, latitude='latitude', longitude='longitude', size='size', height=300)
+                            neighbor_map = folium.Map(
+                                location=[center_lat, center_lon],
+                                zoom_start=12,
+                                tiles="OpenStreetMap"
+                            )
+
+                            # Add marker for current station (blue)
+                            current_station_row = map_data[map_data['station_id']
+                                                           == station_id]
+                            if len(current_station_row) > 0:
+                                for idx, row in current_station_row.iterrows():
+                                    folium.CircleMarker(
+                                        location=[row['latitude'],
+                                                  row['longitude']],
+                                        radius=10,
+                                        popup=folium.Popup(
+                                            f"<b>{row['station_id']}</b><br><i>Current Station</i>", max_width=300),
+                                        tooltip=f"{row['station_id']} (Current)",
+                                        color='#0066FF',
+                                        fill=True,
+                                        fillColor='#0066FF',
+                                        fillOpacity=0.8,
+                                        weight=3
+                                    ).add_to(neighbor_map)
+
+                            # Add markers for neighbors (red)
+                            neighbor_stations_rows = map_data[map_data['station_id'].isin(
+                                neighbor_ids)]
+                            for idx, row in neighbor_stations_rows.iterrows():
+                                folium.CircleMarker(
+                                    location=[row['latitude'],
+                                              row['longitude']],
+                                    radius=7,
+                                    popup=folium.Popup(
+                                        f"<b>{row['station_id']}</b><br><i>Neighbor</i>", max_width=300),
+                                    tooltip=f"{row['station_id']} (Neighbor)",
+                                    color='#FF4444',
+                                    fill=True,
+                                    fillColor='#FF4444',
+                                    fillOpacity=0.7,
+                                    weight=2
+                                ).add_to(neighbor_map)
+
+                            st_folium(neighbor_map, width=1300, height=400)
                     else:
                         st.info("No neighbors within threshold distance")
 
@@ -418,30 +498,35 @@ if st.session_state.raw_data is not None:
 
                     with st.expander(f"{station_id} - {len(anomalies)} anomalies detected"):
                         # Summary
-                        st.warning(f"**{len(anomalies)} anomalies detected** in this station")
+                        st.warning(
+                            f"**{len(anomalies)} anomalies detected** in this station")
 
                         # Anomaly table
                         anomaly_df = pd.DataFrame(anomalies)
                         anomaly_df['date'] = pd.to_datetime(anomaly_df['date'])
-                        anomaly_df['lof_score'] = anomaly_df['lof_score'].round(3)
+                        anomaly_df['lof_score'] = anomaly_df['lof_score'].round(
+                            3)
 
                         st.markdown("##### Anomalous Records")
                         st.dataframe(
-                            anomaly_df[['date', 'temperature', 'humidity', 'lof_score']],
+                            anomaly_df[['date', 'temperature',
+                                        'humidity', 'lof_score']],
                             hide_index=True,
                             use_container_width=True
                         )
 
                         # Chart
                         st.markdown("##### Temperature & Humidity Timeline")
-                        station_data = flagged_data[flagged_data['station_id'] == station_id].copy()
+                        station_data = flagged_data[flagged_data['station_id'] == station_id].copy(
+                        )
                         anomaly_dates = anomaly_df['date'].tolist()
 
                         fig = create_station_chart(station_data, anomaly_dates)
                         st.plotly_chart(fig, use_container_width=True)
 
                         # Anomaly vs Normal Comparison
-                        st.markdown("##### Anomaly vs Normal Comparison (Justification)")
+                        st.markdown(
+                            "##### Anomaly vs Normal Comparison (Justification)")
 
                         # Separate normal and anomaly data for this station
                         normal_data = station_data[station_data['is_anomaly'] == False]
@@ -473,7 +558,8 @@ if st.session_state.raw_data is not None:
                             margin=dict(l=0, r=0, t=30, b=0),
                             xaxis=dict(title='Temperature (C)'),
                             yaxis=dict(title='Humidity (%)'),
-                            legend=dict(orientation='h', yanchor='bottom', y=1.02),
+                            legend=dict(orientation='h',
+                                        yanchor='bottom', y=1.02),
                             paper_bgcolor='rgba(0,0,0,0)',
                             plot_bgcolor='rgba(0,0,0,0)',
                             font=dict(size=11)
@@ -487,22 +573,26 @@ if st.session_state.raw_data is not None:
                         with col1:
                             st.markdown("**Anomaly Days**")
                             if len(anomaly_data_scatter) > 0:
-                                st.metric("Avg Temperature", f"{anomaly_data_scatter['temperature'].mean():.1f} C")
-                                st.metric("Avg Humidity", f"{anomaly_data_scatter['humidity'].mean():.1f} %")
+                                st.metric(
+                                    "Avg Temperature", f"{anomaly_data_scatter['temperature'].mean():.1f} C")
+                                st.metric(
+                                    "Avg Humidity", f"{anomaly_data_scatter['humidity'].mean():.1f} %")
                             else:
                                 st.write("N/A")
 
                         with col2:
                             st.markdown("**Normal Days**")
                             if len(normal_data) > 0:
-                                st.metric("Avg Temperature", f"{normal_data['temperature'].mean():.1f} C")
-                                st.metric("Avg Humidity", f"{normal_data['humidity'].mean():.1f} %")
+                                st.metric(
+                                    "Avg Temperature", f"{normal_data['temperature'].mean():.1f} C")
+                                st.metric(
+                                    "Avg Humidity", f"{normal_data['humidity'].mean():.1f} %")
                             else:
                                 st.write("N/A")
 
 else:
     # No data loaded
-    st.info("Please upload a CSV file or click 'Load Sample Data' to begin.")
+    st.info("Please upload a CSV file to begin.")
 
     st.markdown("#### Expected CSV Format")
     st.code("""
