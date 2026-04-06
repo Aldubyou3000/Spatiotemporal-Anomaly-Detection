@@ -145,7 +145,8 @@ def create_station_chart(station_data, anomaly_dates, detected_unit='C', display
     fig = go.Figure()
 
     # Convert temperature and get label using centralized functions
-    temp_values = convert_temp_series(station_data['temperature'], detected_unit, display_unit)
+    temp_values = convert_temp_series(
+        station_data['temperature'], detected_unit, display_unit)
     temp_label = get_temp_label(display_unit, detected_unit)
 
     # Temperature line
@@ -171,7 +172,8 @@ def create_station_chart(station_data, anomaly_dates, detected_unit='C', display
     anomaly_data = station_data[station_data['date'].isin(
         anomaly_dates)].copy()
     if len(anomaly_data) > 0:
-        anomaly_temp = convert_temp_series(anomaly_data['temperature'], detected_unit, display_unit)
+        anomaly_temp = convert_temp_series(
+            anomaly_data['temperature'], detected_unit, display_unit)
 
         fig.add_trace(go.Scatter(
             x=anomaly_data['date'],
@@ -205,15 +207,16 @@ def paginate_dataframe(df, page_size, page_num):
     return df.iloc[start_idx:end_idx]
 
 
+@st.cache_data
 def prepare_display_data(display_unit):
     """Prepare all display data with temperature conversions applied.
-    
+
     This function reads from session state once and returns all necessary
     prepared data for display. Single entry point for all converted data.
-    
+
     Args:
         display_unit: 'Original', 'Celsius', or 'Fahrenheit'
-    
+
     Returns:
         dict with keys:
         - 'raw_data': converted raw data (if loaded)
@@ -228,7 +231,7 @@ def prepare_display_data(display_unit):
     raw = st.session_state.raw_data
     cleaned = st.session_state.cleaned_data if st.session_state.processed else None
     flagged = st.session_state.flagged_data if st.session_state.processed else None
-    
+
     return {
         'raw_data': convert_dataframe_for_display(raw, detected_unit, display_unit) if raw is not None else None,
         'cleaned_data': convert_dataframe_for_display(cleaned, detected_unit, display_unit) if cleaned is not None else None,
@@ -276,15 +279,12 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Display Format")
 
-    # Get current index for the radio button
     options = ['Original', 'Celsius', 'Fahrenheit']
-    current_index = options.index(
-        st.session_state.display_temp_unit) if st.session_state.display_temp_unit in options else 0
 
-    st.session_state.display_temp_unit = st.radio(
+    st.radio(
         "Show temperature in:",
         options=options,
-        index=current_index,
+        key='display_temp_unit',
         help="Choose how to display temperature values"
     )
 
@@ -655,11 +655,8 @@ if st.session_state.raw_data is not None:
                         )
                         anomaly_dates = anomaly_df['date'].tolist()
 
-                        detected_unit = st.session_state.detected_units['temperature']
-                        display_unit = st.session_state.display_temp_unit
-
                         fig = create_station_chart(
-                            station_data, anomaly_dates, detected_unit, display_unit)
+                            station_data, anomaly_dates, display_data['detected_unit'], display_data['display_unit'])
                         st.plotly_chart(fig, use_container_width=True)
 
                         # Anomaly vs Normal Comparison
@@ -671,8 +668,10 @@ if st.session_state.raw_data is not None:
                         anomaly_data_scatter = station_data[station_data['is_anomaly'] == True]
 
                         # Convert temperatures using centralized function
-                        normal_temp = convert_temp_series(normal_data['temperature'], display_data['detected_unit'], display_data['display_unit'])
-                        anomaly_temp = convert_temp_series(anomaly_data_scatter['temperature'], display_data['detected_unit'], display_data['display_unit'])
+                        normal_temp = convert_temp_series(
+                            normal_data['temperature'], display_data['detected_unit'], display_data['display_unit'])
+                        anomaly_temp = convert_temp_series(
+                            anomaly_data_scatter['temperature'], display_data['detected_unit'], display_data['display_unit'])
 
                         # Scatter plot
                         fig_scatter = go.Figure()
@@ -715,8 +714,10 @@ if st.session_state.raw_data is not None:
                         with col1:
                             st.markdown("**Anomaly Days**")
                             if len(anomaly_data_scatter) > 0:
-                                avg_temp = anomaly_data_scatter['temperature'].mean()
-                                avg_temp = convert_temp(avg_temp, display_data['detected_unit'], display_data['display_unit'])
+                                avg_temp = anomaly_data_scatter['temperature'].mean(
+                                )
+                                avg_temp = convert_temp(
+                                    avg_temp, display_data['detected_unit'], display_data['display_unit'])
                                 st.metric(
                                     "Avg Temperature", f"{avg_temp:.1f} {display_data['temp_symbol']}")
                                 st.metric(
@@ -728,7 +729,8 @@ if st.session_state.raw_data is not None:
                             st.markdown("**Normal Days**")
                             if len(normal_data) > 0:
                                 avg_temp = normal_data['temperature'].mean()
-                                avg_temp = convert_temp(avg_temp, display_data['detected_unit'], display_data['display_unit'])
+                                avg_temp = convert_temp(
+                                    avg_temp, display_data['detected_unit'], display_data['display_unit'])
                                 st.metric(
                                     "Avg Temperature", f"{avg_temp:.1f} {display_data['temp_symbol']}")
                                 st.metric(
