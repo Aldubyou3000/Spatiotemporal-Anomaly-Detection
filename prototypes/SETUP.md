@@ -160,3 +160,62 @@ For issues with the pipeline, check that:
 - All dependencies are installed correctly
 - You're running commands from the `prototypes/` directory
 - CSV file has the required columns: `station_id`, `date`, `latitude`, `longitude`, `temperature`, `humidity`
+
+---
+
+## Unit Support & Auto-Detection
+
+### Temperature Format Detection
+
+The system **automatically detects** the temperature format in your CSV file:
+
+- **Celsius (0-50°C)**: Typical for tropical regions like the Philippines
+- **Fahrenheit (32-122°F)**: Common in other regions
+
+**How it works:**
+1. When you upload a CSV, the system analyzes the temperature values
+2. If all values fall in the Celsius range (0-50), it assumes Celsius
+3. If all values fall in the Fahrenheit range (32-122), it assumes Fahrenheit
+4. If the format is ambiguous, you'll be asked to confirm
+
+### Display Format Options
+
+After uploading and detecting the format, use the **"Display Format"** section in the sidebar to:
+
+- **Original**: Show values in their original format
+- **Celsius**: Convert all temperatures to Celsius (°C)
+- **Fahrenheit**: Convert all temperatures to Fahrenheit (°F)
+
+This affects:
+- All charts and visualizations
+- Metric displays (averages, comparisons)
+- CSV download options
+
+### Humidity Format
+
+Humidity is always in **percentage (0-100%)** with no unit conversion needed.
+
+### Data Precision
+
+All temperature and humidity values are stored and displayed with **1 decimal place** (industry standard for weather data):
+
+- Example: 28.5°C, 83.3°F, 85.2%
+
+This precision ensures:
+- Compatibility with meteorological standards
+- Minimal data loss (< 0.05°C when converting between formats)
+- Reliable anomaly detection performance
+
+### Example CSV Format
+
+```csv
+station_id,date,latitude,longitude,temperature,humidity
+QC_AWS_001,2025-01-01,14.651,121.0495,28.5,85.2
+QC_AWS_001,2025-01-02,14.651,121.0495,27.9,82.1
+QC_AWS_002,2025-01-01,14.620,121.1200,29.2,88.3
+```
+
+The system will:
+1. Detect that temperatures are in Celsius (all values 25-35°C range)
+2. Allow you to display as Celsius, Fahrenheit, or original
+3. Provide download options in your chosen format

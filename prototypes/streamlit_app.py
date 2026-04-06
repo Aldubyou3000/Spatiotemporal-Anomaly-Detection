@@ -7,6 +7,8 @@ from streamlit_folium import st_folium
 from zone.zone_a import zone_a_linear_interpolation
 from zone.zone_b import zone_b_haversine_grouping
 from zone.zone_c import zone_c_lof_anomaly_detection
+from utils.unit_detector import detect_csv_units
+from utils.unit_converter import convert_temperature, format_temperature, format_humidity
 
 
 # ============================================================================
@@ -49,12 +51,69 @@ st.markdown("""
 
 
 # ============================================================================
+# SESSION STATE INITIALIZATION (MUST RUN BEFORE SIDEBAR)
+# ============================================================================
+
+if 'raw_data' not in st.session_state:
+    st.session_state.raw_data = None
+if 'detected_units' not in st.session_state:
+    st.session_state.detected_units = {'temperature': 'C', 'humidity': '%'}
+if 'display_temp_unit' not in st.session_state:
+    st.session_state.display_temp_unit = 'Original'
+if 'processed' not in st.session_state:
+    st.session_state.processed = False
+if 'current_file_name' not in st.session_state:
+    st.session_state.current_file_name = None
+
+
+# ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
 def convert_df_to_csv(df):
     """Convert DataFrame to CSV bytes for download."""
     return df.to_csv(index=False).encode('utf-8')
+
+
+def convert_dataframe_for_display(df, detected_unit, display_unit):
+    """Convert temperature column in dataframe for display based on user preference.
+
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame with temperature column
+    detected_unit : str
+        Original detected unit ('C' or 'F')
+    display_unit : str
+        User's selected display unit ('Original', 'Celsius', 'Fahrenheit')
+
+    Returns:
+    --------
+    pd.DataFrame
+        Copy of dataframe with converted temperature column (if applicable)
+    """
+    df_display = df.copy()
+
+    # Only convert if user selected different unit and we have a temperature column
+    if 'temperature' not in df_display.columns:
+        return df_display
+
+    if display_unit == 'Original':
+        # No conversion needed
+        return df_display
+
+    if display_unit == 'Celsius' and detected_unit == 'F':
+        # Convert Fahrenheit → Celsius
+        df_display['temperature'] = df_display['temperature'].apply(
+            lambda x: convert_temperature(x, 'F', 'C') if pd.notna(x) else None
+        )
+    elif display_unit == 'Fahrenheit' and detected_unit == 'C':
+        # Convert Celsius → Fahrenheit
+        df_display['temperature'] = df_display['temperature'].apply(
+            lambda x: convert_temperature(x, 'C', 'F') if pd.notna(x) else None
+        )
+
+    return df_display
 
 
 def create_station_map(stations_df):
@@ -103,14 +162,41 @@ def create_station_map(stations_df):
     return map_obj
 
 
-def create_station_chart(station_data, anomaly_dates):
-    """Create a line chart with anomaly markers for a station."""
+def create_station_chart(station_data, anomaly_dates, detected_unit='C', display_unit='Original'):
+    """Create a line chart with anomaly markers for a station.
+
+    Parameters:
+    -----------
+    station_data : pd.DataFrame
+        DataFrame with temperature, humidity, and date columns
+    anomaly_dates : list
+        List of dates marked as anomalies
+    detected_unit : str
+        Original detected unit ('C' or 'F')
+    display_unit : str
+        Display unit preference ('Original', 'Celsius', 'Fahrenheit')
+    """
     fig = go.Figure()
+
+    # Convert temperature if needed for display
+    temp_values = station_data['temperature'].copy()
+    if display_unit == 'Fahrenheit' and detected_unit == 'C':
+        temp_values = temp_values.apply(
+            lambda x: convert_temperature(x, 'C', 'F') if pd.notna(x) else None)
+
+    # Determine temperature unit label
+    temp_label = "Temperature"
+    if display_unit == 'Original':
+        temp_label = f"Temperature ({detected_unit})"
+    elif display_unit == 'Celsius':
+        temp_label = "Temperature (°C)"
+    elif display_unit == 'Fahrenheit':
+        temp_label = "Temperature (°F)"
 
     # Temperature line
     fig.add_trace(go.Scatter(
         x=station_data['date'],
-        y=station_data['temperature'],
+        y=temp_values,
         mode='lines',
         name='Temperature',
         line=dict(color='#4ECDC4', width=2)
@@ -127,11 +213,17 @@ def create_station_chart(station_data, anomaly_dates):
     ))
 
     # Anomaly markers for temperature
-    anomaly_data = station_data[station_data['date'].isin(anomaly_dates)]
+    anomaly_data = station_data[station_data['date'].isin(
+        anomaly_dates)].copy()
     if len(anomaly_data) > 0:
+        anomaly_temp = anomaly_data['temperature'].copy()
+        if display_unit == 'Fahrenheit' and detected_unit == 'C':
+            anomaly_temp = anomaly_temp.apply(
+                lambda x: convert_temperature(x, 'C', 'F') if pd.notna(x) else None)
+
         fig.add_trace(go.Scatter(
             x=anomaly_data['date'],
-            y=anomaly_data['temperature'],
+            y=anomaly_temp,
             mode='markers',
             name='Anomaly',
             marker=dict(color='#FF6B6B', size=12, symbol='x'),
@@ -143,7 +235,7 @@ def create_station_chart(station_data, anomaly_dates):
         margin=dict(l=0, r=0, t=30, b=0),
         legend=dict(orientation='h', yanchor='bottom', y=1.02),
         xaxis=dict(title=''),
-        yaxis=dict(title='Temp (C)', side='left', color='#4ECDC4'),
+        yaxis=dict(title=temp_label, side='left', color='#4ECDC4'),
         yaxis2=dict(title='Humidity (%)', side='right',
                     overlaying='y', color='#45B7D1'),
         paper_bgcolor='rgba(0,0,0,0)',
@@ -195,6 +287,21 @@ with st.sidebar:
     )
 
     st.markdown("---")
+    st.markdown("### Display Format")
+
+    # Get current index for the radio button
+    options = ['Original', 'Celsius', 'Fahrenheit']
+    current_index = options.index(
+        st.session_state.display_temp_unit) if st.session_state.display_temp_unit in options else 0
+
+    st.session_state.display_temp_unit = st.radio(
+        "Show temperature in:",
+        options=options,
+        index=current_index,
+        help="Choose how to display temperature values"
+    )
+
+    st.markdown("---")
     st.markdown("### About")
     st.markdown("""
     This pipeline processes AWS data through three zones:
@@ -219,16 +326,8 @@ st.markdown("### Data Input")
 uploaded_file = st.file_uploader(
     "Upload your CSV file",
     type=['csv'],
-    help="CSV must contain: station_id, date, latitude, longitude, temperature, humidity"
+    help="CSV must contain: station_id, date, latitude (decimal), longitude (decimal), temperature (Celsius or Fahrenheit), humidity (%).\nSystem auto-detects temperature format."
 )
-
-# Initialize session state
-if 'raw_data' not in st.session_state:
-    st.session_state.raw_data = None
-if 'processed' not in st.session_state:
-    st.session_state.processed = False
-if 'current_file_name' not in st.session_state:
-    st.session_state.current_file_name = None
 
 # Load data (only reset when NEW file is uploaded)
 if uploaded_file is not None:
@@ -238,6 +337,26 @@ if uploaded_file is not None:
             st.session_state.raw_data['date'])
         st.session_state.current_file_name = uploaded_file.name
         st.session_state.processed = False
+
+        # Auto-detect temperature format
+        detection_result = detect_csv_units(st.session_state.raw_data)
+
+        # Show detection messages
+        st.info("\n".join(detection_result['messages']))
+
+        # If temperature detection is ambiguous, show fallback selector
+        if detection_result['temperature'] is None:
+            st.warning(
+                "Temperature format is ambiguous. Please confirm the format:")
+            confirmed_unit = st.radio(
+                "Temperature is in:",
+                options=['Celsius (°C)', 'Fahrenheit (°F)'],
+                key="temp_format_confirm"
+            )
+            st.session_state.detected_units['temperature'] = 'C' if confirmed_unit.startswith(
+                'Celsius') else 'F'
+        else:
+            st.session_state.detected_units['temperature'] = detection_result['temperature']
 
 # Display and process data
 if st.session_state.raw_data is not None:
@@ -311,13 +430,17 @@ if st.session_state.raw_data is not None:
 
         # Download buttons
         st.markdown("### Download Results")
-        col1, col2 = st.columns(2)
 
+        detected_unit = st.session_state.detected_units['temperature']
+        display_unit = st.session_state.display_temp_unit
+
+        # Option 1: Always available - Original format
+        col1, col2 = st.columns(2)
         with col1:
             st.download_button(
-                label="Download Cleaned Data (Zone A)",
+                label="Download Cleaned Data (Original Format)",
                 data=convert_df_to_csv(cleaned_data),
-                file_name="cleaned_data_zone_a.csv",
+                file_name="cleaned_data_original.csv",
                 mime="text/csv",
                 use_container_width=True
             )
@@ -330,6 +453,38 @@ if st.session_state.raw_data is not None:
                 mime="text/csv",
                 use_container_width=True
             )
+
+        # Option 2: If user selected different display format, offer converted version
+        if display_unit != 'Original':
+            st.markdown("---")
+            st.markdown("#### Alternative Format Downloads")
+
+            # Prepare converted data
+            cleaned_converted = convert_dataframe_for_display(
+                cleaned_data, detected_unit, display_unit
+            )
+            flagged_converted = convert_dataframe_for_display(
+                flagged_data, detected_unit, display_unit
+            )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label=f"Download Cleaned Data ({display_unit})",
+                    data=convert_df_to_csv(cleaned_converted),
+                    file_name=f"cleaned_data_{display_unit.lower()}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+            with col2:
+                st.download_button(
+                    label=f"Download Flagged Data ({display_unit})",
+                    data=convert_df_to_csv(flagged_converted),
+                    file_name=f"flagged_data_{display_unit.lower()}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
 
         st.markdown("---")
 
@@ -370,7 +525,11 @@ if st.session_state.raw_data is not None:
                 st.markdown(
                     f"<br>*Showing rows {(raw_page-1)*page_size + 1} - {min(raw_page*page_size, len(raw_data))} of {len(raw_data)}*", unsafe_allow_html=True)
 
-            st.dataframe(paginate_dataframe(raw_data, page_size,
+            detected_unit = st.session_state.detected_units['temperature']
+            display_unit = st.session_state.display_temp_unit
+            raw_data_display = convert_dataframe_for_display(
+                raw_data, detected_unit, display_unit)
+            st.dataframe(paginate_dataframe(raw_data_display, page_size,
                          raw_page), hide_index=True, use_container_width=True)
 
             st.markdown("#### Missing Value Statistics")
@@ -399,7 +558,11 @@ if st.session_state.raw_data is not None:
                 st.markdown(
                     f"<br>*Showing rows {(cleaned_page-1)*page_size + 1} - {min(cleaned_page*page_size, len(cleaned_data))} of {len(cleaned_data)}*", unsafe_allow_html=True)
 
-            st.dataframe(paginate_dataframe(cleaned_data, page_size,
+            detected_unit = st.session_state.detected_units['temperature']
+            display_unit = st.session_state.display_temp_unit
+            cleaned_data_display = convert_dataframe_for_display(
+                cleaned_data, detected_unit, display_unit)
+            st.dataframe(paginate_dataframe(cleaned_data_display, page_size,
                          cleaned_page), hide_index=True, use_container_width=True)
 
             st.markdown("#### After Zone A Processing")
@@ -521,7 +684,11 @@ if st.session_state.raw_data is not None:
                         )
                         anomaly_dates = anomaly_df['date'].tolist()
 
-                        fig = create_station_chart(station_data, anomaly_dates)
+                        detected_unit = st.session_state.detected_units['temperature']
+                        display_unit = st.session_state.display_temp_unit
+
+                        fig = create_station_chart(
+                            station_data, anomaly_dates, detected_unit, display_unit)
                         st.plotly_chart(fig, use_container_width=True)
 
                         # Anomaly vs Normal Comparison
@@ -532,12 +699,34 @@ if st.session_state.raw_data is not None:
                         normal_data = station_data[station_data['is_anomaly'] == False]
                         anomaly_data_scatter = station_data[station_data['is_anomaly'] == True]
 
+                        # Convert temperatures if needed for display
+                        detected_unit = st.session_state.detected_units['temperature']
+                        display_unit = st.session_state.display_temp_unit
+
+                        normal_temp = normal_data['temperature'].copy()
+                        anomaly_temp = anomaly_data_scatter['temperature'].copy(
+                        )
+
+                        if display_unit == 'Fahrenheit' and detected_unit == 'C':
+                            normal_temp = normal_temp.apply(
+                                lambda x: convert_temperature(x, 'C', 'F') if pd.notna(x) else None)
+                            anomaly_temp = anomaly_temp.apply(
+                                lambda x: convert_temperature(x, 'C', 'F') if pd.notna(x) else None)
+
+                        # Determine temperature label
+                        if display_unit == 'Original':
+                            temp_label = f"Temperature ({detected_unit})"
+                        elif display_unit == 'Celsius':
+                            temp_label = "Temperature (°C)"
+                        else:
+                            temp_label = "Temperature (°F)"
+
                         # Scatter plot
                         fig_scatter = go.Figure()
 
                         # Normal points (gray)
                         fig_scatter.add_trace(go.Scatter(
-                            x=normal_data['temperature'],
+                            x=normal_temp,
                             y=normal_data['humidity'],
                             mode='markers',
                             name='Normal',
@@ -546,7 +735,7 @@ if st.session_state.raw_data is not None:
 
                         # Anomaly points (red)
                         fig_scatter.add_trace(go.Scatter(
-                            x=anomaly_data_scatter['temperature'],
+                            x=anomaly_temp,
                             y=anomaly_data_scatter['humidity'],
                             mode='markers',
                             name='Anomaly',
@@ -556,7 +745,7 @@ if st.session_state.raw_data is not None:
                         fig_scatter.update_layout(
                             height=280,
                             margin=dict(l=0, r=0, t=30, b=0),
-                            xaxis=dict(title='Temperature (C)'),
+                            xaxis=dict(title=temp_label),
                             yaxis=dict(title='Humidity (%)'),
                             legend=dict(orientation='h',
                                         yanchor='bottom', y=1.02),
@@ -570,11 +759,23 @@ if st.session_state.raw_data is not None:
                         # Comparison metrics
                         col1, col2 = st.columns(2)
 
+                        detected_unit = st.session_state.detected_units['temperature']
+                        display_unit = st.session_state.display_temp_unit
+
                         with col1:
                             st.markdown("**Anomaly Days**")
                             if len(anomaly_data_scatter) > 0:
+                                avg_temp = anomaly_data_scatter['temperature'].mean(
+                                )
+                                if display_unit == 'Fahrenheit' and detected_unit == 'C':
+                                    avg_temp = convert_temperature(
+                                        avg_temp, 'C', 'F')
+
+                                temp_label = detected_unit if display_unit == 'Original' else (
+                                    '°C' if display_unit == 'Celsius' else '°F'
+                                )
                                 st.metric(
-                                    "Avg Temperature", f"{anomaly_data_scatter['temperature'].mean():.1f} C")
+                                    "Avg Temperature", f"{avg_temp:.1f} {temp_label}")
                                 st.metric(
                                     "Avg Humidity", f"{anomaly_data_scatter['humidity'].mean():.1f} %")
                             else:
@@ -583,8 +784,16 @@ if st.session_state.raw_data is not None:
                         with col2:
                             st.markdown("**Normal Days**")
                             if len(normal_data) > 0:
+                                avg_temp = normal_data['temperature'].mean()
+                                if display_unit == 'Fahrenheit' and detected_unit == 'C':
+                                    avg_temp = convert_temperature(
+                                        avg_temp, 'C', 'F')
+
+                                temp_label = detected_unit if display_unit == 'Original' else (
+                                    '°C' if display_unit == 'Celsius' else '°F'
+                                )
                                 st.metric(
-                                    "Avg Temperature", f"{normal_data['temperature'].mean():.1f} C")
+                                    "Avg Temperature", f"{avg_temp:.1f} {temp_label}")
                                 st.metric(
                                     "Avg Humidity", f"{normal_data['humidity'].mean():.1f} %")
                             else:
