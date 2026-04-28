@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
+import time
 
 from zone.zone_a import zone_a_linear_interpolation
 from zone.zone_b import zone_b_haversine_grouping
@@ -98,9 +99,18 @@ def create_station_map(stations_df):
     if len(stations_df) == 0:
         return None
 
-    # Calculate map center
-    center_lat = stations_df['latitude'].mean()
-    center_lon = stations_df['longitude'].mean()
+    # Filter to keep only rows with valid coordinates (no NaN)
+    valid_coords = stations_df[
+        stations_df['latitude'].notna() & stations_df['longitude'].notna()
+    ].copy()
+
+    if len(valid_coords) == 0:
+        # If no valid coordinates, return None (no map can be displayed)
+        return None
+
+    # Calculate map center using only valid coordinates
+    center_lat = valid_coords['latitude'].mean()
+    center_lon = valid_coords['longitude'].mean()
 
     # Create map
     map_obj = folium.Map(
@@ -109,8 +119,8 @@ def create_station_map(stations_df):
         tiles="OpenStreetMap"
     )
 
-    # Add markers for each station
-    for idx, row in stations_df.iterrows():
+    # Add markers for each station with valid coordinates
+    for idx, row in valid_coords.iterrows():
         station_id = row.get('station_id', f'Station {idx}')
         folium.CircleMarker(
             location=[row['latitude'], row['longitude']],
@@ -367,6 +377,8 @@ if st.session_state.raw_data is not None:
         "Run Pipeline", type="primary", use_container_width=True)
 
     if run_pipeline:
+        start_time = time.time()
+
         with st.spinner("Processing data through Zone A -> Zone B -> Zone C..."):
             # Zone A: Linear Interpolation
             cleaned_data = zone_a_linear_interpolation(raw_data)
@@ -389,8 +401,13 @@ if st.session_state.raw_data is not None:
             st.session_state.flagged_data = flagged_data
             st.session_state.anomaly_summary = anomaly_summary
             st.session_state.processed = True
+            st.session_state.processing_time = time.time() - start_time
 
         st.success("Pipeline completed successfully!")
+
+        # Display total processing time
+        elapsed = st.session_state.processing_time
+        st.metric("Total Processing Time", f"{elapsed:.2f}s")
 
     # Show results if processed
     if st.session_state.processed:

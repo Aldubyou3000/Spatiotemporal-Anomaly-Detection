@@ -17,22 +17,30 @@ Automated Weather Station (AWS) data quality control and anomaly detection syste
 
 ### Step 1: Install Dependencies
 
-Run this command in your terminal:
+**Recommended Method: Use requirements.txt**
+
+From the project root directory:
 
 ```bash
-pip install pandas numpy scikit-learn streamlit plotly
+pip install -r requirements.txt
+```
+
+**Or if you prefer manual installation:**
+
+```bash
+pip install streamlit>=1.32.0 pandas>=2.2.0 numpy>=1.26.0 scikit-learn>=1.4.0 plotly>=5.18.0 folium>=0.14.0 streamlit-folium>=0.14.0
 ```
 
 **If you get errors with `pip`, use this instead:**
 
 ```bash
-python -m pip install pandas numpy scikit-learn streamlit plotly
+python -m pip install -r requirements.txt
 ```
 
 **If still having issues (Windows users):**
 
 ```bash
-python -m pip install pandas numpy scikit-learn streamlit plotly --user
+python -m pip install -r requirements.txt --user
 ```
 
 ---
@@ -92,13 +100,15 @@ prototypes/
 
 ## Dependencies Explained
 
-| Package        | Purpose                                           |
-| -------------- | ------------------------------------------------- |
-| `pandas`       | Data manipulation and CSV processing              |
-| `numpy`        | Numerical operations                              |
-| `scikit-learn` | Machine learning (LOF algorithm + StandardScaler) |
-| `streamlit`    | Web UI framework                                  |
-| `plotly`       | Interactive charts and visualization              |
+| Package            | Version    | Purpose                                           |
+| ------------------ | ---------- | ------------------------------------------------- |
+| `streamlit`        | ≥1.32.0    | Web UI framework (stable session state)           |
+| `pandas`           | ≥2.2.0     | Data manipulation and CSV processing              |
+| `numpy`            | ≥1.26.0    | Numerical operations                              |
+| `scikit-learn`     | ≥1.4.0     | Machine learning (LOF algorithm + StandardScaler) |
+| `plotly`           | ≥5.18.0    | Interactive charts and visualization              |
+| `folium`           | ≥0.14.0    | Geographic mapping and station location display   |
+| `streamlit-folium` | ≥0.14.0    | Integration of Folium maps into Streamlit         |
 
 ---
 
@@ -108,12 +118,18 @@ prototypes/
 
 **Solution:** Use `python -m pip` instead of `pip`
 
-### Problem: `ModuleNotFoundError: No module named 'streamlit'`
+### Problem: `ModuleNotFoundError: No module named 'streamlit'` (or other missing modules)
 
-**Solution:** Install missing package:
+**Solution:** Reinstall all dependencies using requirements.txt:
 
 ```bash
-python -m pip install streamlit --user
+python -m pip install -r requirements.txt --upgrade
+```
+
+If a specific package is still missing (e.g., `folium`, `streamlit-folium`), install it individually:
+
+```bash
+python -m pip install folium>=0.14.0 streamlit-folium>=0.14.0 --user
 ```
 
 ### Problem: `[WinError 32] The process cannot access the file`
@@ -128,10 +144,10 @@ python -m pip install streamlit --user
 
 ## Quick Start
 
-1. Install dependencies:
+1. Install dependencies from the project root:
 
    ```bash
-   python -m pip install pandas numpy scikit-learn streamlit plotly
+   python -m pip install -r requirements.txt
    ```
 
 2. Navigate to the project folder:
@@ -157,9 +173,19 @@ python -m pip install streamlit --user
 
 For issues with the pipeline, check that:
 
-- All dependencies are installed correctly
-- You're running commands from the `prototypes/` directory
+- All dependencies are installed correctly (use `pip install -r requirements.txt`)
+- You're running Streamlit from the `prototypes/` directory
 - CSV file has the required columns: `station_id`, `date`, `latitude`, `longitude`, `temperature`, `humidity`
+- Streamlit version is ≥1.32.0 (run `streamlit --version` to check)
+- If maps don't display, ensure `folium` and `streamlit-folium` are installed
+
+**Verify Installation:**
+
+Run this in the `prototypes/` directory to verify all dependencies:
+
+```bash
+python -c "import streamlit; import pandas; import folium; import streamlit_folium; import sklearn; import plotly; print('✓ All dependencies installed correctly!')"
+```
 
 ---
 
