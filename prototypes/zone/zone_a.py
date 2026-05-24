@@ -14,6 +14,42 @@ import numpy as np
 from typing import Tuple, Dict, Any
 
 
+def _downmap_hourly_to_daily(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Auto-detect if rainfall data is hourly (contains time component or sub-daily records)
+    and convert to daily by sum per day.
+    """
+    df_temp = df.copy()
+    parsed_dates = pd.to_datetime(df_temp['date'], errors='coerce')
+    
+    # Auto-detect hourly if there is a time component present
+    is_hourly = False
+    if parsed_dates.notna().any():
+        has_time = (parsed_dates.dt.hour != 0).any() | \
+                   (parsed_dates.dt.minute != 0).any() | \
+                   (parsed_dates.dt.second != 0).any()
+        if has_time:
+            is_hourly = True
+            
+    if is_hourly:
+        df_temp['date'] = parsed_dates
+        df_temp['date_only'] = df_temp['date'].dt.date
+        
+        rain_col = 'rainfall' if 'rainfall' in df_temp.columns else 'rainfall_mm'
+        
+        grouped = df_temp.groupby(['station_id', 'date_only']).agg({
+            'latitude': 'first',
+            'longitude': 'first',
+            rain_col: lambda x: x.sum(min_count=1)
+        }).reset_index()
+        
+        grouped = grouped.rename(columns={'date_only': 'date'})
+        grouped['date'] = pd.to_datetime(grouped['date'])
+        return grouped
+        
+    return df
+
+
 def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Zone A: Data Cleaning & Interpolation with Aggressive Exclusion Policy.
@@ -24,13 +60,14 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
     - Decision 3: No extrapolation (exclude series start/end NaN)
 
     Processing order (exact):
-    1. Input validation (columns, types, ranges)
-    2. Remove duplicate (station_id + date) rows
-    3. Station-level filtering (aggressive)
-    4. Row-level gap detection & filtering
-    5. Single-day gap filling (limit=1, limit_area='inside')
-    6. Numeric rounding (1 decimal place)
-    7. Quality report generation
+    1. Hourly to daily downmapping (auto-detected)
+    2. Input validation (columns, types, ranges)
+    3. Remove duplicate (station_id + date) rows
+    4. Station-level filtering (aggressive)
+    5. Row-level gap detection & filtering
+    6. Single-day gap filling (limit=1, limit_area='inside')
+    7. Numeric rounding (1 decimal place)
+    8. Quality report generation
 
     Args:
         raw_data (pd.DataFrame): Raw input CSV data with required columns:
@@ -38,8 +75,7 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
             - date: TEXT/DATE, ISO 8601 format (YYYY-MM-DD)
             - latitude: FLOAT, WGS84 latitude (-90 to +90)
             - longitude: FLOAT, WGS84 longitude (-180 to +180)
-            - temperature: FLOAT/INT, degrees (-50 to 60°C or equivalent)
-            - humidity: FLOAT/INT, percent (0 to 100%)
+            - rainfall or rainfall_mm: FLOAT/INT, rainfall measurements (non-negative)
 
     Returns:
         Tuple[pd.DataFrame, Dict[str, Any]]:
@@ -50,7 +86,7 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
         ValueError: Clear, user-friendly error messages on validation failure
 
     Guarantees:
-        - Output contains NO NaN values in temperature or humidity
+        - Output contains NO NaN values in rainfall
         - All numeric values rounded to exactly 1 decimal place
         - interpolated_flag column True only for values filled by interpolation
         - All original working columns preserved
@@ -63,9 +99,13 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
         raw_data) > 0 else 0
 
     try:
+        # Step 0: Downmap hourly data to daily
+        df_downmapped = _downmap_hourly_to_daily(raw_data)
+        initial_downmapped_rows = len(df_downmapped)
+
         # Step 1: Validate input data
-        df = _validate_input(raw_data)
-        duplicates_removed = initial_rows - len(df)
+        df = _validate_input(df_downmapped)
+        duplicates_removed = initial_downmapped_rows - len(df)
 
         # Step 2: Station-level filtering (aggressive exclusion)
         df, station_exclusions = _filter_stations_by_validity(df)
@@ -84,7 +124,7 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
         final_stations = df['station_id'].nunique() if len(df) > 0 else 0
 
         quality_report = _generate_quality_report(
-            initial_rows=initial_rows,
+            initial_rows=initial_downmapped_rows,
             initial_stations=initial_stations,
             final_rows=final_rows,
             final_stations=final_stations,
@@ -110,7 +150,7 @@ def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
     - Required columns present
     - Date format valid (ISO 8601)
     - Numeric columns parseable
-    - Value ranges valid (temp -50 to 60, humidity 0-100, lat/lon valid)
+    - Rainfall is non-negative
     - Remove duplicate (station_id + date) combinations
 
     Args:
@@ -124,8 +164,8 @@ def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
     """
 
     # Check required columns
-    required_columns = {'station_id', 'date', 'latitude',
-                        'longitude', 'temperature', 'humidity'}
+    rain_col = 'rainfall' if 'rainfall' in raw_data.columns else 'rainfall_mm'
+    required_columns = {'station_id', 'date', 'latitude', 'longitude', rain_col}
     missing_columns = required_columns - set(raw_data.columns)
     if missing_columns:
         raise ValueError(
@@ -149,7 +189,7 @@ def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
     df = df[df['date'].notna()].copy()
 
     # Convert numeric columns
-    for col in ['latitude', 'longitude', 'temperature', 'humidity']:
+    for col in ['latitude', 'longitude', rain_col]:
         try:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         except Exception as e:
@@ -166,17 +206,10 @@ def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
            (df.loc[df['longitude'].notna(), 'longitude'] > 180).any():
             raise ValueError("Longitude must be between -180 and +180")
 
-    # Validate temperature range
-    if df['temperature'].notna().any():
-        if (df.loc[df['temperature'].notna(), 'temperature'] < -50).any() or \
-           (df.loc[df['temperature'].notna(), 'temperature'] > 60).any():
-            raise ValueError("Temperature must be between -50°C and +60°C")
-
-    # Validate humidity range
-    if df['humidity'].notna().any():
-        if (df.loc[df['humidity'].notna(), 'humidity'] < 0).any() or \
-           (df.loc[df['humidity'].notna(), 'humidity'] > 100).any():
-            raise ValueError("Humidity must be between 0% and 100%")
+    # Validate rainfall range
+    if df[rain_col].notna().any():
+        if (df.loc[df[rain_col].notna(), rain_col] < 0).any():
+            raise ValueError(f"{rain_col} must be non-negative")
 
     # Remove duplicates (station_id + date combination, keep first)
     df = df.drop_duplicates(subset=['station_id', 'date'], keep='first').copy()
@@ -188,7 +221,7 @@ def _filter_stations_by_validity(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[s
     """
     Exclude entire stations with 0% valid data or fewer than 2 valid readings.
 
-    Valid reading: both temperature AND humidity are non-NaN.
+    Valid reading: rainfall is non-NaN.
     This is an "aggressive exclusion" to ensure data quality downstream.
 
     Args:
@@ -204,8 +237,9 @@ def _filter_stations_by_validity(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[s
         - Remaining stations have >0% valid data
     """
 
-    # Define valid reading: both temp and humidity non-NaN
-    df['_is_valid_reading'] = df['temperature'].notna() & df['humidity'].notna()
+    # Define valid reading: rainfall non-NaN
+    rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
+    df['_is_valid_reading'] = df[rain_col].notna()
 
     # Count valid readings per station
     valid_counts = df.groupby('station_id')['_is_valid_reading'].sum()
@@ -270,9 +304,9 @@ def _exclude_invalid_gaps(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int
         station_indices = df[station_mask].index.tolist()
         station_df = df.loc[station_indices].sort_values('date').copy()
 
-        # Identify which rows are missing (either temp or humidity is NaN)
-        station_df['_has_nan'] = station_df['temperature'].isna(
-        ) | station_df['humidity'].isna()
+        # Identify which rows are missing (rainfall is NaN)
+        rain_col = 'rainfall' if 'rainfall' in station_df.columns else 'rainfall_mm'
+        station_df['_has_nan'] = station_df[rain_col].isna()
 
         # Find rows to exclude within this station
         local_rows_to_exclude = _identify_invalid_gap_rows(
@@ -392,6 +426,8 @@ def _fill_single_day_gaps(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.copy()
     df['interpolated_flag'] = False
+    
+    rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
 
     # Process each station separately to maintain date sorting
     for station_id in df['station_id'].unique():
@@ -403,36 +439,28 @@ def _fill_single_day_gaps(df: pd.DataFrame) -> pd.DataFrame:
             'date').reset_index(drop=True)
 
         # Record which values existed BEFORE interpolation
-        before_interp = station_data[['temperature', 'humidity']].notna()
+        before_interp = station_data[rain_col].notna()
 
         # Perform interpolation with limit=1, limit_area='inside'
-        station_data['temperature'] = station_data['temperature'].interpolate(
-            method='linear', limit=1, limit_area='inside'
-        )
-        station_data['humidity'] = station_data['humidity'].interpolate(
+        station_data[rain_col] = station_data[rain_col].interpolate(
             method='linear', limit=1, limit_area='inside'
         )
 
         # After interpolation, find newly filled values
-        after_interp = station_data[['temperature', 'humidity']].notna()
+        after_interp = station_data[rain_col].notna()
 
         # Mark rows where at least one value was newly filled
-        newly_filled_mask = pd.Series(False, index=station_data.index)
-        for col in ['temperature', 'humidity']:
-            newly_filled_mask |= (~before_interp[col]) & after_interp[col]
+        newly_filled_mask = (~before_interp) & after_interp
 
         # Map back to original indices and set interpolated_flag
-        local_filled_indices = newly_filled_mask[newly_filled_mask].index.tolist(
-        )
+        local_filled_indices = newly_filled_mask[newly_filled_mask].index.tolist()
         for local_idx in local_filled_indices:
             global_idx = station_indices[local_idx]
             df.loc[global_idx, 'interpolated_flag'] = True
 
-        # Update temperature and humidity in original DataFrame
+        # Update rainfall in original DataFrame
         for local_idx, global_idx in enumerate(station_indices):
-            df.loc[global_idx,
-                   'temperature'] = station_data.loc[local_idx, 'temperature']
-            df.loc[global_idx, 'humidity'] = station_data.loc[local_idx, 'humidity']
+            df.loc[global_idx, rain_col] = station_data.loc[local_idx, rain_col]
 
     return df.reset_index(drop=True)
 
@@ -451,14 +479,10 @@ def _round_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame: Same data with numeric columns rounded to 1 decimal
     """
 
-    df = df.copy()
-
-    # Round temperature and humidity to 1 decimal
-    numeric_cols_to_round = ['temperature', 'humidity']
-
-    for col in numeric_cols_to_round:
-        if col in df.columns:
-            df[col] = df[col].round(1)
+    # Round rainfall to 1 decimal
+    rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
+    if rain_col in df.columns:
+        df[rain_col] = df[rain_col].round(1)
 
     return df
 

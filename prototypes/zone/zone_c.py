@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import LocalOutlierFactor
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
 
 
 # ============================================================================
@@ -11,8 +11,8 @@ from sklearn.preprocessing import StandardScaler
 
 def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
                                  neighbors: dict = None,
-                                 contamination: float = 0.1,
-                                 n_neighbors: int = 20) -> tuple:
+                                 contamination: float = 0.05,
+                                 n_neighbors: int = 15) -> tuple:
     """
     Zone C: Anomaly Detection using Local Outlier Factor (LOF).
     Supports global mode or spatial-context mode using Zone B neighbors.
@@ -21,33 +21,34 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
     -----------
     cleaned_data : pd.DataFrame
         Data from Zone A with columns: station_id, date, latitude, longitude,
-        temperature, humidity (no NaNs).
+        rainfall or rainfall_mm (no NaNs).
     neighbors : dict, optional
         Neighbor dict from Zone B: {station_id: [{"neighbor_id": str, "distance_km": float}, ...]}
         If None, uses global LOF mode.
     contamination : float
-        Expected proportion of outliers in the data (default 0.1).
+        Expected proportion of outliers in the data (default 0.05).
     n_neighbors : int
-        Number of neighbors for LOF algorithm (default 20).
+        Number of neighbors for LOF algorithm (default 15).
 
     Returns:
     --------
     tuple: (flagged_data: pd.DataFrame, anomaly_summary: dict)
         - flagged_data: Original data with 'lof_score' and 'is_anomaly' columns added
         - anomaly_summary: {station_id: [{"date": datetime, "lof_score": float,
-                           "temperature": float, "humidity": float}, ...]}
+                           "rainfall": float}, ...]}
     """
 
     # Copy data to avoid modifying original
     flagged_data = cleaned_data.copy().reset_index(drop=True)
 
     # ========================================================================
-    # Feature extraction: treat every (temperature, humidity) pair as 2D point
+    # Feature extraction: treat rainfall (or rainfall_mm) as 1D point
     # ========================================================================
-    features = ['temperature', 'humidity']
+    rain_col = 'rainfall' if 'rainfall' in flagged_data.columns else 'rainfall_mm'
+    features = [rain_col]
 
-    # Scale features globally (fit once on all data for consistent scaling)
-    scaler = StandardScaler()
+    # Scale features globally using RobustScaler
+    scaler = RobustScaler()
     scaled_features = scaler.fit_transform(flagged_data[features])
 
     # Initialize output columns
@@ -135,8 +136,7 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
                 {
                     'date': row['date'],
                     'lof_score': row['lof_score'],
-                    'temperature': row['temperature'],
-                    'humidity': row['humidity']
+                    rain_col: row[rain_col]
                 }
                 for _, row in station_anomalies.iterrows()
             ]

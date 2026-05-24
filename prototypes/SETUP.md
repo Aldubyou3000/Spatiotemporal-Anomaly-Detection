@@ -175,7 +175,7 @@ For issues with the pipeline, check that:
 
 - All dependencies are installed correctly (use `pip install -r requirements.txt`)
 - You're running Streamlit from the `prototypes/` directory
-- CSV file has the required columns: `station_id`, `date`, `latitude`, `longitude`, `temperature`, `humidity`
+- CSV file has the required columns: `station_id`, `date`, `latitude`, `longitude`, and **`rainfall` or `rainfall_mm`** (rainfall amounts in mm)
 - Streamlit version is ≥1.32.0 (run `streamlit --version` to check)
 - If maps don't display, ensure `folium` and `streamlit-folium` are installed
 
@@ -189,24 +189,28 @@ python -c "import streamlit; import pandas; import folium; import streamlit_foli
 
 ---
 
-## Unit Support & Auto-Detection
+## Data Format
 
-### Temperature Format Detection
+### Rainfall Column
 
-The system **automatically detects** the temperature format in your CSV file:
+The system expects rainfall data in **millimeters (mm)** per day. The CSV must contain either:
+- `rainfall` — Rainfall amount in mm, OR
+- `rainfall_mm` — Alternative column name, same meaning
 
-- **Celsius (0-50°C)**: Typical for tropical regions like the Philippines
-- **Fahrenheit (32-122°F)**: Common in other regions
+**Rainfall range**: Non-negative values (≥ 0 mm). Values outside this range are flagged for exclusion.
 
-**How it works:**
-1. When you upload a CSV, the system analyzes the temperature values
-2. If all values fall in the Celsius range (0-50), it assumes Celsius
-3. If all values fall in the Fahrenheit range (32-122), it assumes Fahrenheit
-4. If the format is ambiguous, you'll be asked to confirm
+### Hourly-to-Daily Downmapping
 
-### Display Format Options
+If your input CSV contains **hourly rainfall data** (multiple rows per station per day), Zone A automatically:
+1. Detects the hourly structure
+2. Aggregates each day's hourly readings into a single daily total (sum of hourly values)
+3. Proceeds with standard cleaning/interpolation
 
-After uploading and detecting the format, use the **"Display Format"** section in the sidebar to:
+**Example**: 24 hourly readings of 2.5 mm each → 60 mm daily total
+
+### Processing Steps
+
+After uploading, the system runs:
 
 - **Original**: Show values in their original format
 - **Celsius**: Convert all temperatures to Celsius (°C)

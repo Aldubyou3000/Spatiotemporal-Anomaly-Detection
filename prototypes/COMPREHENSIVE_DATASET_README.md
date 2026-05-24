@@ -17,8 +17,7 @@
 | Total rows | 100,000 |
 | Unique stations | 14 |
 | Date range | 2023-01-01 to 2025-12-31 |
-| Missing temperatures | 33,708 (33.7%) |
-| Missing humidity | 33,708 (33.7%) |
+| Missing rainfall values | 33,708 (33.7%) |
 | Missing coordinates | 6,666 rows |
 | Expected output (after Zone A) | ~68,000 rows (31.9% reduction) |
 
