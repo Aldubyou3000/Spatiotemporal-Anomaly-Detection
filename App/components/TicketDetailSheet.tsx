@@ -632,26 +632,26 @@ const styles = StyleSheet.create({
     elevation: 16,
   },
   handle: {
-    width: 32, height: 3, borderRadius: 2,
+    width: 36, height: 4, borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 10, marginBottom: 6,
+    marginTop: 12, marginBottom: 4,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 14,
+    paddingTop: 16,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     gap: 12,
   },
   sheetHeaderLeft: { flex: 1 },
   sheetTitle: {
-    fontSize: 16, fontWeight: '700', lineHeight: 22, letterSpacing: -0.3,
+    fontSize: 17, fontWeight: '600', lineHeight: 23, letterSpacing: -0.2,
   },
-  sheetId: { fontSize: 11, marginTop: 3, fontWeight: '500' },
+  sheetId: { fontSize: 12, marginTop: 4, fontWeight: '500', letterSpacing: 0.1 },
   closeBtn: {
-    width: 30, height: 30, borderRadius: 15,
+    width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
     marginTop: 1,
   },
@@ -659,36 +659,36 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   bodyContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32 },
 
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 20 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 24 },
   chip: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
   },
-  statusDot: { width: 5, height: 5, borderRadius: 3, marginRight: 5 },
-  chipText: { fontSize: 11, fontWeight: '600' },
+  statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 5 },
+  chipText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.1 },
 
   sectionHeader: {
-    fontSize: 11, fontWeight: '600', letterSpacing: 0.2, marginBottom: 8,
+    fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginBottom: 10, textTransform: 'uppercase',
   },
 
-  descText: { fontSize: 14, lineHeight: 22 },
+  descText: { fontSize: 15, lineHeight: 23 },
 
-  detailsCard: { borderRadius: 12, overflow: 'hidden', marginBottom: 22 },
+  detailsCard: { borderRadius: 12, overflow: 'hidden', marginBottom: 24 },
   detailRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 10, paddingHorizontal: 14, gap: 12,
+    paddingVertical: 12, paddingHorizontal: 14, gap: 12,
   },
   detailIconWrap: { width: 18 },
   detailText: { flex: 1 },
-  detailLabel: { fontSize: 11, fontWeight: '500', marginBottom: 1 },
-  detailValue: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  detailLabel: { fontSize: 12, fontWeight: '500', marginBottom: 2 },
+  detailValue: { fontSize: 14, lineHeight: 19, fontWeight: '500' },
 
   thumbRow: { gap: 10, paddingRight: 4 },
-  thumbWrap: { borderRadius: 10, overflow: 'hidden' },
-  thumb: { width: 100, height: 76 },
+  thumbWrap: { borderRadius: 12, overflow: 'hidden' },
+  thumb: { width: 104, height: 80 },
 
-  reviewBlock: { borderRadius: 10, padding: 14, marginBottom: 22 },
-  reviewText: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
+  reviewBlock: { borderRadius: 12, padding: 14, marginBottom: 24 },
+  reviewText: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
 
   // Full-screen viewer
   viewer: {
@@ -743,6 +743,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  csvName: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  csvMeta: { fontSize: 11, marginTop: 1 },
+  csvName: { fontSize: 14, fontWeight: '600', lineHeight: 19 },
+  csvMeta: { fontSize: 12, marginTop: 2 },
 });

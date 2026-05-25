@@ -3,46 +3,72 @@ import { Tabs } from 'expo-router';
 import { Pressable } from 'react-native';
 
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { palette, spacing, typography } from '@/constants/theme';
 import { useAppContext } from '@/context/AppContext';
+import { useTheme } from '@/hooks/useTheme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+// ─── Theme toggle (header right) ─────────────────────────────────────────────
+function ThemeToggleButton({
+  isDarkMode, onPress, color,
+}: {
+  isDarkMode: boolean; onPress: () => void; color: string;
+}) {
+  const icon: IoniconName = isDarkMode ? 'sunny-outline' : 'moon-outline';
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={({ pressed }) => ({
+        marginRight: spacing.sm,
+        padding: 8,
+        opacity: pressed ? 0.5 : 1,
+      })}
+    >
+      <Ionicons name={icon} size={20} color={color} />
+    </Pressable>
+  );
+}
+
+// ─── Tabs ────────────────────────────────────────────────────────────────────
 export default function TabLayout() {
   const { isDarkMode, toggleTheme } = useAppContext();
+  const theme = useTheme();
 
-  const activeTint   = '#1E6FD9';
   const inactiveTint = isDarkMode ? '#3A4D6B' : '#9AAAC4';
-  const tabBarBg     = isDarkMode ? '#0D1422' : '#ffffff';
-  const headerBg     = isDarkMode ? '#0A0F1E' : '#F5F7FA';
-  const headerTint   = isDarkMode ? '#F0F4FF' : '#0D1B3E';
-  const borderColor  = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: activeTint,
+        tabBarActiveTintColor:   palette.brand,
         tabBarInactiveTintColor: inactiveTint,
         tabBarStyle: {
-          backgroundColor: tabBarBg,
-          borderTopColor: borderColor,
-          borderTopWidth: 1,
-          paddingTop: 6,
-          height: 58,
+          backgroundColor: theme.surface,
+          borderTopColor:  theme.border,
+          borderTopWidth:  1,
+          paddingTop:      6,
+          height:          62,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
+          fontSize:    typography.caption.size,
+          fontWeight:  '600',
+          letterSpacing: 0.1,
           marginBottom: 6,
         },
         headerStyle: {
-          backgroundColor: headerBg,
-          shadowColor: 'transparent',
-          elevation: 0,
+          backgroundColor: theme.bg,
+          shadowColor:     'transparent',
+          elevation:       0,
           borderBottomWidth: 1,
-          borderBottomColor: borderColor,
+          borderBottomColor: theme.border,
         } as any,
-        headerTintColor: headerTint,
-        headerTitleStyle: { fontWeight: '700', fontSize: 16 },
+        headerTintColor:    theme.text,
+        headerTitleStyle:   {
+          fontWeight: typography.subtitle.weight,
+          fontSize:   typography.subtitle.size,
+          letterSpacing: typography.subtitle.letterSpacing,
+        },
         headerShown: useClientOnlyValue(false, true),
       }}
     >
@@ -51,12 +77,16 @@ export default function TabLayout() {
         options={{
           title: 'Dashboard',
           headerRight: () => (
-            <ThemeToggleButton isDarkMode={isDarkMode} onPress={toggleTheme} color={headerTint} />
+            <ThemeToggleButton
+              isDarkMode={isDarkMode}
+              onPress={toggleTheme}
+              color={theme.text}
+            />
           ),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'grid' : 'grid-outline'}
-              size={21}
+              name={focused ? 'home' : 'home-outline'}
+              size={22}
               color={color}
             />
           ),
@@ -68,7 +98,7 @@ export default function TabLayout() {
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'person-circle' : 'person-circle-outline'}
+              name={focused ? 'person' : 'person-outline'}
               size={22}
               color={color}
             />
@@ -76,26 +106,5 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
-  );
-}
-
-function ThemeToggleButton({
-  isDarkMode,
-  onPress,
-  color,
-}: {
-  isDarkMode: boolean;
-  onPress: () => void;
-  color: string;
-}) {
-  const icon: IoniconName = isDarkMode ? 'sunny-outline' : 'moon-outline';
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={10}
-      style={({ pressed }) => ({ marginRight: 14, padding: 6, opacity: pressed ? 0.55 : 1 })}
-    >
-      <Ionicons name={icon} size={20} color={color} />
-    </Pressable>
   );
 }

@@ -1,19 +1,33 @@
 import { PropsWithChildren } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
-import { useAppContext } from '@/context/AppContext';
+import { radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/useTheme';
 
 type CardProps = PropsWithChildren<{
   style?: StyleProp<ViewStyle>;
+  /** Reduce internal padding for nested or compact cards. */
+  compact?: boolean;
+  /** Remove background — useful when grouping rows without a visible container. */
+  transparent?: boolean;
 }>;
 
-export default function Card({ children, style }: CardProps) {
-  const { isDarkMode } = useAppContext();
-  const backgroundColor = isDarkMode ? '#131929' : '#ffffff';
-  const borderColor = isDarkMode ? '#1E2D47' : '#E8ECF2';
+export default function Card({ children, style, compact = false, transparent = false }: CardProps) {
+  const theme = useTheme();
 
   return (
-    <View style={[styles.card, { backgroundColor, borderColor }, style]}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: transparent ? 'transparent' : theme.surface,
+          borderColor: theme.border,
+          borderWidth: transparent ? 0 : StyleSheet.hairlineWidth,
+          padding: compact ? spacing.sm : spacing.md,
+        },
+        style,
+      ]}
+    >
       {children}
     </View>
   );
@@ -22,8 +36,6 @@ export default function Card({ children, style }: CardProps) {
 const styles = StyleSheet.create({
   card: {
     width: '100%',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
+    borderRadius: radius.lg,
   },
 });

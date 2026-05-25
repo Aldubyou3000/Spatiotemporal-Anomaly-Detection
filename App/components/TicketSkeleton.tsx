@@ -8,17 +8,25 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { useAppContext } from '@/context/AppContext';
+import { radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/useTheme';
 
-function ShimmerBox({ width, height, style }: { width: number | string; height: number; style?: object }) {
-  const { isDarkMode } = useAppContext();
+// ─── Shimmer building block ──────────────────────────────────────────────────
+function ShimmerBox({
+  width, height, style,
+}: {
+  width: number | `${number}%`;
+  height: number;
+  style?: object;
+}) {
+  const theme = useTheme();
   const opacity = useSharedValue(0.4);
 
   useEffect(() => {
     opacity.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 700 }),
-        withTiming(0.4, { duration: 700 }),
+        withTiming(0.9, { duration: 800 }),
+        withTiming(0.4, { duration: 800 }),
       ),
       -1,
       false,
@@ -26,46 +34,54 @@ function ShimmerBox({ width, height, style }: { width: number | string; height: 
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  const baseColor = isDarkMode ? '#1E2D47' : '#E2E8F0';
+  const baseColor = theme.isDark ? '#1E2D47' : '#E2E8F0';
 
   return (
     <Animated.View
-      style={[{ width, height, borderRadius: 6, backgroundColor: baseColor }, animStyle, style]}
+      style={[
+        { width, height, borderRadius: 6, backgroundColor: baseColor },
+        animStyle,
+        style,
+      ]}
     />
   );
 }
 
+// ─── Skeleton card ───────────────────────────────────────────────────────────
 function SkeletonCard() {
-  const { isDarkMode } = useAppContext();
-  const bg = isDarkMode ? '#131929' : '#ffffff';
-  const border = isDarkMode ? '#1E2D47' : '#E8ECF2';
+  const theme = useTheme();
 
   return (
-    <View style={[styles.card, { backgroundColor: bg, borderColor: border }]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: theme.surface, borderColor: theme.border },
+      ]}
+    >
       {/* Status + priority row */}
       <View style={styles.topRow}>
-        <ShimmerBox width={80} height={22} style={{ borderRadius: 999 }} />
-        <ShimmerBox width={56} height={22} style={{ borderRadius: 999 }} />
+        <ShimmerBox width={88} height={22} style={{ borderRadius: radius.pill }} />
+        <ShimmerBox width={64} height={22} style={{ borderRadius: radius.pill }} />
       </View>
       {/* Title */}
-      <ShimmerBox width="70%" height={14} style={{ marginBottom: 8 }} />
+      <ShimmerBox width="68%" height={16} style={{ marginBottom: spacing.xs }} />
       {/* Description lines */}
-      <ShimmerBox width="100%" height={11} style={{ marginBottom: 6 }} />
-      <ShimmerBox width="55%" height={11} style={{ marginBottom: 14 }} />
+      <ShimmerBox width="100%" height={12} style={{ marginBottom: 6 }} />
+      <ShimmerBox width="56%" height={12} style={{ marginBottom: spacing.md }} />
       {/* Meta chips */}
       <View style={styles.metaRow}>
         <ShimmerBox width={60} height={10} />
         <ShimmerBox width={72} height={10} />
       </View>
       {/* Divider */}
-      <View style={[styles.divider, { backgroundColor: border }]} />
+      <View style={[styles.divider, { backgroundColor: theme.border }]} />
       {/* Action button */}
-      <ShimmerBox width="100%" height={38} style={{ borderRadius: 10 }} />
+      <ShimmerBox width="100%" height={40} style={{ borderRadius: radius.sm + 2 }} />
     </View>
   );
 }
 
+// ─── Public component ────────────────────────────────────────────────────────
 export default function TicketSkeleton({ count = 3 }: { count?: number }) {
   return (
     <>
@@ -78,23 +94,23 @@ export default function TicketSkeleton({ count = 3 }: { count?: number }) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    marginBottom: 10,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: spacing.sm,
   },
   topRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
   metaRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   divider: {
-    height: 1,
-    marginBottom: 12,
+    height: StyleSheet.hairlineWidth,
+    marginBottom: spacing.sm,
   },
 });

@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -17,31 +18,92 @@ import {
 import BottomSheet from '@/components/BottomSheet';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
+import Pill from '@/components/Pill';
+import SectionHeader from '@/components/SectionHeader';
 import { Text } from '@/components/Themed';
-import { useAppContext } from '@/context/AppContext';
-import { getTicketById, MaintenanceTicket, submitInspectionReport, uploadInspectionPhoto } from '@/services/supabaseApi';
+import { palette, radius, spacing, typography } from '@/constants/theme';
+import { useTheme } from '@/hooks/useTheme';
+import {
+  getTicketById,
+  MaintenanceTicket,
+  submitInspectionReport,
+  uploadInspectionPhoto,
+} from '@/services/supabaseApi';
 
-const PRIORITY_COLOR: Record<string, string> = {
-  high: '#E53535', medium: '#F5A623', low: '#0DB976',
-};
+// ─── Constants ───────────────────────────────────────────────────────────────
+const PRIORITY = {
+  high:   { label: 'High',   color: palette.danger,  bg: palette.dangerSoft },
+  medium: { label: 'Medium', color: palette.warning, bg: palette.warningSoft },
+  low:    { label: 'Low',    color: palette.success, bg: palette.successSoft },
+} as const;
 
+// ─── Toggle group (used for sensor + severity) ───────────────────────────────
+function ToggleGroup<T extends string | boolean>({
+  options, value, onChange,
+}: {
+  options: { value: T; label: string; color: string; icon?: React.ComponentProps<typeof Ionicons>['name'] }[];
+  value: T | null;
+  onChange: (v: T | null) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.toggleRow}>
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <Pressable
+            key={String(opt.value)}
+            onPress={() => onChange(active ? null : opt.value)}
+            style={({ pressed }) => [
+              styles.toggleBtn,
+              {
+                backgroundColor: active ? opt.color + '12' : theme.surface,
+                borderColor: active ? opt.color : theme.borderStrong,
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+          >
+            {opt.icon ? (
+              <Ionicons
+                name={opt.icon}
+                size={15}
+                color={active ? opt.color : theme.textSecondary}
+                style={{ marginRight: spacing.xxs + 1 }}
+              />
+            ) : null}
+            <Text
+              style={[
+                styles.toggleLabel,
+                { color: active ? opt.color : theme.textSecondary },
+              ]}
+            >
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Screen ──────────────────────────────────────────────────────────────────
 export default function ReportScreen() {
   const router = useRouter();
-  const { isDarkMode } = useAppContext();
+  const theme  = useTheme();
   const params = useLocalSearchParams();
   const ticketId = (params.id ?? params.ticketId) as string | undefined;
 
-  const [ticket, setTicket] = useState<MaintenanceTicket | null>(null);
-  const [notes, setNotes] = useState('');
+  const [ticket, setTicket]               = useState<MaintenanceTicket | null>(null);
+  const [notes, setNotes]                 = useState('');
   const [sensorWorking, setSensorWorking] = useState<boolean | null>(null);
-  const [severity, setSeverity] = useState<'low' | 'medium' | 'high' | null>(null);
-  const [rootCause, setRootCause] = useState('');
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [photoMime, setPhotoMime] = useState('image/jpeg');
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [notesError, setNotesError] = useState('');
-  const [showPhotoSheet, setShowPhotoSheet] = useState(false);
+  const [severity, setSeverity]           = useState<'low' | 'medium' | 'high' | null>(null);
+  const [rootCause, setRootCause]         = useState('');
+  const [photoUri, setPhotoUri]           = useState<string | null>(null);
+  const [photoMime, setPhotoMime]         = useState('image/jpeg');
+  const [loading, setLoading]             = useState(true);
+  const [submitting, setSubmitting]       = useState(false);
+  const [notesError, setNotesError]       = useState('');
+  const [showPhotoSheet, setShowPhotoSheet]     = useState(false);
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
 
   useEffect(() => {
@@ -75,7 +137,7 @@ export default function ReportScreen() {
   const handleSubmit = async () => {
     if (!ticket) return;
     if (!notes.trim()) {
-      setNotesError('Field observations are required before submitting.');
+      setNotesError('Field observations are required.');
       return;
     }
     setNotesError('');
@@ -86,232 +148,237 @@ export default function ReportScreen() {
         notes.trim(),
         sensorWorking,
         severity,
-        rootCause.trim() || null
+        rootCause.trim() || null,
       );
       if (photoUri) await uploadInspectionPhoto(reportId, photoUri, photoMime);
       setShowSuccessSheet(true);
     } catch {
-      Alert.alert('Submission failed', 'Could not submit the report. Please check your connection and try again.');
+      Alert.alert('Submission failed', 'Could not submit the report. Check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const bg = isDarkMode ? '#0A0F1E' : '#F5F7FA';
-  const inputBg = isDarkMode ? '#0D1422' : '#ffffff';
-  const textColor = isDarkMode ? '#F0F4FF' : '#0D1B3E';
-  const secondaryText = isDarkMode ? '#7A8BAA' : '#6B7A99';
-  const borderColor = isDarkMode ? '#1E2D47' : '#E8ECF2';
-
+  // ── Loading / error states ─────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: bg }]}>
-        <Text style={{ color: secondaryText }}>Loading ticket…</Text>
+      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator color={palette.brand} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+          Loading ticket…
+        </Text>
       </View>
     );
   }
   if (!ticket) {
     return (
-      <View style={[styles.centered, { backgroundColor: bg }]}>
-        <Ionicons name="alert-circle-outline" size={32} color="#E53535" style={{ marginBottom: 8 }} />
-        <Text style={{ color: '#E53535', fontWeight: '600' }}>Ticket not found.</Text>
+      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
+        <Ionicons name="alert-circle-outline" size={36} color={palette.danger} />
+        <Text style={[styles.errorTitle, { color: palette.danger }]}>
+          Ticket not found
+        </Text>
       </View>
     );
   }
 
-  const pc = PRIORITY_COLOR[ticket.priority ?? 'medium'];
+  const pr = PRIORITY[(ticket.priority ?? 'medium') as keyof typeof PRIORITY];
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: bg }}
+      style={{ flex: 1, backgroundColor: theme.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={{ flex: 1 }}>
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={[styles.content, { backgroundColor: bg }]}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Ticket summary */}
-          <Text style={[styles.sectionLabel, { color: secondaryText }]}>Ticket</Text>
-          <Card style={styles.card}>
-            <Text style={[styles.ticketTitle, { color: textColor }]}>{ticket.stationName}</Text>
-            <Text style={[styles.ticketDesc, { color: secondaryText }]}>{ticket.flaggedAnomaly}</Text>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Ticket summary ──────────────────────────────────────────── */}
+        <SectionHeader label="Ticket" />
+        <Card style={styles.section}>
+          <Text style={[styles.ticketTitle, { color: theme.text }]}>
+            {ticket.stationName}
+          </Text>
+          <Text style={[styles.ticketDesc, { color: theme.textSecondary }]}>
+            {ticket.flaggedAnomaly}
+          </Text>
 
-            <View style={styles.ticketMeta}>
-              {ticket.coordinates ? (
-                <View style={styles.metaChip}>
-                  <Ionicons name="location-outline" size={13} color={secondaryText} style={{ marginRight: 4 }} />
-                  <Text style={[styles.metaText, { color: secondaryText }]}>{ticket.coordinates}</Text>
-                </View>
-              ) : null}
-              {ticket.priority ? (
-                <View style={[styles.priorityBadge, { backgroundColor: `${pc}12`, borderColor: `${pc}30` }]}>
-                  <Text style={[styles.priorityText, { color: pc }]}>
-                    {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)} Priority
-                  </Text>
-                </View>
-              ) : null}
-              {ticket.anomalyZone ? (
-                <View style={[styles.zoneBadge]}>
-                  <Text style={[styles.zoneText]}>Zone {ticket.anomalyZone}</Text>
-                </View>
-              ) : null}
-            </View>
-          </Card>
-
-          {/* Field observations */}
-          <Text style={[styles.sectionLabel, { color: secondaryText }]}>Field Observations</Text>
-          <Card style={styles.card}>
-            <TextInput
-              style={[
-                styles.notesInput,
-                { backgroundColor: inputBg, color: textColor, borderColor: notesError ? '#E53535' : borderColor },
-              ]}
-              multiline
-              placeholder="Describe what you observed on site…"
-              placeholderTextColor={isDarkMode ? '#2A3A52' : '#A8B4CC'}
-              value={notes}
-              onChangeText={(v) => { setNotes(v); if (v.trim()) setNotesError(''); }}
-              textAlignVertical="top"
-            />
-            {notesError ? (
-              <View style={styles.fieldErrorRow}>
-                <Ionicons name="alert-circle-outline" size={13} color="#E53535" style={{ marginRight: 4 }} />
-                <Text style={styles.fieldError}>{notesError}</Text>
-              </View>
+          <View style={styles.ticketChips}>
+            {ticket.priority ? (
+              <Pill label={`${pr.label} Priority`} color={pr.color} bg={pr.bg} outline />
             ) : null}
+            {ticket.anomalyZone ? (
+              <Pill label={`Zone ${ticket.anomalyZone}`} color={palette.accent} bg={palette.accentSoft} />
+            ) : null}
+          </View>
 
-            {/* Sensor status */}
-            <Text style={[styles.fieldLabel, { color: secondaryText }]}>Is the sensor working?</Text>
-            <View style={styles.toggleRow}>
-              {([true, false] as const).map((val) => {
-                const active = sensorWorking === val;
-                const c = val ? '#0DB976' : '#E53535';
-                return (
-                  <Pressable
-                    key={String(val)}
-                    onPress={() => setSensorWorking(active ? null : val)}
-                    style={({ pressed }) => [
-                      styles.toggleBtn,
-                      {
-                        borderColor: active ? c : borderColor,
-                        backgroundColor: active ? `${c}10` : 'transparent',
-                        opacity: pressed ? 0.72 : 1,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={val ? 'checkmark-circle-outline' : 'close-circle-outline'}
-                      size={15}
-                      color={active ? c : secondaryText}
-                      style={{ marginRight: 5 }}
-                    />
-                    <Text style={{ color: active ? c : secondaryText, fontWeight: '600', fontSize: 14 }}>
-                      {val ? 'Yes' : 'No'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+          {ticket.coordinates ? (
+            <View style={[styles.coordRow, { borderTopColor: theme.border }]}>
+              <Ionicons name="navigate-outline" size={14} color={theme.textSecondary} />
+              <Text style={[styles.coordText, { color: theme.textSecondary }]}>
+                {ticket.coordinates}
+              </Text>
             </View>
+          ) : null}
+        </Card>
 
-            {/* Severity */}
-            <Text style={[styles.fieldLabel, { color: secondaryText }]}>Severity</Text>
-            <View style={styles.toggleRow}>
-              {(['low', 'medium', 'high'] as const).map((level) => {
-                const active = severity === level;
-                const c = PRIORITY_COLOR[level];
-                return (
-                  <Pressable
-                    key={level}
-                    onPress={() => setSeverity(active ? null : level)}
-                    style={({ pressed }) => [
-                      styles.toggleBtn,
-                      {
-                        borderColor: active ? c : borderColor,
-                        backgroundColor: active ? `${c}10` : 'transparent',
-                        opacity: pressed ? 0.72 : 1,
-                      },
-                    ]}
-                  >
-                    <Text style={{ color: active ? c : secondaryText, fontWeight: '600', fontSize: 13, textTransform: 'capitalize' }}>
-                      {level}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+        {/* ── Field observations ──────────────────────────────────────── */}
+        <SectionHeader label="Field Observations" spaced />
+        <Card style={styles.section}>
+          <Text style={[styles.fieldLabel, { color: theme.text }]}>
+            What did you observe? <Text style={{ color: palette.danger }}>*</Text>
+          </Text>
+          <TextInput
+            style={[
+              styles.textarea,
+              {
+                backgroundColor: theme.surfaceAlt,
+                color: theme.text,
+                borderColor: notesError ? palette.danger : theme.borderStrong,
+              },
+            ]}
+            multiline
+            placeholder="Describe what you saw on site…"
+            placeholderTextColor={theme.textTertiary}
+            value={notes}
+            onChangeText={(v) => { setNotes(v); if (v.trim()) setNotesError(''); }}
+            textAlignVertical="top"
+          />
+          {notesError ? (
+            <View style={styles.errorRow}>
+              <Ionicons name="alert-circle" size={13} color={palette.danger} />
+              <Text style={styles.errorText}>{notesError}</Text>
             </View>
+          ) : null}
 
-            {/* Root cause */}
-            <Text style={[styles.fieldLabel, { color: secondaryText }]}>
-              Root Cause <Text style={{ fontWeight: '400' }}>(optional)</Text>
+          {/* Sensor status */}
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.text }]}>
+              Is the sensor working?
+            </Text>
+            <ToggleGroup
+              value={sensorWorking}
+              onChange={setSensorWorking}
+              options={[
+                { value: true,  label: 'Yes', color: palette.success, icon: 'checkmark-circle-outline' },
+                { value: false, label: 'No',  color: palette.danger,  icon: 'close-circle-outline' },
+              ]}
+            />
+          </View>
+
+          {/* Severity */}
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.text }]}>
+              Severity
+            </Text>
+            <ToggleGroup
+              value={severity}
+              onChange={setSeverity}
+              options={[
+                { value: 'low',    label: 'Low',    color: palette.success },
+                { value: 'medium', label: 'Medium', color: palette.warning },
+                { value: 'high',   label: 'High',   color: palette.danger  },
+              ]}
+            />
+          </View>
+
+          {/* Root cause */}
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: theme.text }]}>
+              Root cause{' '}
+              <Text style={[styles.fieldOptional, { color: theme.textTertiary }]}>
+                (optional)
+              </Text>
             </Text>
             <TextInput
-              style={[styles.shortInput, { backgroundColor: inputBg, color: textColor, borderColor }]}
-              placeholder="e.g. sensor malfunction, clogged gauge…"
-              placeholderTextColor={isDarkMode ? '#2A3A52' : '#A8B4CC'}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.surfaceAlt,
+                  color: theme.text,
+                  borderColor: theme.borderStrong,
+                },
+              ]}
+              placeholder="e.g. sensor malfunction, clogged gauge"
+              placeholderTextColor={theme.textTertiary}
               value={rootCause}
               onChangeText={setRootCause}
-              textAlignVertical="top"
               multiline
+              textAlignVertical="top"
             />
-          </Card>
+          </View>
+        </Card>
 
-          {/* Photo */}
-          <Text style={[styles.sectionLabel, { color: secondaryText }]}>
-            Photo <Text style={{ fontWeight: '400', textTransform: 'none' }}>(optional)</Text>
-          </Text>
-          <Card style={styles.card}>
-            {photoUri ? (
-              <View>
-                <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-                <Pressable
-                  onPress={() => { setPhotoUri(null); setPhotoMime('image/jpeg'); }}
-                  style={({ pressed }) => [styles.removePhotoBtn, { opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Ionicons name="trash-outline" size={13} color="#E53535" style={{ marginRight: 5 }} />
-                  <Text style={styles.removePhotoBtnText}>Remove photo</Text>
-                </Pressable>
-              </View>
-            ) : (
+        {/* ── Photo ──────────────────────────────────────────────────── */}
+        <SectionHeader label="Photo Evidence" spaced />
+        <Card style={styles.section}>
+          {photoUri ? (
+            <View>
+              <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
               <Pressable
-                onPress={() => setShowPhotoSheet(true)}
-                style={({ pressed }) => [styles.photoPickerBtn, { borderColor, opacity: pressed ? 0.7 : 1 }]}
+                onPress={() => { setPhotoUri(null); setPhotoMime('image/jpeg'); }}
+                style={({ pressed }) => [styles.removeBtn, { opacity: pressed ? 0.7 : 1 }]}
               >
-                <Ionicons name="camera-outline" size={26} color={secondaryText} style={{ marginBottom: 8 }} />
-                <Text style={{ color: textColor, fontSize: 14, fontWeight: '600' }}>Attach a photo</Text>
-                <Text style={{ color: secondaryText, fontSize: 12, marginTop: 4 }}>
-                  Camera or gallery
-                </Text>
+                <Ionicons name="trash-outline" size={14} color={palette.danger} />
+                <Text style={styles.removeBtnText}>Remove photo</Text>
               </Pressable>
-            )}
-          </Card>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => setShowPhotoSheet(true)}
+              style={({ pressed }) => [
+                styles.photoPicker,
+                {
+                  borderColor: theme.borderStrong,
+                  backgroundColor: theme.surfaceMuted,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.photoIconWrap, { backgroundColor: palette.brandSoft }]}>
+                <Ionicons name="camera-outline" size={22} color={palette.brand} />
+              </View>
+              <Text style={[styles.photoTitle, { color: theme.text }]}>
+                Attach a photo
+              </Text>
+              <Text style={[styles.photoSub, { color: theme.textSecondary }]}>
+                Camera or gallery — optional
+              </Text>
+            </Pressable>
+          )}
+        </Card>
 
+        {/* ── Submit ──────────────────────────────────────────────────── */}
+        <View style={styles.submitWrap}>
           <Button
-            label={submitting ? 'Submitting…' : 'Submit Verification Report'}
+            label={submitting ? 'Submitting…' : 'Submit Report'}
             onPress={handleSubmit}
             loading={submitting}
-            style={styles.submitBtn}
+            icon={submitting ? undefined : 'paper-plane-outline'}
+            iconRight
           />
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
 
+      {/* Photo source sheet */}
       <BottomSheet
         visible={showPhotoSheet}
         onClose={() => setShowPhotoSheet(false)}
         title="Attach Photo"
         actions={[
-          { label: 'Take Photo', variant: 'primary', onPress: launchCamera },
-          { label: 'Choose from Gallery', onPress: launchGallery },
-          { label: 'Cancel', onPress: () => {} },
+          { label: 'Take Photo',           variant: 'primary', onPress: launchCamera },
+          { label: 'Choose from Gallery',                       onPress: launchGallery },
+          { label: 'Cancel',                                    onPress: () => {} },
         ]}
       />
 
+      {/* Success sheet */}
       <BottomSheet
         visible={showSuccessSheet}
         onClose={() => {}}
         title="Report Submitted"
-        message="Your report has been sent to the analyst for review."
+        message="Your report was sent to the analyst for review."
         actions={[
           { label: 'Done', variant: 'primary', onPress: () => router.back() },
         ]}
@@ -320,57 +387,177 @@ export default function ReportScreen() {
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 18, paddingBottom: 40 },
-
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
-    textTransform: 'uppercase', marginBottom: 8, marginTop: 4,
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  card: { marginBottom: 18 },
-
-  ticketTitle: { fontSize: 16, fontWeight: '700', marginBottom: 5, lineHeight: 22 },
-  ticketDesc: { fontSize: 13, lineHeight: 19, marginBottom: 12 },
-  ticketMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
-  metaChip: { flexDirection: 'row', alignItems: 'center' },
-  metaText: { fontSize: 12 },
-  priorityBadge: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1 },
-  priorityText: { fontSize: 11, fontWeight: '700' },
-  zoneBadge: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(155,109,255,0.08)', borderWidth: 1, borderColor: 'rgba(155,109,255,0.25)' },
-  zoneText: { fontSize: 11, fontWeight: '700', color: '#9B6DFF' },
-
-  fieldLabel: { fontSize: 13, fontWeight: '600', marginTop: 18, marginBottom: 4 },
-  fieldErrorRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  fieldError: { color: '#E53535', fontSize: 12, fontWeight: '500' },
-
-  notesInput: {
-    minHeight: 100, borderRadius: 10, borderWidth: 1,
-    padding: 12, fontSize: 14, marginTop: 4,
+  loadingText: {
+    fontSize: typography.callout.size,
+    lineHeight: typography.callout.lineHeight,
   },
-  shortInput: {
-    minHeight: 64, borderRadius: 10, borderWidth: 1,
-    padding: 12, fontSize: 14, marginTop: 8,
+  errorTitle: {
+    fontSize: typography.subtitle.size,
+    fontWeight: typography.subtitle.weight,
   },
 
-  toggleRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  content: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
+
+  section: { marginBottom: 0 }, // SectionHeader provides spacing
+
+  // Ticket summary ─────────────────────────────────────────────────────────
+  ticketTitle: {
+    fontSize: typography.subtitle.size,
+    lineHeight: typography.subtitle.lineHeight,
+    fontWeight: typography.subtitle.weight,
+    letterSpacing: typography.subtitle.letterSpacing,
+    marginBottom: spacing.xxs + 2,
+  },
+  ticketDesc: {
+    fontSize: typography.callout.size,
+    lineHeight: typography.callout.lineHeight + 2,
+    marginBottom: spacing.sm,
+  },
+  ticketChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  coordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  coordText: {
+    fontSize: typography.caption.size,
+    lineHeight: typography.caption.lineHeight,
+  },
+
+  // Form fields ────────────────────────────────────────────────────────────
+  fieldGroup: { marginTop: spacing.md },
+  fieldLabel: {
+    fontSize: typography.callout.size,
+    lineHeight: typography.callout.lineHeight,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  fieldOptional: {
+    fontSize: typography.caption.size,
+    fontWeight: '400',
+  },
+
+  textarea: {
+    minHeight: 100,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.sm,
+    fontSize: typography.body.size,
+    lineHeight: typography.body.lineHeight,
+  },
+  input: {
+    minHeight: 56,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.sm,
+    fontSize: typography.body.size,
+    lineHeight: typography.body.lineHeight,
+  },
+
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.xs,
+  },
+  errorText: {
+    color: palette.danger,
+    fontSize: typography.caption.size,
+    lineHeight: typography.caption.lineHeight,
+    fontWeight: '500',
+  },
+
+  // Toggle group ───────────────────────────────────────────────────────────
+  toggleRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
   toggleBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  toggleLabel: {
+    fontSize: typography.callout.size,
+    lineHeight: typography.callout.lineHeight,
+    fontWeight: '600',
   },
 
-  photo: { width: '100%', height: 200, borderRadius: 10 },
-  photoPickerBtn: {
-    borderWidth: 1, borderStyle: 'dashed', borderRadius: 12,
-    paddingVertical: 28, alignItems: 'center',
+  // Photo ──────────────────────────────────────────────────────────────────
+  photo: {
+    width: '100%',
+    height: 200,
+    borderRadius: radius.md,
   },
-  removePhotoBtn: {
-    flexDirection: 'row', alignItems: 'center', marginTop: 10,
-    alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 8, backgroundColor: 'rgba(229,53,53,0.07)',
-    borderWidth: 1, borderColor: 'rgba(229,53,53,0.2)',
+  photoPicker: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: radius.md,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
   },
-  removePhotoBtnText: { color: '#E53535', fontWeight: '600', fontSize: 12 },
+  photoIconWrap: {
+    width: 48, height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  photoTitle: {
+    fontSize: typography.bodyBold.size,
+    lineHeight: typography.bodyBold.lineHeight,
+    fontWeight: typography.bodyBold.weight,
+  },
+  photoSub: {
+    fontSize: typography.caption.size,
+    lineHeight: typography.caption.lineHeight,
+    marginTop: 2,
+  },
 
-  submitBtn: { marginTop: 4 },
+  removeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginTop: spacing.sm,
+    borderRadius: radius.sm,
+    backgroundColor: palette.dangerSoft,
+  },
+  removeBtnText: {
+    color: palette.danger,
+    fontWeight: '600',
+    fontSize: typography.caption.size,
+  },
+
+  // Submit ─────────────────────────────────────────────────────────────────
+  submitWrap: {
+    marginTop: spacing.lg,
+  },
 });
