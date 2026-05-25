@@ -1,397 +1,514 @@
-# Ticketing System Design — Brainstorm & Requirements
+# Ticketing System — Design & Implementation Reference
 
-**Date**: May 24, 2026  
-**Purpose**: Define requirements for the maintenance ticket workflow connecting Streamlit (analyst) → Supabase + FastAPI → Expo (technician)
+**Last updated**: May 25, 2026  
+**Status**: Phase 1 code complete; Supabase project setup still required (see Section 5)
 
 ---
 
-## Architecture Overview
+## 1. Architecture Overview
 
 ```
 Streamlit (Data Analyst)
     ↓ Creates maintenance ticket when anomaly detected
-Supabase (Database)
-    ↓ Stores ticket metadata + inspection reports
-FastAPI (Backend API)
-    ↓ Handles CRUD operations
+Supabase (Database + Auth + Storage)
+    ↓ Stores tickets, reports, and photos
 Expo App (Technician)
-    ↓ Views assigned tickets, submits inspection reports with photos
+    ↓ Views assigned tickets, submits inspection reports
 ```
 
 **Tech Stack**:
-- **Database**: Supabase (PostgreSQL + built-in Storage)
-- **Backend API**: FastAPI
-- **Frontend**: Streamlit (analyst) + Expo (technician)
-- **Authentication**: Hardcoded for MVP (analyst creates technician accounts)
+| Layer | Technology |
+|-------|-----------|
+| Database & Auth | Supabase (PostgreSQL + RLS + Supabase Auth) |
+| Storage | Supabase Storage (`inspection-photos` bucket) |
+| Backend API | FastAPI (Phase 2) |
+| Analyst frontend | Streamlit |
+| Technician frontend | Expo (React Native) |
+
+**Key environment rule**:
+- Expo uses `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (safe for mobile, tracked in git)
+- Streamlit uses `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (gitignored — never shared)
+- FastAPI uses service_role key (Phase 2)
 
 ---
 
-## What's Working ✅
+## 2. Ticket Workflow
 
-- **Clear role separation**: Analyst (detects) → Technician (inspects) is intuitive
-- **Supabase + FastAPI combo**: Good choice. Supabase handles DB + storage; FastAPI is lightweight and perfect for this
-- **Expo client**: Already set up; just needs to call real APIs instead of mock data
-- **Hardcoded auth for MVP**: Fine for now—you can iterate later
+**Status state machine**:
+```
+created → assigned → in-progress → completed → verified
+```
+
+For MVP (current), tickets skip directly to `assigned` on creation (the `create_ticket()` function sets status to `assigned` immediately).
+
+**Valid transitions**:
+- Analyst creates ticket → status `assigned`
+- Technician starts work → status `in-progress` (optional)
+- Technician submits report → status `completed`
+- Analyst approves report → status `verified`
 
 ---
 
-## Critical Questions to Answer FIRST ⚠️
+## 3. Database Schema
 
-### 1. Ticket Data Model — What fields does a ticket need?
+Run the full SQL block in Supabase SQL Editor (see Section 5, Step 2).
 
-**Minimum Viable Ticket**:
-```
-- id (UUID)
-- analyst_id (who created it)
-- technician_id (who will inspect)
-- station_id (which AWS station needs inspection)
-- status (enum: created → assigned → in-progress → completed → approved)
-- anomaly_data (JSON: which values were anomalous? which zone detected it?)
-- created_at, assigned_at, completed_at
-- priority (high/medium/low?)
-- title / description (analyst notes about what to inspect)
-```
+### Table: `profiles`
 
-**Questions**:
-- Does analyst want to attach the actual CSV data/chart?
-- Should tickets have a due date?
-- Do you need SLA tracking (e.g., "must complete within 24 hours")?
+Single table for both analysts and technicians (role-based access via RLS).
 
----
+```sql
+CREATE TABLE profiles (
+  id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username    TEXT UNIQUE NOT NULL,
+  full_name   TEXT NOT NULL,
+  email       TEXT UNIQUE NOT NULL,
+  role        TEXT NOT NULL CHECK (role IN ('analyst', 'technician')),
+  phone       TEXT,
+  station_ids TEXT[]  DEFAULT '{}',
+  is_active   BOOLEAN DEFAULT true,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
 
-### 2. Technician Report Structure — What does the technician submit?
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-**Current Expo Design Shows**:
-- notes (text input)
-- photos (image picker)
+-- Users can read their own profile
+CREATE POLICY "own_profile_read"
+  ON profiles FOR SELECT
+  USING (auth.uid() = id);
 
-**Missing**:
-- measurement data? (re-read the sensor?)
-- checkbox validation? (e.g., "Sensor working: Y/N")
-- severity assessment? (is this a real anomaly?)
-- repair recommended? (Y/N + cost estimate?)
-- inspection_date (when did you check it?)
-- root_cause (why did anomaly occur?)
+-- Analysts can read all profiles (to assign tickets to technicians)
+CREATE POLICY "analyst_read_all_profiles"
+  ON profiles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'analyst'
+    )
+  );
 
-**Recommendation for MVP**: Start with notes + photos only; add structured fields in Phase 2.
+-- Analysts can insert new profiles (for creating technician accounts)
+CREATE POLICY "analyst_create_profiles"
+  ON profiles FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'analyst'
+    )
+  );
 
----
-
-### 3. Ticket Workflow State Machine — What are valid transitions?
-
-**Proposed Flow**:
-```
-created → assigned → acknowledged → in-progress → completed → verified
-```
-
-**Questions**:
-- Can analyst reassign mid-inspection?
-- Can technician reject a ticket? (If sensor is broken and can't be inspected)
-- What triggers "verified"? (Analyst review? Auto-approval?)
-- Can tickets expire/timeout?
-- Can technician save draft report and submit later?
-
-**Recommendation**: 
-```
-For MVP:
-created → assigned → completed → verified
-
-Simple, low overhead. Add complexity later.
+-- Users can update their own profile
+CREATE POLICY "own_profile_update"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = id);
 ```
 
 ---
 
-### 4. Real-Time Requirements
+### RPC Function: Username-to-Email Bridge
 
-**Does analyst see technician report immediately?**
+Allows username login — the app doesn't expose email addresses.
 
-- **If YES**: Use WebSockets (Supabase Realtime or separate service)
-- **If NO**: Polling is fine; technician submits report, analyst reviews later
+```sql
+CREATE OR REPLACE FUNCTION get_email_by_username(p_username TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_email TEXT;
+BEGIN
+  SELECT email INTO v_email
+  FROM profiles
+  WHERE username = lower(trim(p_username))
+    AND is_active = true;
+  RETURN v_email;
+END;
+$$;
 
-**Recommendation for MVP**: NO (better for MVP). Analyst checks dashboard periodically.
+GRANT EXECUTE ON FUNCTION get_email_by_username(TEXT) TO anon;
+```
 
 ---
 
-### 5. Photo Storage Strategy
+### Table: `tickets`
 
-**Options**:
-1. **Supabase Storage** (recommended)
-   - Easy integration with Supabase DB
-   - Store file URLs in ticket_reports table
-   - Built-in access control
+```sql
+CREATE TABLE tickets (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  analyst_id     UUID NOT NULL REFERENCES profiles(id),
+  technician_id  UUID NOT NULL REFERENCES profiles(id),
+  station_id     TEXT NOT NULL,
+  status         TEXT DEFAULT 'created'
+                   CHECK (status IN ('created','assigned','in-progress','completed','verified')),
+  priority       TEXT DEFAULT 'medium'
+                   CHECK (priority IN ('low','medium','high')),
+  anomaly_zone   TEXT CHECK (anomaly_zone IN ('A','B','C')),
+  anomaly_data   JSONB,
+  title          TEXT NOT NULL,
+  description    TEXT,
+  created_at     TIMESTAMPTZ DEFAULT now(),
+  assigned_at    TIMESTAMPTZ,
+  completed_at   TIMESTAMPTZ,
+  verified_at    TIMESTAMPTZ,
+  updated_at     TIMESTAMPTZ DEFAULT now()
+);
 
-2. **AWS S3** (if scaling beyond prototype)
-   - More expensive, more control
-   - Worth it if millions of photos
+ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
 
-3. **Local app storage** (NOT recommended)
-   - Risky; loses data if app crashes
-   - Can't access from analyst dashboard
+-- Technician sees tickets assigned to them; analyst sees all
+CREATE POLICY "technician_see_assigned"
+  ON tickets FOR SELECT
+  USING (
+    technician_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'analyst')
+  );
 
-**Recommendation**: Use Supabase Storage for MVP.
+-- Analysts can create tickets
+CREATE POLICY "analyst_create_tickets"
+  ON tickets FOR INSERT
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'analyst')
+  );
+
+-- Technician or analyst can update tickets
+CREATE POLICY "analyst_or_technician_update"
+  ON tickets FOR UPDATE
+  USING (
+    technician_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'analyst')
+  );
+```
 
 ---
 
-## Architecture Concerns ⚠️
+### Table: `inspection_reports`
 
-### Authentication (Your "Hardcoded" Plan)
+One report per ticket (enforced by UNIQUE constraint on `ticket_id`).
 
-**Option A: Better (Recommended)**
+```sql
+CREATE TABLE inspection_reports (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id            UUID NOT NULL UNIQUE REFERENCES tickets(id) ON DELETE CASCADE,
+  technician_id        UUID NOT NULL REFERENCES profiles(id),
+  notes                TEXT,
+  sensor_working       BOOLEAN,
+  severity             TEXT CHECK (severity IN ('low','medium','high')),
+  root_cause           TEXT,
+  repair_recommended   BOOLEAN,
+  repair_cost_estimate DECIMAL,
+  submitted_at         TIMESTAMPTZ,
+  analyst_approved     BOOLEAN DEFAULT false,
+  analyst_approved_at  TIMESTAMPTZ,
+  analyst_notes        TEXT,
+  created_at           TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE inspection_reports ENABLE ROW LEVEL SECURITY;
+
+-- Technician can manage their own reports
+CREATE POLICY "technician_own_reports"
+  ON inspection_reports FOR ALL
+  USING (technician_id = auth.uid());
+
+-- Analyst can read all reports
+CREATE POLICY "analyst_read_reports"
+  ON inspection_reports FOR SELECT
+  USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'analyst')
+  );
+
+-- Analyst can approve/update reports
+CREATE POLICY "analyst_approve_reports"
+  ON inspection_reports FOR UPDATE
+  USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'analyst')
+  );
 ```
-Use Supabase Auth with role-based access
-- Analyst role: can create tickets, view reports, approve
-- Technician role: can only see assigned tickets, submit reports
-- Admin role: create analyst/technician accounts
-
-Benefits:
-- Supabase RLS (Row-Level Security) handles access control
-- Audit trail built-in
-- Can revoke access anytime
-
-Effort: 2 hours to set up
-```
-
-**Option B: Your Current Plan (Hardcoded)**
-```
-Hardcoded auth tokens
-- Works for MVP
-- Risk: No audit trail, can't revoke access easily
-- Fine if testing with 2-3 people
-
-Effort: 30 minutes
-```
-
-**Honest Take**: I'd recommend Option A (2 hours now saves 10 hours of headaches later).
 
 ---
 
-### FastAPI Routes You'll Need
+### Table: `inspection_photos`
+
+```sql
+CREATE TABLE inspection_photos (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id   UUID NOT NULL REFERENCES inspection_reports(id) ON DELETE CASCADE,
+  photo_url   TEXT NOT NULL,
+  description TEXT,
+  uploaded_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE inspection_photos ENABLE ROW LEVEL SECURITY;
+
+-- Photos follow report access rules
+CREATE POLICY "photos_follow_report_access"
+  ON inspection_photos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM inspection_reports ir
+      WHERE ir.id = report_id
+        AND (
+          ir.technician_id = auth.uid()
+          OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'analyst')
+        )
+    )
+  );
+
+-- Technician can insert photos to their own reports
+CREATE POLICY "technician_insert_photos"
+  ON inspection_photos FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM inspection_reports ir
+      WHERE ir.id = report_id AND ir.technician_id = auth.uid()
+    )
+  );
+```
+
+---
+
+## 4. Implementation Status
+
+### Phase 1 — MVP ✅ Code Complete
+
+| Item | Status | File |
+|------|--------|------|
+| Supabase client (Expo) | ✅ Done | `App/services/supabase.ts` |
+| Ticket/report API (Expo) | ✅ Done | `App/services/supabaseApi.ts` |
+| Auth context (Expo) | ✅ Done | `App/context/AppContext.tsx` |
+| Supabase client (Streamlit) | ✅ Done | `prototypes/utils/supabase_client.py` |
+| requirements.txt | ✅ Done | `requirements.txt` |
+| .gitignore (root + App/) | ✅ Done | `.gitignore`, `App/.gitignore` |
+| **Supabase project creation** | ⏳ You do this | See Section 5 |
+| **Run SQL schema** | ⏳ You do this | See Section 5 |
+| **Create storage bucket** | ⏳ You do this | See Section 5 |
+| **Create analyst account** | ⏳ You do this | See Section 5 |
+
+### Phase 2 — Automation (Next)
+
+- [ ] Streamlit UI page for creating/managing tickets
+- [ ] Streamlit dashboard for viewing/approving technician reports
+- [ ] FastAPI endpoints (see Section 7 for planned routes)
+- [ ] Auto-create ticket when anomaly detected (Zone C triggers)
+- [ ] Photo uploads from Expo app
+
+### Phase 3 — Polish (Later)
+
+- [ ] Real-time updates via Supabase Realtime / WebSockets
+- [ ] Push notifications (Expo + Supabase)
+- [ ] SLA tracking and alerts
+- [ ] Photo management (batch uploads, compression)
+
+---
+
+## 5. Supabase Project Setup (You Do These Steps)
+
+### Step 1 — Create Project (2 min)
+
+1. Go to [supabase.com](https://supabase.com) → **New Project**
+2. Fill in:
+   - **Name**: `spatiotemporal-anomaly`
+   - **Database password**: Generate and save it
+   - **Region**: Southeast Asia (Singapore)
+3. Wait ~2 minutes until project shows "Connected"
+
+---
+
+### Step 2 — Run the SQL Schema (5 min)
+
+1. Supabase dashboard → **SQL Editor** → **New query**
+2. Paste the entire SQL block from Section 3 above (all four tables + RPC function)
+3. Click **Run** (▶)
+
+Run tables in this order: `profiles` → `tickets` → `inspection_reports` → `inspection_photos`
+
+✅ Done when: "Success. No rows returned" appears at the bottom.
+
+---
+
+### Step 3 — Create Storage Bucket (5 min)
+
+1. Supabase dashboard → **Storage** → **New bucket**
+2. Fill in:
+   - **Name**: `inspection-photos`
+   - **Public bucket**: OFF (private — analyst accesses via signed URLs)
+3. Click **Save**
+
+4. In **SQL Editor**, run this storage policy so technicians can upload photos:
+
+```sql
+-- Allow authenticated technicians to upload photos to their own report folders
+CREATE POLICY "technician_upload_photos"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'inspection-photos');
+
+-- Allow authenticated users to read photos (analyst reads via signed URLs from service role,
+-- but this policy is required for the storage path to resolve)
+CREATE POLICY "authenticated_read_photos"
+  ON storage.objects FOR SELECT
+  TO authenticated
+  USING (bucket_id = 'inspection-photos');
+```
+
+> **Note**: The Streamlit analyst app uses the **service_role** key, which bypasses storage RLS entirely and can always generate signed URLs. The Expo app uses the **anon** key with the authenticated role — the INSERT policy above is what allows technicians to upload.
+
+---
+
+### Step 4 — Create Your Analyst Account (5 min)
+
+**Part A — Create auth user:**
+
+1. Supabase dashboard → **Authentication** → **Users** → **Add user** → **Create new user**
+2. Enter your email and a password → **Create user**
+3. Copy the UUID from the users list
+
+**Part B — Create profile row:**
+
+```sql
+INSERT INTO profiles (id, username, full_name, email, role)
+VALUES (
+  'YOUR_UUID_HERE',
+  'your_chosen_username',
+  'Your Full Name',
+  'your@email.com',
+  'analyst'
+);
+```
+
+Replace the four placeholders and run in SQL Editor.
+
+---
+
+### Step 5 — Collect API Keys (1 min)
+
+Supabase dashboard → **Project Settings** (gear icon) → **API**
+
+| Key | Location | Safe to share? |
+|-----|----------|----------------|
+| Project URL | Top of API page | ✅ Yes |
+| anon / public | Under "Project API keys" | ✅ Yes (mobile safe) |
+| service_role | Under "Project API keys" | ⚠️ Server-side only |
+
+Put these in your env files:
+
+```bash
+# App/.env  (gitignored)
+EXPO_PUBLIC_SUPABASE_URL=your_project_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+
+# prototypes/.env  (gitignored)
+SUPABASE_URL=your_project_url
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+---
+
+## 6. Code Reference
+
+### Expo (TypeScript)
+
+**Client initialization** — `App/services/supabase.ts`:
+```ts
+import 'react-native-url-polyfill/auto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient } from '@supabase/supabase-js';
+
+export const supabase = createClient(
+  process.env.EXPO_PUBLIC_SUPABASE_URL!,
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  }
+);
+```
+
+**Ticket API** — `App/services/supabaseApi.ts`:
+- `fetchActiveTickets()` — returns tickets in `created/assigned/in-progress` for current user
+- `fetchTicketHistory()` — returns `completed/verified` tickets
+- `submitInspectionReport(dbTicketId, notes, imageUri)` — inserts report, sets ticket to `completed`
+
+**Auth** — `App/context/AppContext.tsx`:
+- `login(username, password)` — resolves username → email via RPC, then `signInWithPassword`
+- `logout()` — calls `supabase.auth.signOut()`
+- Profile loaded automatically from `profiles` table on session change
+
+---
+
+### Streamlit (Python)
+
+**Client** — `prototypes/utils/supabase_client.py`:
+- `get_supabase()` — service-role client (bypasses RLS, DB operations)
+- `get_anon_client()` — anon client (user-level auth)
+- `sign_in_analyst(username, password)` — resolves username → email → auth → profile
+- `fetch_all_tickets(status_filter)` — returns tickets with technician join
+- `create_ticket(analyst_id, technician_id, station_id, title, ...)` — inserts ticket as `assigned`
+- `update_ticket_status(ticket_id, status)` — updates status + `updated_at`
+- `fetch_all_reports()` — returns reports with ticket + technician join
+- `approve_report(report_id, ticket_id, analyst_notes)` — approves report + sets ticket to `verified`
+- `fetch_technicians(active_only)` — lists technician profiles
+- `create_technician_account(email, password, full_name, username, ...)` — creates Supabase Auth user + profile row
+
+---
+
+## 7. FastAPI Routes (Phase 2)
 
 ```python
 # ===== TICKETS =====
 POST   /api/tickets                    # Analyst creates ticket
-GET    /api/tickets/{id}              # Technician views ticket (verify access)
+GET    /api/tickets/{id}              # View ticket
 GET    /api/tickets?assigned_to={uid} # Technician lists assigned tickets
 GET    /api/tickets?analyst_id={uid}  # Analyst lists created tickets
-PATCH  /api/tickets/{id}              # Update status (created→assigned, etc.)
-DELETE /api/tickets/{id}              # Analyst cancels ticket (rare)
+PATCH  /api/tickets/{id}              # Update status
+DELETE /api/tickets/{id}              # Analyst cancels ticket
 
 # ===== REPORTS =====
 POST   /api/tickets/{id}/reports      # Technician submits report
-GET    /api/tickets/{id}/reports      # Analyst views report
+GET    /api/tickets/{id}/reports      # View report
 PATCH  /api/reports/{report_id}       # Analyst approves/rejects
-GET    /api/reports                   # Analyst lists all reports (dashboard)
+GET    /api/reports                   # Analyst lists all reports
 
 # ===== TECHNICIANS (Admin) =====
 POST   /api/admin/technicians         # Create technician account
 GET    /api/admin/technicians         # List all technicians
-PATCH  /api/admin/technicians/{id}    # Update technician (activate/deactivate)
+PATCH  /api/admin/technicians/{id}    # Activate/deactivate
 DELETE /api/admin/technicians/{id}    # Remove technician
 
-# ===== PHOTO UPLOAD =====
-POST   /api/reports/{report_id}/photos # Upload photo (returns URL)
-GET    /api/reports/{report_id}/photos # List photos for report
+# ===== PHOTOS =====
+POST   /api/reports/{report_id}/photos # Upload photo
+GET    /api/reports/{report_id}/photos # List photos
 ```
 
-**Question**: Will you use REST (above) or GraphQL?
-- **Recommendation**: REST (FastAPI shines at REST; GraphQL adds complexity)
+Using REST (not GraphQL) — FastAPI is optimized for REST.
 
 ---
 
-## Data Flow Overview
+## 8. Security Checklist
 
-### Current State
-```
-Streamlit (reads CSV)
-    ↓
-Zone A/B/C (detects anomalies)
-    ↓
-Analyst reviews dashboard
-    ↓ (Manual) Creates ticket
-Supabase (tickets table)
-    ↓
-Expo app fetches ticket
-    ↓
-Technician submits report
-    ↓
-Supabase (reports table)
-    ↓
-Analyst reviews report in Streamlit dashboard ← Missing UI
-```
-
-### Missing Pieces
-1. **Streamlit UI for creating/managing tickets** (new page)
-2. **Streamlit dashboard for viewing technician reports** (new page)
-3. **FastAPI endpoints** (to wire it all together)
-4. **Supabase tables** (tickets, reports, technicians, photos metadata)
-
----
-
-## Database Schema (Supabase Tables)
-
-### Table: `technicians`
-```sql
-CREATE TABLE technicians (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  phone TEXT,
-  station_ids TEXT[] DEFAULT '{}', -- stations they're assigned to
-  is_active BOOLEAN DEFAULT true,
-  created_by UUID NOT NULL, -- analyst who created account
-  created_at TIMESTAMP DEFAULT now(),
-  updated_at TIMESTAMP DEFAULT now()
-);
-```
-
-### Table: `tickets`
-```sql
-CREATE TABLE tickets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  analyst_id UUID NOT NULL, -- who created it
-  technician_id UUID NOT NULL, -- who will inspect
-  station_id TEXT NOT NULL, -- AWS station ID
-  status TEXT DEFAULT 'created', -- created|assigned|in-progress|completed|verified
-  priority TEXT DEFAULT 'medium', -- low|medium|high
-  anomaly_zone TEXT, -- which zone detected it (A/B/C)
-  anomaly_data JSONB, -- raw anomaly context
-  title TEXT NOT NULL,
-  description TEXT,
-  created_at TIMESTAMP DEFAULT now(),
-  assigned_at TIMESTAMP,
-  completed_at TIMESTAMP,
-  verified_at TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT now(),
-  
-  FOREIGN KEY (analyst_id) REFERENCES analysts(id),
-  FOREIGN KEY (technician_id) REFERENCES technicians(id)
-);
-```
-
-### Table: `inspection_reports`
-```sql
-CREATE TABLE inspection_reports (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  ticket_id UUID NOT NULL UNIQUE, -- one report per ticket
-  technician_id UUID NOT NULL,
-  notes TEXT,
-  sensor_working BOOLEAN,
-  severity TEXT, -- low|medium|high
-  root_cause TEXT,
-  repair_recommended BOOLEAN,
-  repair_cost_estimate DECIMAL,
-  created_at TIMESTAMP DEFAULT now(),
-  submitted_at TIMESTAMP,
-  analyst_approved BOOLEAN DEFAULT false,
-  analyst_approved_at TIMESTAMP,
-  analyst_notes TEXT,
-  
-  FOREIGN KEY (ticket_id) REFERENCES tickets(id),
-  FOREIGN KEY (technician_id) REFERENCES technicians(id)
-);
-```
-
-### Table: `inspection_photos`
-```sql
-CREATE TABLE inspection_photos (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  report_id UUID NOT NULL,
-  photo_url TEXT NOT NULL, -- URL in Supabase Storage
-  description TEXT,
-  uploaded_at TIMESTAMP DEFAULT now(),
-  
-  FOREIGN KEY (report_id) REFERENCES inspection_reports(id)
-);
-```
-
----
-
-## Recommended Implementation Phases
-
-### Phase 1: MVP (2 weeks)
-1. ✅ Define ticket schema + report schema (document in SCHEMA.md)
-2. ✅ Create Supabase tables (tickets, reports, technicians, photos)
-3. ✅ Write FastAPI endpoints (CRUD for tickets/reports)
-4. ✅ Wire Expo app to real API (replace mockApi.ts)
-5. ✅ Add simple ticket creation UI to Streamlit (manual, no automation)
-6. ✅ Test end-to-end: analyst creates ticket → technician sees it → submits report
-
-### Phase 2: Automation (1 week)
-1. Auto-create tickets when anomalies detected (Zone C triggers ticket creation)
-2. Streamlit dashboard for viewing/approving reports
-3. Ticket history & audit trail
-
-### Phase 3: Polish (ongoing)
-1. Supabase Auth + role-based access (replace hardcoded)
-2. Real-time updates (WebSockets for instant notifications)
-3. Photo management (batch uploads, compression)
-4. SLA tracking & notifications
-
----
-
-## Red Flags to Watch 🚩
-
-| Risk | Mitigation |
+| Risk | Protection |
 |------|-----------|
-| **Photo bloat** — Users upload huge images | Compress on Expo before upload; store in Supabase Storage |
-| **Missing audit trail** — Can't prove who did what when | Add `created_by`, `updated_by`, `created_at` to all tables |
-| **Notification gap** — Technician doesn't know ticket exists | Email notification or push notification (Expo + Supabase Realtime) |
-| **Conflicting edits** — Analyst reassigns ticket same time technician starts work | Use status field; prevent reassign if status ≥ in-progress |
-| **Report loss** — App crashes before submitting → photos lost | Auto-save drafts to AsyncStorage; resume on reopen |
-| **Unauthorized access** — Technician sees other technician's tickets | Use Supabase RLS to filter by technician_id |
-| **Photo access control** — Anyone can guess URL and view photos | Use Supabase Storage signed URLs with expiration |
+| Keys committed to GitHub | `.env` files in both `.gitignore` files |
+| service_role key in mobile app | Never — stored only in `prototypes/.env` |
+| Technician sees other technician's tickets | RLS policy `technician_see_assigned` |
+| Anyone guesses photo URLs | Private bucket + signed URLs (Phase 2) |
+| Unauthenticated API access | RLS enabled on all tables |
+| Username exposes email | RPC `get_email_by_username()` (controlled access) |
+| Brute force login | Supabase Auth built-in rate limiting |
+| Report loss (app crash before submit) | Phase 2: auto-save draft to AsyncStorage |
+| Conflicting edits (reassign mid-inspection) | Status field prevents reassign if status ≥ `in-progress` |
 
 ---
 
-## Questions for You 🤔
+## 9. Related Documentation
 
-Before you start coding FastAPI, answer these:
-
-1. **Who approves the technician's report?**
-   - Just the analyst reviewing it?
-   - Is there a second review (e.g., supervisor approval)?
-
-2. **Can a technician see historical tickets** they've completed?
-   - Only active tickets for MVP?
-   - Full history for audit trail?
-
-3. **What happens if a technician can't reach the station?**
-   - Reject ticket?
-   - Request delay?
-   - Add status like "blocked"?
-
-4. **Version control for photos?**
-   - Replace old inspection photo, or keep all historical ones?
-   - Should analyst be able to request "re-inspect"?
-
-5. **Scheduling / Priority?**
-   - Should high-priority tickets appear first?
-   - Should technician see due date?
-
----
-
-## TL;DR — My Honest Recommendation
-
-**Your idea is good.** Don't overthink Phase 1—get it working with real API calls instead of mock data.
-
-**But before coding, spend 3 hours upfront on**:
-1. Ticket data model (what fields matter?)
-2. Report data model (what does inspection capture?)
-3. Ticket lifecycle (state machine)
-4. API contract (what endpoints, what request/response shapes?)
-
-**Then FastAPI/Supabase will flow naturally.**
-
-**The biggest mistake**: Building APIs before knowing what data you actually need. Define schema first, code second.
-
----
-
-## Next Steps
-
-1. **Review this document** — Highlight sections that don't match your vision
-2. **Answer the "Questions for You" section** above
-3. **Create SCHEMA.md** in prototypes/ with finalized data model
-4. **Start Phase 1 implementation**:
-   - Supabase tables (SQL scripts)
-   - FastAPI endpoints (Python)
-   - Expo integration (TypeScript)
+- [App/AGENTS.md](App/AGENTS.md) — Expo development conventions, file structure, patterns
+- [AGENTS.md](AGENTS.md) — Root dual-project architecture overview
