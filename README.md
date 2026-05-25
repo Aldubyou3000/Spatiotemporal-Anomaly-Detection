@@ -1,2 +1,2 @@
-# Spatiotemporal-Anomaly-Detection
+# Spatiotemporal-Rainfall-Anomaly-Detection
 thesis

@@ -3,6 +3,11 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp"
+    },
+    "railway": {
+      "type": "stdio",
+      "command": "railway",
+      "args": ["mcp"]
     }
   }
 }
