@@ -111,7 +111,7 @@ def fetch_all_tickets(status_filter: list[str] | None = None) -> list[dict]:
             '*, '
             'technician:profiles!tickets_technician_id_fkey(full_name, username), '
             'report:inspection_reports!inspection_reports_ticket_id_fkey'
-            '(notes, sensor_working, severity, root_cause, analyst_approved, analyst_notes, submitted_at)'
+            '(id, notes, sensor_working, severity, root_cause, analyst_approved, analyst_notes, submitted_at)'
         )
     )
     if status_filter:
@@ -315,3 +315,61 @@ def upload_inspection_photo(
         'photo_url': public_url,
     }).execute()
     return public_url
+
+
+# ---------------------------------------------------------------------------
+# Ticket attachment helpers (CSV files uploaded by analysts)
+# ---------------------------------------------------------------------------
+
+def upload_ticket_attachment(
+    ticket_id: str,
+    uploaded_by: str,
+    file_bytes: bytes,
+    filename: str,
+) -> dict:
+    """Upload a CSV to the ticket-attachments bucket and record it in ticket_attachments."""
+    sb = get_supabase()
+    bucket = 'ticket-attachments'
+    import time as _time
+    safe_name = filename.replace(' ', '_')
+    path = f"{ticket_id}/{int(_time.time())}_{safe_name}"
+    sb.storage.from_(bucket).upload(
+        path, file_bytes,
+        file_options={'content-type': 'text/csv', 'upsert': 'true'},
+    )
+    signed = sb.storage.from_(bucket).create_signed_url(path, expires_in=3600 * 24 * 365)
+    file_url = signed.get('signedURL') or signed.get('signed_url') or ''
+    row = sb.table('ticket_attachments').insert({
+        'ticket_id': ticket_id,
+        'uploaded_by': uploaded_by,
+        'file_name': filename,
+        'file_url': file_url,
+        'file_size': len(file_bytes),
+    }).execute()
+    return row.data[0] if row.data else {}
+
+
+def fetch_ticket_attachments(ticket_id: str) -> list[dict]:
+    """Fetch CSV attachments for a ticket, refreshing signed URLs."""
+    sb = get_supabase()
+    bucket = 'ticket-attachments'
+    rows = (
+        sb.table('ticket_attachments')
+        .select('*')
+        .eq('ticket_id', ticket_id)
+        .order('created_at')
+        .execute()
+        .data or []
+    )
+    result = []
+    for row in rows:
+        url = row.get('file_url', '')
+        if url and f'/{bucket}/' in url:
+            path = url.split(f'/{bucket}/')[-1].split('?')[0]
+            try:
+                signed = sb.storage.from_(bucket).create_signed_url(path, expires_in=3600)
+                row = {**row, 'file_url': signed.get('signedURL') or signed.get('signed_url') or url}
+            except Exception:
+                pass
+        result.append(row)
+    return result

@@ -3,10 +3,11 @@ Zone A: Data Cleaning & Interpolation with Aggressive Exclusion Policy
 
 This module implements strict data quality control for the AWS Quality Control Pipeline.
 It validates input, removes problematic data, and performs minimal interpolation
-(single-day gaps only) while maintaining full data integrity and audit trails.
+(single-hour gaps only, before downmapping) while maintaining full data integrity
+and audit trails.
 
 Author: AWS QC Pipeline Team
-Version: 1.0.0
+Version: 2.0.0
 """
 
 import pandas as pd
@@ -14,73 +15,175 @@ import numpy as np
 from typing import Tuple, Dict, Any
 
 
+def _exclude_invalid_hour_gaps(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
+    """
+    Exclude hourly rows that belong to gaps ≥2 consecutive missing hours or series edges.
+
+    For each station (sorted by datetime):
+    1. If series starts with NaN hours: exclude those rows
+    2. If series ends with NaN hours: exclude those rows
+    3. If gap is ≥2 consecutive NaN hours: exclude all rows in that gap
+
+    Single missing hours (gap length == 1) are left in for interpolation.
+
+    Args:
+        df (pd.DataFrame): Raw hourly data with datetime 'date' column
+
+    Returns:
+        Tuple[pd.DataFrame, Dict[str, int]]:
+            - Filtered data with invalid hourly gap rows removed
+            - Dict: counts of excluded rows by reason
+    """
+    exclusion_stats = {
+        'multi_hour_gaps': 0,
+        'starts_with_nan': 0,
+        'ends_with_nan': 0,
+    }
+
+    rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
+    rows_to_exclude = set()
+
+    for station_id in df['station_id'].unique():
+        station_mask = df['station_id'] == station_id
+        station_indices = df[station_mask].index.tolist()
+        station_df = df.loc[station_indices].sort_values('date').copy()
+        station_df['_has_nan'] = station_df[rain_col].isna()
+
+        local_to_exclude = _identify_invalid_gap_rows(station_df, exclusion_stats,
+                                                       multi_key='multi_hour_gaps')
+
+        for local_idx in local_to_exclude:
+            rows_to_exclude.add(station_indices[local_idx])
+
+    df = df.drop(list(rows_to_exclude)).copy()
+    df = df.drop(columns=['_has_nan'], errors='ignore')
+    return df.reset_index(drop=True), exclusion_stats
+
+
+def _fill_single_hour_gaps(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill ONLY single-hour gaps in hourly data using linear interpolation.
+
+    limit=1 ensures only one consecutive missing hour is filled.
+    limit_area='inside' prevents extrapolation at series edges.
+    Adds 'interpolated_flag' column: True for any row whose value was estimated.
+
+    Args:
+        df (pd.DataFrame): Hourly data after invalid gap exclusion
+
+    Returns:
+        pd.DataFrame: Same data with single-hour gaps filled + interpolated_flag column
+    """
+    df = df.copy()
+    df['interpolated_flag'] = False
+    rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
+
+    for station_id in df['station_id'].unique():
+        station_mask = df['station_id'] == station_id
+        station_indices = df[station_mask].index.tolist()
+
+        station_data = df.loc[station_indices].sort_values('date').reset_index(drop=True)
+        before_interp = station_data[rain_col].notna()
+
+        station_data[rain_col] = station_data[rain_col].interpolate(
+            method='linear', limit=1, limit_area='inside'
+        )
+
+        after_interp = station_data[rain_col].notna()
+        newly_filled = (~before_interp) & after_interp
+
+        for local_idx in newly_filled[newly_filled].index.tolist():
+            df.loc[station_indices[local_idx], 'interpolated_flag'] = True
+
+        for local_idx, global_idx in enumerate(station_indices):
+            df.loc[global_idx, rain_col] = station_data.loc[local_idx, rain_col]
+
+    return df.reset_index(drop=True)
+
+
 def _downmap_hourly_to_daily(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Auto-detect if rainfall data is hourly (contains time component or sub-daily records)
-    and convert to daily by sum per day.
+    Convert hourly data to daily by summing rainfall per station per day.
+
+    Auto-detects hourly input by checking for any non-midnight time component.
+    interpolated_flag is carried forward: True if any hour in that day was interpolated.
+    min_count=1 ensures a day with all-NaN hours stays NaN rather than becoming 0.
+
+    Args:
+        df (pd.DataFrame): Hourly data (may include interpolated_flag column)
+
+    Returns:
+        pd.DataFrame: Daily-aggregated data
     """
     df_temp = df.copy()
     parsed_dates = pd.to_datetime(df_temp['date'], errors='coerce')
-    
-    # Auto-detect hourly if there is a time component present
+
     is_hourly = False
     if parsed_dates.notna().any():
-        has_time = (parsed_dates.dt.hour != 0).any() | \
-                   (parsed_dates.dt.minute != 0).any() | \
-                   (parsed_dates.dt.second != 0).any()
+        has_time = (
+            (parsed_dates.dt.hour != 0).any() |
+            (parsed_dates.dt.minute != 0).any() |
+            (parsed_dates.dt.second != 0).any()
+        )
         if has_time:
             is_hourly = True
-            
+
     if is_hourly:
         df_temp['date'] = parsed_dates
         df_temp['date_only'] = df_temp['date'].dt.date
-        
         rain_col = 'rainfall' if 'rainfall' in df_temp.columns else 'rainfall_mm'
-        
-        grouped = df_temp.groupby(['station_id', 'date_only']).agg({
+
+        has_flag = 'interpolated_flag' in df_temp.columns
+
+        agg_dict = {
             'latitude': 'first',
             'longitude': 'first',
-            rain_col: lambda x: x.sum(min_count=1)
-        }).reset_index()
-        
+            rain_col: lambda x: x.sum(min_count=1),
+        }
+        if has_flag:
+            agg_dict['interpolated_flag'] = 'any'
+
+        grouped = df_temp.groupby(['station_id', 'date_only']).agg(agg_dict).reset_index()
         grouped = grouped.rename(columns={'date_only': 'date'})
         grouped['date'] = pd.to_datetime(grouped['date'])
         return grouped
-        
-    return df
+
+    return df_temp
 
 
 def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Zone A: Data Cleaning & Interpolation with Aggressive Exclusion Policy.
 
-    Implements a strict data quality pipeline following three core decisions:
+    Implements a strict data quality pipeline:
     - Decision 1: Aggressive exclusion (exclude, don't flag)
-    - Decision 2: Gap limit = 1 (only fill single-day gaps)
+    - Decision 2: Gap limit = 1 (only fill single-hour gaps, before downmapping)
     - Decision 3: No extrapolation (exclude series start/end NaN)
 
     Processing order (exact):
-    1. Hourly to daily downmapping (auto-detected)
-    2. Input validation (columns, types, ranges)
-    3. Remove duplicate (station_id + date) rows
-    4. Station-level filtering (aggressive)
-    5. Row-level gap detection & filtering
-    6. Single-day gap filling (limit=1, limit_area='inside')
-    7. Numeric rounding (1 decimal place)
-    8. Quality report generation
+    1. Hourly gap exclusion (series-edge NaN, gaps ≥2 consecutive hours excluded)
+    2. Single-hour gap filling via linear interpolation (limit=1, limit_area='inside')
+    3. Hourly to daily downmapping (sum per station per day; interpolated_flag carried)
+    4. Input validation (columns, types, ranges)
+    5. Remove duplicate (station_id + date) rows
+    6. Station-level filtering (aggressive: 0 valid or <2 valid readings)
+    7. Daily row-level gap detection & filtering (no interpolation at daily level)
+    8. Numeric rounding (1 decimal place)
+    9. Quality report generation
 
     Args:
-        raw_data (pd.DataFrame): Raw input CSV data with required columns:
+        raw_data (pd.DataFrame): Raw hourly CSV data with required columns:
             - station_id: TEXT, unique station identifier
-            - date: TEXT/DATE, ISO 8601 format (YYYY-MM-DD)
+            - date: TEXT/DATETIME, ISO 8601 with time component (YYYY-MM-DD HH:MM:SS)
             - latitude: FLOAT, WGS84 latitude (-90 to +90)
             - longitude: FLOAT, WGS84 longitude (-180 to +180)
             - rainfall or rainfall_mm: FLOAT/INT, rainfall measurements (non-negative)
 
     Returns:
         Tuple[pd.DataFrame, Dict[str, Any]]:
-            - cleaned_data: DataFrame with NO NaN values, interpolated_flag column added
-            - quality_report: Dict with exclusion statistics matching SCHEMA.md output contract
+            - cleaned_data: Daily DataFrame with NO NaN rainfall values,
+              interpolated_flag column added
+            - quality_report: Dict with exclusion statistics
 
     Raises:
         ValueError: Clear, user-friendly error messages on validation failure
@@ -88,38 +191,38 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
     Guarantees:
         - Output contains NO NaN values in rainfall
         - All numeric values rounded to exactly 1 decimal place
-        - interpolated_flag column True only for values filled by interpolation
+        - interpolated_flag=True on any daily row where at least one hourly value
+          was estimated by interpolation
         - All original working columns preserved
         - Complete audit trail of exclusions in quality_report
     """
-
-    # Track initial state for quality report
     initial_rows = len(raw_data)
-    initial_stations = raw_data['station_id'].nunique() if len(
-        raw_data) > 0 else 0
+    initial_stations = raw_data['station_id'].nunique() if len(raw_data) > 0 else 0
 
     try:
-        # Step 0: Downmap hourly data to daily
-        df_downmapped = _downmap_hourly_to_daily(raw_data)
-        initial_downmapped_rows = len(df_downmapped)
+        # Step 1: Exclude invalid hourly gaps (edge NaN, ≥2 consecutive missing hours)
+        df_hourly, hour_gap_exclusions = _exclude_invalid_hour_gaps(raw_data)
 
-        # Step 1: Validate input data
-        df = _validate_input(df_downmapped)
+        # Step 2: Fill single-hour gaps via linear interpolation
+        df_hourly = _fill_single_hour_gaps(df_hourly)
+
+        # Step 3: Downmap hourly → daily (interpolated_flag carried as 'any')
+        df_daily = _downmap_hourly_to_daily(df_hourly)
+        initial_downmapped_rows = len(df_daily)
+
+        # Step 4: Validate input (columns, types, coordinate ranges, negative rainfall)
+        df = _validate_input(df_daily)
         duplicates_removed = initial_downmapped_rows - len(df)
 
-        # Step 2: Station-level filtering (aggressive exclusion)
+        # Step 5: Station-level filtering
         df, station_exclusions = _filter_stations_by_validity(df)
 
-        # Step 3: Row-level gap detection & filtering
+        # Step 6: Daily row-level gap exclusion (no fill at daily level)
         df, gap_exclusions = _exclude_invalid_gaps(df)
 
-        # Step 4: Single-day gap filling
-        df = _fill_single_day_gaps(df)
-
-        # Step 5: Numeric precision (1 decimal place)
+        # Step 7: Numeric rounding
         df = _round_numeric_columns(df)
 
-        # Step 6: Generate quality report
         final_rows = len(df)
         final_stations = df['station_id'].nunique() if len(df) > 0 else 0
 
@@ -130,13 +233,13 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
             final_stations=final_stations,
             station_exclusions=station_exclusions,
             gap_exclusions=gap_exclusions,
+            hour_gap_exclusions=hour_gap_exclusions,
             duplicates_removed=duplicates_removed,
         )
 
         return df.reset_index(drop=True), quality_report
 
     except ValueError:
-        # Re-raise validation errors with clear messages
         raise
     except Exception as e:
         raise ValueError(f"Zone A processing failed: {str(e)}")
@@ -144,17 +247,17 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
 
 def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
     """
-    Validate input CSV: check required columns, data types, ranges, remove duplicates.
+    Validate daily data: check required columns, data types, ranges, remove duplicates.
 
     Checks:
     - Required columns present
-    - Date format valid (ISO 8601)
+    - Date format valid
     - Numeric columns parseable
     - Rainfall is non-negative
     - Remove duplicate (station_id + date) combinations
 
     Args:
-        raw_data (pd.DataFrame): Raw input data
+        raw_data (pd.DataFrame): Daily-aggregated data post-downmapping
 
     Returns:
         pd.DataFrame: Validated, deduplicated data
@@ -162,40 +265,34 @@ def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
     Raises:
         ValueError: Descriptive error for any validation failure
     """
-
-    # Check required columns
     rain_col = 'rainfall' if 'rainfall' in raw_data.columns else 'rainfall_mm'
     required_columns = {'station_id', 'date', 'latitude', 'longitude', rain_col}
     missing_columns = required_columns - set(raw_data.columns)
     if missing_columns:
-        raise ValueError(
-            f"Missing required columns: {', '.join(sorted(missing_columns))}")
+        raise ValueError(f"Missing required columns: {', '.join(sorted(missing_columns))}")
 
     if len(raw_data) == 0:
         raise ValueError("Input CSV is empty (0 rows)")
 
-    df = raw_data[list(required_columns)].copy()
+    keep_cols = list(required_columns)
+    if 'interpolated_flag' in raw_data.columns:
+        keep_cols.append('interpolated_flag')
 
-    # Parse date column
+    df = raw_data[keep_cols].copy()
+
     try:
-        df['date'] = pd.to_datetime(
-            df['date'], format='%Y-%m-%d', errors='coerce')
+        df['date'] = pd.to_datetime(df['date'], errors='coerce')
     except Exception as e:
-        raise ValueError(
-            f"Date parsing failed. Expected ISO 8601 format (YYYY-MM-DD): {str(e)}")
+        raise ValueError(f"Date parsing failed: {str(e)}")
 
-    # Remove rows with invalid dates
-    initial_count = len(df)
     df = df[df['date'].notna()].copy()
 
-    # Convert numeric columns
     for col in ['latitude', 'longitude', rain_col]:
         try:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         except Exception as e:
             raise ValueError(f"Column '{col}' must be numeric: {str(e)}")
 
-    # Validate coordinate ranges
     if df['latitude'].notna().any():
         if (df.loc[df['latitude'].notna(), 'latitude'] < -90).any() or \
            (df.loc[df['latitude'].notna(), 'latitude'] > 90).any():
@@ -206,90 +303,64 @@ def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
            (df.loc[df['longitude'].notna(), 'longitude'] > 180).any():
             raise ValueError("Longitude must be between -180 and +180")
 
-    # Validate rainfall range
     if df[rain_col].notna().any():
         if (df.loc[df[rain_col].notna(), rain_col] < 0).any():
             raise ValueError(f"{rain_col} must be non-negative")
 
-    # Remove duplicates (station_id + date combination, keep first)
     df = df.drop_duplicates(subset=['station_id', 'date'], keep='first').copy()
-
     return df.reset_index(drop=True)
 
 
 def _filter_stations_by_validity(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Exclude entire stations with 0% valid data or fewer than 2 valid readings.
+    Exclude entire stations with 0% valid daily readings or fewer than 2 valid readings.
 
     Valid reading: rainfall is non-NaN.
-    This is an "aggressive exclusion" to ensure data quality downstream.
 
     Args:
-        df (pd.DataFrame): Validated input data
+        df (pd.DataFrame): Validated daily data
 
     Returns:
         Tuple[pd.DataFrame, Dict[str, int]]:
             - Filtered data with invalid stations removed
             - Dict: counts of excluded stations by reason
-
-    Guarantees:
-        - Remaining stations have ≥2 valid readings
-        - Remaining stations have >0% valid data
     """
-
-    # Define valid reading: rainfall non-NaN
     rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
     df['_is_valid_reading'] = df[rain_col].notna()
-
-    # Count valid readings per station
     valid_counts = df.groupby('station_id')['_is_valid_reading'].sum()
 
-    # Identify stations to exclude
     zero_valid = valid_counts[valid_counts == 0].index.tolist()
-    insufficient = valid_counts[(valid_counts > 0) & (
-        valid_counts < 2)].index.tolist()
+    insufficient = valid_counts[(valid_counts > 0) & (valid_counts < 2)].index.tolist()
 
     exclusion_stats = {
         'zero_valid_stations': len(zero_valid),
         'insufficient_readings_stations': len(insufficient),
     }
 
-    # Filter out excluded stations
     stations_to_exclude = set(zero_valid + insufficient)
     if stations_to_exclude:
         df = df[~df['station_id'].isin(stations_to_exclude)].copy()
 
-    # Clean up helper column
     df = df.drop(columns=['_is_valid_reading'])
-
     return df.reset_index(drop=True), exclusion_stats
 
 
 def _exclude_invalid_gaps(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Exclude rows that belong to gaps ≥2 consecutive days or series edges (start/end NaN).
+    Exclude daily rows in gaps ≥2 consecutive days or at series edges (start/end NaN).
 
-    For each station (sorted by date):
-    1. Identify all consecutive NaN sequences
-    2. If gap is ≥2 consecutive rows: exclude all rows in that gap
-    3. If series starts with NaN: exclude those rows
-    4. If series ends with NaN: exclude those rows
+    No interpolation is performed at the daily level. Single-day NaN gaps that
+    survive this step remain as NaN (they arise only if a full calendar day had
+    all-NaN hourly readings that were not recoverable at the hourly stage).
 
     Args:
-        df (pd.DataFrame): Data after station filtering
+        df (pd.DataFrame): Daily data after station filtering
 
     Returns:
         Tuple[pd.DataFrame, Dict[str, int]]:
-            - Filtered data with invalid gap rows removed
+            - Filtered data with invalid daily gap rows removed
             - Dict: counts of excluded rows by reason
-
-    Guarantees:
-        - No remaining gaps ≥2 consecutive days
-        - No series starting with NaN
-        - No series ending with NaN
-        - Single-day gaps remain for potential filling
     """
-
     exclusion_stats = {
         'multi_day_gaps': 0,
         'starts_with_nan': 0,
@@ -298,36 +369,26 @@ def _exclude_invalid_gaps(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int
 
     rows_to_exclude = set()
 
-    # Process each station separately
     for station_id in df['station_id'].unique():
         station_mask = df['station_id'] == station_id
         station_indices = df[station_mask].index.tolist()
         station_df = df.loc[station_indices].sort_values('date').copy()
 
-        # Identify which rows are missing (rainfall is NaN)
         rain_col = 'rainfall' if 'rainfall' in station_df.columns else 'rainfall_mm'
         station_df['_has_nan'] = station_df[rain_col].isna()
 
-        # Find rows to exclude within this station
-        local_rows_to_exclude = _identify_invalid_gap_rows(
-            station_df, exclusion_stats
-        )
+        local_rows_to_exclude = _identify_invalid_gap_rows(station_df, exclusion_stats)
 
-        # Convert local indices to global indices
         for local_idx in local_rows_to_exclude:
-            global_idx = station_indices[local_idx]
-            rows_to_exclude.add(global_idx)
+            rows_to_exclude.add(station_indices[local_idx])
 
-    # Remove excluded rows
     df = df.drop(list(rows_to_exclude)).copy()
-
-    # Clean up helper column
     df = df.drop(columns=['_has_nan'], errors='ignore')
-
     return df.reset_index(drop=True), exclusion_stats
 
 
-def _identify_invalid_gap_rows(station_df: pd.DataFrame, exclusion_stats: Dict) -> set:
+def _identify_invalid_gap_rows(station_df: pd.DataFrame, exclusion_stats: Dict,
+                                multi_key: str = 'multi_day_gaps') -> set:
     """
     Identify local row indices within a single station that should be excluded.
 
@@ -337,153 +398,72 @@ def _identify_invalid_gap_rows(station_df: pd.DataFrame, exclusion_stats: Dict) 
     3. Rows in consecutive NaN gaps ≥2 rows long
 
     Args:
-        station_df (pd.DataFrame): Single station's data, sorted by date
+        station_df (pd.DataFrame): Single station's data, sorted by date, with _has_nan column
         exclusion_stats (Dict): Mutable dict to track exclusion counts
+        multi_key (str): Key in exclusion_stats to increment for multi-row gaps
 
     Returns:
         set: Local indices to exclude
     """
-
     rows_to_exclude = set()
     has_nan = station_df['_has_nan'].values
 
-    # Find first and last valid readings
     first_valid_idx = None
     for idx in range(len(station_df)):
         if not has_nan[idx]:
             first_valid_idx = idx
             break
 
-    # If entire station is NaN, should have been caught by station filtering
     if first_valid_idx is None:
         return set(range(len(station_df)))
 
-    # Exclude rows before first valid reading (series start with NaN)
     if first_valid_idx > 0:
         for idx in range(first_valid_idx):
             rows_to_exclude.add(idx)
             exclusion_stats['starts_with_nan'] += 1
 
-    # Find last valid reading
     last_valid_idx = None
     for idx in range(len(station_df) - 1, -1, -1):
         if not has_nan[idx]:
             last_valid_idx = idx
             break
 
-    # Exclude rows after last valid reading (series end with NaN)
     if last_valid_idx is not None and last_valid_idx < len(station_df) - 1:
         for idx in range(last_valid_idx + 1, len(station_df)):
             rows_to_exclude.add(idx)
             exclusion_stats['ends_with_nan'] += 1
 
-    # Detect and exclude gaps ≥2 consecutive rows
     idx = first_valid_idx
     while idx < len(station_df):
         if has_nan[idx]:
-            # Start of a NaN gap
             gap_start = idx
             gap_length = 0
-
-            # Count consecutive NaN rows
             while idx < len(station_df) and has_nan[idx]:
                 gap_length += 1
                 idx += 1
-
-            # If gap is ≥2 consecutive rows, exclude all rows in the gap
             if gap_length >= 2:
                 for gap_idx in range(gap_start, gap_start + gap_length):
                     rows_to_exclude.add(gap_idx)
-                    exclusion_stats['multi_day_gaps'] += 1
+                    exclusion_stats[multi_key] += 1
         else:
             idx += 1
 
     return rows_to_exclude
 
 
-def _fill_single_day_gaps(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Fill ONLY single-day gaps using linear interpolation with limit=1, limit_area='inside'.
-
-    For each station:
-    1. Sort by date
-    2. Apply pandas linear interpolation with limit=1 (fill ≤1 consecutive NaN)
-    3. With limit_area='inside' (don't fill edges; edges already excluded)
-    4. Track which values were filled in new interpolated_flag column
-
-    Args:
-        df (pd.DataFrame): Data ready for interpolation (no edge NaN, no ≥2-day gaps)
-
-    Returns:
-        pd.DataFrame: Same data with single-day gaps filled + interpolated_flag column
-
-    Guarantees:
-        - interpolated_flag=True only where values were filled
-        - interpolated_flag=False for all original measurements
-        - No extrapolation (limit_area='inside')
-        - Interpolation respects limit=1
-    """
-
-    df = df.copy()
-    df['interpolated_flag'] = False
-    
-    rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
-
-    # Process each station separately to maintain date sorting
-    for station_id in df['station_id'].unique():
-        station_mask = df['station_id'] == station_id
-        station_indices = df[station_mask].index.tolist()
-
-        # Get station data sorted by date (reset index for easier local indexing)
-        station_data = df.loc[station_indices].sort_values(
-            'date').reset_index(drop=True)
-
-        # Record which values existed BEFORE interpolation
-        before_interp = station_data[rain_col].notna()
-
-        # Perform interpolation with limit=1, limit_area='inside'
-        station_data[rain_col] = station_data[rain_col].interpolate(
-            method='linear', limit=1, limit_area='inside'
-        )
-
-        # After interpolation, find newly filled values
-        after_interp = station_data[rain_col].notna()
-
-        # Mark rows where at least one value was newly filled
-        newly_filled_mask = (~before_interp) & after_interp
-
-        # Map back to original indices and set interpolated_flag
-        local_filled_indices = newly_filled_mask[newly_filled_mask].index.tolist()
-        for local_idx in local_filled_indices:
-            global_idx = station_indices[local_idx]
-            df.loc[global_idx, 'interpolated_flag'] = True
-
-        # Update rainfall in original DataFrame
-        for local_idx, global_idx in enumerate(station_indices):
-            df.loc[global_idx, rain_col] = station_data.loc[local_idx, rain_col]
-
-    return df.reset_index(drop=True)
-
-
 def _round_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Round all numeric columns to exactly 1 decimal place.
-
-    Per SCHEMA.md: all measurements must have precision of 1 decimal place.
-    Examples: 28.5, 65.0, 85.2 (never 28.523 or 85.23)
+    Round rainfall to exactly 1 decimal place.
 
     Args:
-        df (pd.DataFrame): Data with numeric values to round
+        df (pd.DataFrame): Daily data
 
     Returns:
-        pd.DataFrame: Same data with numeric columns rounded to 1 decimal
+        pd.DataFrame: Same data with rainfall rounded to 1 decimal
     """
-
-    # Round rainfall to 1 decimal
     rain_col = 'rainfall' if 'rainfall' in df.columns else 'rainfall_mm'
     if rain_col in df.columns:
         df[rain_col] = df[rain_col].round(1)
-
     return df
 
 
@@ -494,42 +474,25 @@ def _generate_quality_report(
     final_stations: int,
     station_exclusions: Dict[str, int],
     gap_exclusions: Dict[str, int],
+    hour_gap_exclusions: Dict[str, int],
     duplicates_removed: int,
 ) -> Dict[str, Any]:
     """
-    Generate a comprehensive quality report with exact structure from project spec.
-
-    Structure matches SCHEMA.md output contract for easy Streamlit display.
+    Generate a comprehensive quality report.
 
     Args:
-        initial_rows (int): Total input rows
-        initial_stations (int): Total input stations
-        final_rows (int): Total output rows
+        initial_rows (int): Total daily rows after downmapping (pre-validation)
+        initial_stations (int): Total input stations (pre-processing)
+        final_rows (int): Total output daily rows
         final_stations (int): Total output stations
         station_exclusions (Dict): {zero_valid_stations, insufficient_readings_stations}
         gap_exclusions (Dict): {multi_day_gaps, starts_with_nan, ends_with_nan}
+        hour_gap_exclusions (Dict): {multi_hour_gaps, starts_with_nan, ends_with_nan}
         duplicates_removed (int): Duplicate (station_id+date) rows removed
 
     Returns:
-        Dict[str, Any]: Quality report with exact structure:
-            {
-                "total_input_rows": int,
-                "total_input_stations": int,
-                "stations_excluded": int,
-                "rows_excluded": int,
-                "rows_filled": int,
-                "exclusion_details": {
-                    "zero_valid_stations": int,
-                    "insufficient_readings_stations": int,
-                    "multi_day_gaps": int,
-                    "starts_with_nan": int,
-                    "ends_with_nan": int,
-                    "duplicates": int
-                },
-                "summary_text": str
-            }
+        Dict[str, Any]: Quality report
     """
-
     total_rows_excluded = initial_rows - final_rows
     total_stations_excluded = (
         station_exclusions['zero_valid_stations'] +
@@ -537,23 +500,26 @@ def _generate_quality_report(
     )
 
     summary_text = (
-        f"Processed {initial_rows} rows from {initial_stations} station(s). "
+        f"Processed {initial_rows} daily rows from {initial_stations} station(s). "
         f"Output: {final_rows} rows from {final_stations} station(s). "
-        f"Excluded: {total_stations_excluded} station(s) "
+        f"Hourly exclusions — gaps ≥2h: {hour_gap_exclusions['multi_hour_gaps']}, "
+        f"series-start: {hour_gap_exclusions['starts_with_nan']}, "
+        f"series-end: {hour_gap_exclusions['ends_with_nan']}. "
+        f"Station exclusions: {total_stations_excluded} "
         f"({station_exclusions['zero_valid_stations']} with 0% valid, "
-        f"{station_exclusions['insufficient_readings_stations']} with <2 readings), "
-        f"{gap_exclusions['multi_day_gaps']} rows (gaps ≥2 days), "
-        f"{gap_exclusions['starts_with_nan']} rows (series start NaN), "
-        f"{gap_exclusions['ends_with_nan']} rows (series end NaN), "
-        f"{duplicates_removed} duplicate(s)."
+        f"{station_exclusions['insufficient_readings_stations']} with <2 readings). "
+        f"Daily exclusions — gaps ≥2d: {gap_exclusions['multi_day_gaps']}, "
+        f"series-start: {gap_exclusions['starts_with_nan']}, "
+        f"series-end: {gap_exclusions['ends_with_nan']}, "
+        f"duplicates: {duplicates_removed}."
     )
 
-    quality_report = {
+    return {
         "total_input_rows": initial_rows,
         "total_input_stations": initial_stations,
         "stations_excluded": total_stations_excluded,
         "rows_excluded": total_rows_excluded,
-        "rows_filled": 0,  # Will be calculated from interpolated_flag in UI if needed
+        "rows_filled": 0,
         "exclusion_details": {
             "zero_valid_stations": station_exclusions['zero_valid_stations'],
             "insufficient_readings_stations": station_exclusions['insufficient_readings_stations'],
@@ -561,26 +527,18 @@ def _generate_quality_report(
             "starts_with_nan": gap_exclusions['starts_with_nan'],
             "ends_with_nan": gap_exclusions['ends_with_nan'],
             "duplicates": duplicates_removed,
+            "multi_hour_gaps": hour_gap_exclusions['multi_hour_gaps'],
+            "hourly_starts_with_nan": hour_gap_exclusions['starts_with_nan'],
+            "hourly_ends_with_nan": hour_gap_exclusions['ends_with_nan'],
         },
         "summary_text": summary_text,
     }
 
-    return quality_report
 
-
-# Backward compatibility wrapper (for existing streamlit_app.py integration)
+# Backward compatibility wrapper
 def zone_a_linear_interpolation(raw_data: pd.DataFrame) -> pd.DataFrame:
     """
-    Backward compatibility wrapper for existing code.
-
-    Calls new process_zone_a() function and returns only cleaned data.
-    Quality report is handled internally.
-
-    Args:
-        raw_data (pd.DataFrame): Raw input data
-
-    Returns:
-        pd.DataFrame: Cleaned data (no NaN values, interpolated_flag column added)
+    Backward compatibility wrapper. Calls process_zone_a() and returns only cleaned data.
     """
     cleaned_data, _ = process_zone_a(raw_data)
     return cleaned_data

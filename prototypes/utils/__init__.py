@@ -1,1 +1,1 @@
-# Utils package for unit detection and conversion
+# Utility modules for the QC pipeline

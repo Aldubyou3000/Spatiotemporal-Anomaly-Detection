@@ -1,0 +1,18 @@
+station_id,case,detail,expected
+SCI_GARDEN,A2_single_hour_gap,"50 days, hour 14 NaN",hour_interpolated_interpolated_flag_true_on_daily_row
+SCI_GARDEN,A6_duplicate_rows,15 days duplicated at end of file,duplicate_dropped_first_kept
+SCI_GARDEN,C1_isolated_spike,15 wet-season days 180-230mm/day,flagged_anomaly_lof_spatial_mode
+NAPINDAN_II,A3_multi_hour_gap,30 days hours 10-11 NaN,both_hours_excluded_not_interpolated
+NAPINDAN_II,A4_series_start_nan,First 3 hours of station series NaN (2021-01-01 00-02h),leading_nan_hours_excluded
+NAPINDAN_II,C2_zero_during_wet,15 wet-season days rainfall=0 while neighbors high,flagged_anomaly_lof_spatial_mode
+MANDALUYONG,A5_series_end_nan,Last 3 hours of station series NaN (2023-12-31 21-23h),trailing_nan_hours_excluded
+MANDALUYONG,A9_daily_gap_gte2,2021-07-15 and 2021-07-16 all hours NaN -> 2 NaN daily rows excluded,two_daily_rows_excluded_after_downmapping
+MANDALUYONG,A11_daily_series_end_nan,2023-09-30 all hours NaN -> daily row excluded,last_daily_row_of_window_excluded
+MYC,A10_daily_series_start_nan,2021-08-01 all hours NaN -> daily row excluded,first_daily_row_of_window_excluded
+MYC,A6_duplicate_rows,15 days duplicated at end of file,duplicate_dropped_first_kept
+VALENZUELA,A7_all_nan_subwindow,2021-01-01 to 2021-01-30 all NaN -> 30 daily rows excluded,all_nan_daily_rows_excluded_station_survives
+VALENZUELA,A8_insufficient_readings,"2021-02-01 to 2021-02-03, only 1 valid hour -> daily rows excluded",sub_period_excluded_station_survives
+ALL_5,C3_typhoon_cluster,2022-08-10 to 2022-08-14 all stations 150-200mm/day,not_flagged_all_neighbors_agree
+ALL_5,C4_normal_seasonal,"Majority of data: dry season 0-5mm/day, wet season 8-60mm/day",no_anomaly
+A12_validation,A12_negative_rainfall,rainfall=-5.0 -> in validation_errors.csv only,ValueError_rainfall_must_be_non_negative
+A13_validation,A13_bad_coordinate,latitude=999 -> in validation_errors.csv only,ValueError_latitude_out_of_range

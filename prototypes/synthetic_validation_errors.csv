@@ -1,0 +1,3 @@
+station_id,date,latitude,longitude,rainfall,case,expected
+SCI_GARDEN,2021-01-01 06:00:00,14.6453,121.0437,-5.0,A12_negative_rainfall,ValueError_raised
+SCI_GARDEN,2021-01-01 07:00:00,999.0,121.0437,2.0,A13_bad_coordinate,ValueError_raised
