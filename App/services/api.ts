@@ -324,15 +324,33 @@ export async function submitInspectionReport(
   return { success: true, reportId: data.id, ticketId: data.ticket_id, submittedAt: data.submitted_at };
 }
 
-export async function fetchReportIdForTicket(ticketId: string): Promise<string | null> {
+export interface TicketReportSummary {
+  id: string;
+  ticket_id: string;
+  submitted_at: string;
+  notes: string | null;
+  sensor_working: boolean | null;
+  severity: 'low' | 'medium' | 'high' | null;
+  root_cause: string | null;
+  analyst_approved: boolean;
+  analyst_approved_at: string | null;
+  analyst_notes: string | null;
+}
+
+export async function fetchReportForTicket(ticketId: string): Promise<TicketReportSummary | null> {
   try {
-    const data = await request<{ id: string; ticket_id: string; submitted_at: string } | null>(
+    return await request<TicketReportSummary | null>(
       `/api/mobile/tickets/${ticketId}/report-id`,
     );
-    return data?.id ?? null;
   } catch {
     return null;
   }
+}
+
+/** @deprecated use fetchReportForTicket */
+export async function fetchReportIdForTicket(ticketId: string): Promise<string | null> {
+  const report = await fetchReportForTicket(ticketId);
+  return report?.id ?? null;
 }
 
 export interface TicketAttachment {

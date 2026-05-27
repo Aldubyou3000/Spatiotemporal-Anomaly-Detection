@@ -10,7 +10,7 @@ export function Skeleton({ className }: SkeletonProps) {
       className={cn(
         "relative overflow-hidden rounded-md bg-surface-muted",
         "after:absolute after:inset-0 after:bg-gradient-to-r",
-        "after:from-transparent after:via-white/10 after:to-transparent",
+        "after:from-transparent after:via-white/20 after:to-transparent",
         "after:animate-[sweep_1.4s_ease-in-out_infinite]",
         className
       )}

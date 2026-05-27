@@ -29,10 +29,11 @@ import { useAppContext } from '@/context/AppContext';
 import {
   downloadTicketPdf,
   fetchInspectionPhotos,
-  fetchReportIdForTicket,
+  fetchReportForTicket,
   fetchTicketAttachments,
   MaintenanceTicket,
   TicketAttachment,
+  TicketReportSummary,
 } from '@/services/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -92,6 +93,7 @@ function SectionHeader({ title }: { title: string }) {
 export default function TicketDetailSheet({ ticket, onClose }: Props) {
   const { isDarkMode } = useAppContext();
 
+  const [report, setReport]                 = useState<TicketReportSummary | null>(null);
   const [photoUrls, setPhotoUrls]           = useState<string[]>([]);
   const [loadingPhotos, setLoadingPhotos]   = useState(false);
   const [csvAttachments, setCsvAttachments] = useState<TicketAttachment[]>([]);
@@ -145,30 +147,33 @@ export default function TicketDetailSheet({ ticket, onClose }: Props) {
     } else {
       backdropO.value  = withTiming(0, { duration: duration.fast, easing: ease });
       translateY.value = withTiming(PANEL_HEIGHT, { duration: duration.normal, easing: ease });
+      setReport(null);
       setPhotoUrls([]);
       setCsvAttachments([]);
       setViewerUri(null);
     }
   }, [visible]);
 
-  // Fetch photos + CSV attachments whenever a ticket opens
+  // Fetch report, photos + CSV attachments whenever a ticket opens
   useEffect(() => {
     if (!ticket?._dbId) return;
     let cancelled = false;
 
     const load = async () => {
       setLoadingPhotos(true);
+      setReport(null);
       setPhotoUrls([]);
       setCsvAttachments([]);
       try {
-        const [reportId, attachments] = await Promise.all([
-          fetchReportIdForTicket(ticket._dbId!),
+        const [reportData, attachments] = await Promise.all([
+          fetchReportForTicket(ticket._dbId!),
           fetchTicketAttachments(ticket._dbId!),
         ]);
         if (cancelled) return;
         setCsvAttachments(attachments);
-        if (!reportId) return;
-        const photos = await fetchInspectionPhotos(reportId);
+        if (!reportData) return;
+        setReport(reportData);
+        const photos = await fetchInspectionPhotos(reportData.id);
         if (!cancelled) setPhotoUrls(photos.map((p) => p.photo_url));
       } catch {
         // silently ignore — attachments are supplementary
@@ -434,10 +439,49 @@ export default function TicketDetailSheet({ ticket, onClose }: Props) {
               </>
             )}
 
-            {/* History: verification status */}
+            {/* Inspection Report (history tickets) */}
+            {isHistory && report && (
+              <>
+                <SectionHeader title="Inspection Report" />
+                <View style={[styles.detailsCard, { borderColor: divider, borderWidth: 1, marginBottom: 16 }]}>
+                  {report.sensor_working !== null && (
+                    <DetailRow
+                      icon={report.sensor_working ? 'wifi-outline' : 'wifi-off-outline'}
+                      label="Sensor Working"
+                      value={report.sensor_working ? 'Yes' : 'No'}
+                    />
+                  )}
+                  {report.severity ? (
+                    <DetailRow icon="warning-outline" label="Severity" value={
+                      report.severity.charAt(0).toUpperCase() + report.severity.slice(1)
+                    } />
+                  ) : null}
+                </View>
+
+                {report.notes ? (
+                  <>
+                    <Text style={[styles.fieldLabel, { color: secondary }]}>Field Observations</Text>
+                    <Text style={[styles.descText, { color: titleCol, marginBottom: 16 }]}>
+                      {report.notes}
+                    </Text>
+                  </>
+                ) : null}
+
+                {report.root_cause ? (
+                  <>
+                    <Text style={[styles.fieldLabel, { color: secondary }]}>Root Cause</Text>
+                    <Text style={[styles.descText, { color: titleCol, marginBottom: 16 }]}>
+                      {report.root_cause}
+                    </Text>
+                  </>
+                ) : null}
+              </>
+            )}
+
+            {/* Analyst remarks */}
             {isHistory && (
               <>
-                <SectionHeader title="Review Status" />
+                <SectionHeader title="Analyst Remarks" />
                 <View
                   style={[
                     styles.reviewBlock,
@@ -452,29 +496,30 @@ export default function TicketDetailSheet({ ticket, onClose }: Props) {
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.reviewText,
-                      { color: verified ? '#0DB976' : '#F5A623' },
-                    ]}
-                  >
-                    {verified
-                      ? 'This ticket has been reviewed and approved by an analyst.'
-                      : 'This ticket is awaiting analyst review. No action required.'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <Ionicons
+                      name={verified ? 'checkmark-circle' : 'time-outline'}
+                      size={14}
+                      color={verified ? '#0DB976' : '#F5A623'}
+                    />
+                    <Text style={[styles.reviewStatusLabel, { color: verified ? '#0DB976' : '#F5A623' }]}>
+                      {verified ? 'Approved by Analyst' : 'Pending Review'}
+                    </Text>
+                  </View>
+                  {report?.analyst_notes ? (
+                    <Text style={[styles.reviewText, { color: titleCol }]}>
+                      {report.analyst_notes}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.reviewText, { color: secondary }]}>
+                      {verified
+                        ? 'No additional remarks were added.'
+                        : 'This ticket is awaiting analyst review.'}
+                    </Text>
+                  )}
                 </View>
               </>
             )}
-
-            {/* Field notes */}
-            {ticket.notes ? (
-              <>
-                <SectionHeader title="Field Notes" />
-                <Text style={[styles.descText, { color: titleCol, marginBottom: 22 }]}>
-                  {ticket.notes}
-                </Text>
-              </>
-            ) : null}
 
             <View style={{ height: 16 }} />
           </ScrollView>
@@ -594,7 +639,9 @@ const styles = StyleSheet.create({
   thumb: { width: 104, height: 80 },
 
   reviewBlock: { borderRadius: 12, padding: 14, marginBottom: 24 },
-  reviewText: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  reviewStatusLabel: { fontSize: 13, fontWeight: '600' },
+  reviewText: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  fieldLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 },
 
   // Full-screen viewer
   viewer: {

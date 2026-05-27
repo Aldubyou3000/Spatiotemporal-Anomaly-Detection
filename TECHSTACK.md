@@ -1,7 +1,7 @@
 # Tech Stack — Spatiotemporal Anomaly Detection System
 
-**Last updated**: 2026-05-26
-**Status**: Planned migration — Streamlit → Next.js + FastAPI
+**Last updated**: 2026-05-27
+**Status**: Migration complete — Streamlit replaced by Next.js + FastAPI
 
 ---
 
@@ -11,9 +11,9 @@ Two frontends, one backend, one database.
 
 | System | Users | Status |
 |--------|-------|--------|
-| Web Dashboard (`web/`) | Data Analysts | Migrating from Streamlit → Next.js |
-| Mobile App (`App/`) | Field Technicians | Expo (React Native) — untouched |
-| Backend API (`api/`) | Serves both frontends | New: FastAPI |
+| Web Dashboard (`web/`) | Data Analysts | Next.js — live |
+| Mobile App (`App/`) | Field Technicians | Expo (React Native) — live |
+| Backend API (`api/`) | Serves both frontends | FastAPI — live |
 
 **Core rule:** No frontend ever talks to Supabase directly. All data flows through FastAPI only.
 
@@ -84,157 +84,97 @@ Spatiotemporal-Anomaly-Detection/
 ├── web/                  ← Next.js frontend (analyst dashboard)
 ├── api/                  ← FastAPI backend
 ├── App/                  ← Expo mobile app (field technician)
-├── TECHSTACK.md          ← This document
+├── prototypes/           ← Reference only — original Streamlit + zone algorithms
+├── README.md             ← Project overview and quick start
 ├── CLAUDE.md             ← Codebase instructions for Claude Code
-├── RUNNING.md            ← How to start each service
-└── TICKETING_SYSTEM_DESIGN.md
+└── TECHSTACK.md          ← This document
 ```
 
 ---
 
 ### Web Frontend (`web/`)
 
-The `src/` wrapper keeps source code separate from config files at the root. Route groups `(auth)` and `(dashboard)` apply different layouts to different pages without adding URL segments — login gets a plain centered layout, everything else gets the sidebar dashboard layout.
+Route groups `(auth)` and `(dashboard)` apply different layouts without adding URL segments — login gets a plain centered layout, everything else gets the sidebar dashboard layout.
 
 ```
-web/
-├── src/
-│   ├── app/                          ← Next.js App Router
-│   │   ├── (auth)/                   ← Route group: plain layout, no sidebar
-│   │   │   ├── layout.tsx            ← Centered card layout for login
-│   │   │   └── login/
-│   │   │       └── page.tsx
-│   │   ├── (dashboard)/              ← Route group: protected, with sidebar
-│   │   │   ├── layout.tsx            ← Auth guard + sidebar shell
-│   │   │   ├── zones/
-│   │   │   │   ├── page.tsx          ← Upload form
-│   │   │   │   └── [sessionId]/
-│   │   │   │       └── page.tsx      ← Pipeline results (tabs: overview, raw,
-│   │   │   │                             cleaned, neighbors, anomalies, create ticket)
-│   │   │   └── tickets/
-│   │   │       └── page.tsx          ← Ticket board + inspection reports + manage technicians
-│   │   ├── layout.tsx                ← Root layout (fonts, global providers)
-│   │   ├── globals.css
-│   │   └── page.tsx                  ← Redirects to /zones or /login
-│   │
-│   ├── components/
-│   │   ├── ui/                       ← Generic, domain-agnostic components
-│   │   │   ├── Badge.tsx             ← Status and priority badges
-│   │   │   ├── Button.tsx
-│   │   │   ├── Card.tsx
-│   │   │   ├── DataTable.tsx         ← Paginated table
-│   │   │   ├── EmptyState.tsx
-│   │   │   └── Modal.tsx
-│   │   ├── layout/                   ← App shell components
-│   │   │   ├── Sidebar.tsx
-│   │   │   ├── Header.tsx
-│   │   │   └── NavLink.tsx
-│   │   ├── zones/                    ← Zones page components
-│   │   │   ├── UploadForm.tsx
-│   │   │   ├── PipelineResults.tsx   ← Tab container after processing
-│   │   │   ├── OverviewTab.tsx       ← Stats grid + map + CSV downloads
-│   │   │   ├── StationMap.tsx        ← Leaflet map
-│   │   │   ├── AnomalyChart.tsx      ← Per-station bar chart
-│   │   │   ├── NeighborGroups.tsx
-│   │   │   └── CreateTicketForm.tsx
-│   │   ├── tickets/                  ← Tickets page components
-│   │   │   ├── TicketCard.tsx
-│   │   │   ├── TicketBoard.tsx
-│   │   │   ├── StatusFilter.tsx
-│   │   │   └── StatusControls.tsx
-│   │   ├── reports/                  ← Inspection reports components
-│   │   │   ├── ReportCard.tsx
-│   │   │   ├── ApproveForm.tsx
-│   │   │   └── PhotoViewer.tsx
-│   │   └── technicians/              ← Manage technicians components
-│   │       ├── TechnicianList.tsx
-│   │       └── CreateTechnicianForm.tsx
-│   │
-│   ├── hooks/                        ← Custom React hooks (one per domain)
-│   │   ├── useAuth.ts
-│   │   ├── useZones.ts
-│   │   ├── useTickets.ts
-│   │   ├── useReports.ts
-│   │   └── useTechnicians.ts
-│   │
-│   ├── lib/
-│   │   ├── api/                      ← All FastAPI calls — split by domain
-│   │   │   ├── client.ts             ← Base fetch wrapper: attaches auth token, handles errors
-│   │   │   ├── auth.ts               ← login(), logout(), getMe()
-│   │   │   ├── zones.ts              ← processFile(), getResults()
-│   │   │   ├── tickets.ts            ← getTickets(), updateStatus(), createTicket()
-│   │   │   ├── reports.ts            ← getReports(), approveReport()
-│   │   │   └── technicians.ts        ← getTechnicians(), createTechnician()
-│   │   └── utils/
-│   │       ├── formatters.ts         ← Date and number formatting
-│   │       └── cn.ts                 ← Tailwind class merging utility
-│   │
-│   └── types/                        ← TypeScript types — mirrors backend schemas
-│       ├── auth.ts
-│       ├── zones.ts
-│       ├── tickets.ts
-│       ├── reports.ts
-│       └── technicians.ts
+web/src/
+├── app/
+│   ├── (auth)/login/page.tsx         ← Login page
+│   ├── (dashboard)/
+│   │   ├── layout.tsx                ← Auth guard + sidebar shell
+│   │   ├── zones/page.tsx            ← Upload + pipeline results (tabs)
+│   │   ├── tickets/page.tsx          ← Ticket board
+│   │   ├── reports/page.tsx          ← Inspection reports + approval
+│   │   └── technicians/page.tsx      ← Manage technician accounts
+│   ├── layout.tsx                    ← Root layout
+│   ├── globals.css
+│   └── page.tsx                      ← Redirects to /zones or /login
 │
-├── public/
-├── .env.local
-├── next.config.ts
-├── tailwind.config.ts
-├── tsconfig.json
-└── package.json
+├── components/
+│   ├── ui/                           ← Generic components (Badge, Button, Card, etc.)
+│   ├── dashboard/                    ← Shell components (Sidebar, Header)
+│   └── zones/                        ← Pipeline result tabs (OverviewTab, StationMap, etc.)
+│
+├── context/
+│   ├── AuthContext.tsx
+│   └── ThemeContext.tsx
+│
+├── lib/
+│   ├── api/                          ← One file per domain; all go through client.ts
+│   │   ├── client.ts                 ← Base fetch: auto-refresh on 401, credentials: include
+│   │   ├── auth.ts
+│   │   ├── zones.ts
+│   │   ├── tickets.ts
+│   │   ├── reports.ts
+│   │   └── technicians.ts
+│   ├── cn.ts                         ← Tailwind class merging
+│   └── csv.ts
+│
+├── middleware.ts                     ← Cookie-based route guard
+└── types/                            ← TypeScript interfaces mirroring backend schemas
 ```
 
 ---
 
 ### Backend API (`api/`)
 
-Routers handle HTTP only — parse the request, call a service, return the response. Services handle business logic and know nothing about HTTP. Schemas define the shape of data going in and out. This separation means each layer can be changed or tested independently.
+Routers handle HTTP only — parse the request, call a service, return the response. Services handle business logic and know nothing about HTTP.
 
 ```
-api/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                       ← FastAPI app: registers routers, middleware, CORS
-│   │
-│   ├── core/                         ← Infrastructure — config, security, shared dependencies
-│   │   ├── __init__.py
-│   │   ├── config.py                 ← All env vars via Pydantic BaseSettings
-│   │   ├── security.py               ← JWT creation and verification
-│   │   └── dependencies.py           ← FastAPI Depends() — auth guard, role checks
-│   │
-│   ├── routers/                      ← HTTP layer only — no business logic here
-│   │   ├── __init__.py
-│   │   ├── auth.py                   ← POST /api/auth/login, GET /api/auth/me
-│   │   ├── zones.py                  ← POST /api/zones/process, GET /api/zones/{id}
-│   │   ├── tickets.py                ← GET/POST /api/tickets, PATCH /api/tickets/{id}
-│   │   ├── reports.py                ← GET/POST /api/reports, PATCH /api/reports/{id}/approve
-│   │   └── technicians.py            ← GET/POST /api/technicians
-│   │
-│   ├── services/                     ← Business logic — no HTTP, no request/response objects
-│   │   ├── __init__.py
-│   │   ├── auth_service.py           ← Verify credentials, issue tokens
-│   │   ├── zone_service.py           ← Orchestrate zone_a → zone_b → zone_c
-│   │   ├── ticket_service.py         ← Create, update, validate ticket transitions
-│   │   ├── report_service.py         ← Submit and approve reports
-│   │   └── technician_service.py     ← Create and list technician accounts
-│   │
-│   ├── schemas/                      ← Pydantic models — request and response shapes
-│   │   ├── __init__.py
-│   │   ├── auth.py                   ← LoginRequest, TokenResponse, UserProfile
-│   │   ├── zones.py                  ← ProcessResponse, SessionResult, AnomalySummary
-│   │   ├── tickets.py                ← TicketCreate, TicketResponse, TicketStatusUpdate
-│   │   ├── reports.py                ← ReportCreate, ReportResponse, ApproveRequest
-│   │   └── technicians.py            ← TechnicianCreate, TechnicianResponse
-│   │
-│   └── zones/                        ← Existing zone processing code — untouched
-│       ├── __init__.py
-│       ├── zone_a.py
-│       ├── zone_b.py
-│       └── zone_c.py
+api/app/
+├── main.py                           ← FastAPI app: routers, CORS, rate limiting, security headers
 │
-├── .env
-├── .env.example
-└── requirements.txt
+├── core/
+│   ├── config.py                     ← Env vars via Pydantic BaseSettings
+│   ├── security.py                   ← JWT verification (Supabase tokens)
+│   └── dependencies.py               ← Depends(): get_current_user (cookie), get_mobile_user (Bearer)
+│
+├── routers/                          ← HTTP only — no business logic
+│   ├── auth.py                       ← POST /api/auth/login|logout|refresh, GET /api/auth/me
+│   ├── zones.py                      ← POST /api/zones/process, GET /api/zones/{id}
+│   ├── tickets.py                    ← CRUD /api/tickets
+│   ├── reports.py                    ← /api/reports — submit, approve
+│   ├── technicians.py                ← /api/technicians
+│   └── mobile.py                     ← /api/mobile/* — technician Bearer-auth endpoints
+│
+├── services/                         ← Business logic — Supabase calls, zone orchestration
+│   ├── auth_service.py
+│   ├── zones_service.py              ← run_pipeline() — call via run_in_threadpool
+│   ├── tickets_service.py
+│   ├── reports_service.py
+│   └── technicians_service.py
+│
+├── schemas/                          ← Pydantic v2 request/response models
+│   ├── auth.py
+│   ├── zones.py
+│   ├── tickets.py
+│   ├── reports.py
+│   └── technicians.py
+│
+└── zones/                            ← Zone algorithms — do not modify
+    ├── zone_a.py
+    ├── zone_b.py
+    └── zone_c.py
 ```
 
 ---
@@ -275,31 +215,48 @@ POST   /api/auth/refresh              { refresh_token } → { access_token }
 
 ### Zones Processing
 ```
-POST   /api/zones/process             { file: CSV } → { session_id }
-GET    /api/zones/{session_id}        → Full pipeline results
-POST   /api/zones/{session_id}/ticket → Create ticket from anomaly
+POST   /api/zones/process             { file: CSV, contamination? } → ProcessResult (synchronous)
 ```
 
 ### Tickets
 ```
-GET    /api/tickets                   → Paginated list, filterable by status
-GET    /api/tickets/{id}              → Single ticket with report and attachments
+GET    /api/tickets                   → Paginated list (status/priority/station_id filters)
+GET    /api/tickets/{id}              → Single ticket with attachments
 POST   /api/tickets                   → Create (analyst only)
-PATCH  /api/tickets/{id}/status       → Update status
+PATCH  /api/tickets/{id}              → Update status, technician, or fields
+GET    /api/tickets/{id}/pdf          → Stream PDF report
+GET    /api/tickets/{id}/attachments  → List CSV attachments
+POST   /api/tickets/{id}/attachments  → Upload CSV attachment
 ```
 
 ### Reports
 ```
-GET    /api/reports                   → Pending reports awaiting approval
-GET    /api/reports/{id}              → Single report with photos
-POST   /api/reports                   → Submit report (technician only)
-PATCH  /api/reports/{id}/approve      → Approve report (analyst only)
+GET    /api/reports                   → All reports (analyst only)
+GET    /api/reports/{id}              → Single report
+PATCH  /api/reports/{id}/approve      → Approve report, mark ticket verified (analyst only)
 ```
 
 ### Technicians
 ```
-GET    /api/technicians               → List all technician accounts
+GET    /api/technicians               → List technician accounts
 POST   /api/technicians               → Create technician account (analyst only)
+```
+
+### Mobile (technician Bearer auth — all under `/api/mobile/`)
+```
+POST   /api/mobile/auth/login         → Returns access + refresh tokens
+POST   /api/mobile/auth/refresh
+POST   /api/mobile/auth/logout
+GET    /api/mobile/auth/me
+GET    /api/mobile/tickets            → Tickets assigned to authenticated technician
+GET    /api/mobile/tickets/{id}
+PATCH  /api/mobile/tickets/{id}/status → Set in-progress or completed
+GET    /api/mobile/tickets/{id}/attachments
+GET    /api/mobile/tickets/{id}/report-id
+GET    /api/mobile/tickets/{id}/pdf
+POST   /api/mobile/reports            → Submit inspection report
+GET    /api/mobile/reports/{id}/photos
+POST   /api/mobile/reports/{id}/photos → Upload inspection photo
 ```
 
 ---
@@ -361,15 +318,15 @@ Enforced in two places: FastAPI `dependencies.py` (application level) and Supaba
 
 ## Migration Status
 
-| Phase | What Gets Built | Status |
-|-------|-----------------|--------|
-| **1** | Next.js + FastAPI projects scaffolded, login working end-to-end | ✅ Complete |
-| **2** | Zones pipeline in FastAPI, full results UI in Next.js (all tabs, maps, charts) | ✅ Complete |
-| **3** | Ticket board in Next.js, ticket CRUD in FastAPI, PDF export | ✅ Complete |
-| **4** | Inspection reports, report approval, manage technicians, create ticket from zones | ✅ Complete |
-| **5** | Feature parity verified, Streamlit shut down | ✅ Complete |
+**Migration complete.** All five phases delivered. Streamlit shut down; `prototypes/` kept as reference only.
 
-**Migration complete.** All Streamlit pages have been replicated in the Next.js dashboard and mobile app. Streamlit and prototypes/ have been removed.
+| Phase | What Was Built |
+|-------|----------------|
+| 1 | Next.js + FastAPI scaffold, login end-to-end |
+| 2 | Zones pipeline in FastAPI, full results UI in Next.js |
+| 3 | Ticket board, CRUD, PDF export |
+| 4 | Inspection reports, approval, manage technicians |
+| 5 | Feature parity verified, Streamlit shut down |
 
 ---
 

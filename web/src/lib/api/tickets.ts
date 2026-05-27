@@ -14,6 +14,20 @@ export interface TicketListParams {
   station_id?: string;
   limit?: number;
   offset?: number;
+  [key: string]: string | number | boolean | undefined;
+}
+
+export interface TicketReport {
+  id: string;
+  notes: string | null;
+  sensor_working: boolean | null;
+  severity: "low" | "medium" | "high" | null;
+  root_cause: string | null;
+  submitted_at: string | null;
+  analyst_approved: boolean;
+  analyst_approved_at: string | null;
+  analyst_notes: string | null;
+  photos: { id: string; photo_url: string }[];
 }
 
 export const ticketsApi = {
@@ -43,6 +57,9 @@ export const ticketsApi = {
       form,
     );
   },
+
+  report: (id: string) =>
+    apiClient.get<TicketReport | null>(`/api/tickets/${id}/report`),
 
   downloadPdf: async (id: string, filename: string) => {
     const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";

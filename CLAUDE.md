@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
 
@@ -41,13 +41,6 @@ npm run dev
 cd App
 npm start
 # Press w for browser, or scan QR with Expo Go on phone (same WiFi as PC)
-```
-
-### Legacy Streamlit (prototypes/) — kept until Phase 5 migration complete
-```powershell
-cd prototypes
-streamlit run streamlit_app.py
-# http://localhost:8501
 ```
 
 ---
@@ -96,6 +89,7 @@ Strict layer separation — never bypass it:
 | `schemas/` | Pydantic models for all request/response shapes |
 | `core/` | Config (`config.py`), JWT (`security.py`), auth guards (`dependencies.py`) |
 | `zones/` | Pure data processing — untouched, no HTTP, no DB calls |
+| `routers/mobile.py` | Technician-only endpoints — Bearer token auth, all `/api/mobile/` routes |
 
 Zone pipeline execution order: `zone_a.py` → `zone_b.py` → `zone_c.py`
 
@@ -105,11 +99,14 @@ Zone pipeline execution order: `zone_a.py` → `zone_b.py` → `zone_c.py`
 
 The `zones/` directory is a copy of `prototypes/zone/` — **do not modify the algorithms**.
 
+Zone pipeline is CPU-bound; call `zones_service.run_pipeline()` via `fastapi.concurrency.run_in_threadpool` to keep the event loop responsive.
+
 ### Auth Flow
 1. Login → FastAPI verifies with Supabase Auth → issues JWT access token (30 min) + refresh token (7 days)
-2. Tokens stored in **httpOnly cookies** (never localStorage)
-3. Refresh rotates on every use; expiry → redirect to login
-4. Role enforcement: `analyst` (pipeline, tickets, reports, manage technicians) vs `technician` (view assigned tickets, submit reports)
+2. **Web dashboard**: tokens stored in **httpOnly cookies** (`get_current_user` dependency reads `Cookie: access_token`)
+3. **Mobile app**: tokens stored in `SecureStore`; every request sends `Authorization: Bearer <token>` (`get_mobile_user` / `require_technician_mobile` dependencies)
+4. Refresh rotates on every use; expiry → redirect to login
+5. Role enforcement: `analyst` (pipeline, tickets, reports, manage technicians) vs `technician` (view/update assigned tickets, submit reports, upload photos)
 
 ---
 
@@ -132,9 +129,10 @@ Always use `@/` path aliases for imports. Never put API calls in components — 
 
 File-based routing via Expo Router. Screens live in `app/`; tabs under `app/(tabs)/`.
 
-- Global state in `context/AppContext.tsx`
-- API calls in `services/api.ts` (replaced mock API in recent migration)
-- Sensitive values → `SecureStore`; non-sensitive → `AsyncStorage`
+- Global state in `context/AppContext.tsx` — auth, theme, profile
+- API calls in `services/api.ts` — wraps all `/api/mobile/` endpoints with auto token-refresh
+- Tokens: `SecureStore` on native, `localStorage` on web (platform-branched in `services/api.ts`)
+- Theme preference persisted via `SecureStore` (native) / `localStorage` (web)
 - **Expo v55.0.26 is pinned** — do not upgrade to v56+
 
 ---
@@ -144,7 +142,6 @@ File-based routing via Expo Router. Screens live in `app/`; tabs under `app/(tab
 - **Expo v55.0.26 pinned** — breaking changes in v56+
 - **pandas 2.2.0+** required — `interpolate(limit_area='inside')` parameter
 - **scikit-learn 1.4.0+** required — LOF API changed in earlier versions
-- **streamlit 1.32.0+** required — stable session state
 - Zone algorithms (`zone_a.py`, `zone_b.py`, `zone_c.py`) must remain untouched
 - Supabase DB schema unchanged during migration (no new tables/columns)
 - Ticket lifecycle: `assigned → in-progress → completed → verified`
@@ -159,12 +156,17 @@ File-based routing via Expo Router. Screens live in `app/`; tabs under `app/(tab
 ```
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=
+SUPABASE_JWT_SECRET=
 JWT_SECRET=
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ALLOWED_ORIGINS=http://localhost:3000
+DEV_MODE=true
 ```
+
+`DEV_MODE=true` (default) widens CORS to all `localhost` and `192.168.x.x` origins — set `false` in production.
 
 **`web/.env.local`** — Next.js only gets the API URL:
 ```
@@ -180,14 +182,14 @@ EXPO_PUBLIC_API_URL=http://192.168.100.10:8000
 
 ## Migration Status
 
-The system is migrating from Streamlit → Next.js + FastAPI. Streamlit stays running until Phase 5.
+The system migrated from Streamlit → Next.js + FastAPI. Streamlit has been shut down (Phase 5 complete).
 
 | Phase | Status |
 |-------|--------|
 | 1 — Login, auth, project scaffold | Complete |
 | 2 — Zones pipeline + results UI | Complete |
-| 3 — Ticket board, CRUD, PDF export | Pending |
-| 4 — Reports, approval, manage technicians | Pending |
-| 5 — Feature parity verified, Streamlit shut down | Pending |
+| 3 — Ticket board, CRUD, PDF export | Complete |
+| 4 — Reports, approval, manage technicians | Complete |
+| 5 — Feature parity verified, Streamlit shut down | Complete |
 
-When editing `api/` or `web/`, do not touch `prototypes/` zone algorithms or the Expo app (unless the task explicitly targets `App/`).
+`prototypes/` is kept for reference only — the `zones/` algorithms there are the source of truth for `api/app/zones/`. When editing `api/` or `web/`, do not touch `prototypes/` or the Expo app (unless the task explicitly targets `App/`).

@@ -272,10 +272,15 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 .stagger > *:nth-child(n+7){ animation-delay: 190ms; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  /* Disable decorative entrance animations only — functional feedback (spinners, shimmer, pulse) intentionally left running */
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-slide-in-right,
+  .stagger > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 

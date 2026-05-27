@@ -211,17 +211,20 @@ function PendingReportCard({
           <PhotoGallery reportId={report.id} />
         </ReportField>
 
-        {/* Analyst notes + approve */}
-        <div className="pt-2 border-t border-border space-y-3">
+        {/* Analyst Remarks + approve */}
+        <div className="pt-3 border-t border-border space-y-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-              Analyst Notes (optional)
+              Analyst Remarks
             </label>
+            <p className="text-[11px] text-text-tertiary -mt-0.5">
+              These remarks will be visible to the technician and stored with the ticket.
+            </p>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any notes before approving…"
-              rows={2}
+              placeholder="Add remarks before approving (optional)…"
+              rows={3}
               disabled={saving}
               className={cn(
                 "px-3.5 py-2.5 rounded-lg bg-surface-alt text-text text-[13px] resize-none",
@@ -297,7 +300,8 @@ function ApprovedReportRow({ report }: { report: InspectionReport }) {
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 pt-0 space-y-3 border-t border-border bg-surface-muted/30">
+        <div className="px-4 pb-4 pt-0 space-y-4 border-t border-border bg-surface-muted/30 animate-fade-in">
+          {/* Meta row */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3">
             <ReportField label="Sensor Working">
               {report.sensor_working === null ? (
@@ -315,6 +319,7 @@ function ApprovedReportRow({ report }: { report: InspectionReport }) {
             <ReportField label="Submitted">{fmt(report.submitted_at)}</ReportField>
             <ReportField label="Approved">{fmt(report.analyst_approved_at)}</ReportField>
           </div>
+
           {report.notes && (
             <ReportField label="Field Observations">
               <p className="text-[13px] text-text-secondary leading-relaxed">{report.notes}</p>
@@ -325,11 +330,19 @@ function ApprovedReportRow({ report }: { report: InspectionReport }) {
               <p className="text-[13px] text-text-secondary leading-relaxed">{report.root_cause}</p>
             </ReportField>
           )}
-          {report.analyst_notes && (
-            <ReportField label="Analyst Notes">
+
+          {/* Analyst Remarks — always shown for approved, matches tickets panel style */}
+          <div className="rounded-lg p-3 border bg-success/5 border-success/20">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-1">
+              Analyst Remarks
+            </p>
+            {report.analyst_notes ? (
               <p className="text-[13px] text-text-secondary leading-relaxed">{report.analyst_notes}</p>
-            </ReportField>
-          )}
+            ) : (
+              <p className="text-[12px] text-text-tertiary italic">No remarks added.</p>
+            )}
+          </div>
+
           <ReportField label="Photos">
             <PhotoGallery reportId={report.id} />
           </ReportField>
@@ -479,7 +492,7 @@ export default function ReportsPage() {
                 </div>
               ) : (
                 <div
-                  className="bg-surface border border-border rounded-2xl overflow-hidden"
+                  className="bg-surface border border-border rounded-2xl overflow-hidden stagger"
                   style={{ boxShadow: "var(--shadow-sm)" }}
                 >
                   {approved.map((r) => (

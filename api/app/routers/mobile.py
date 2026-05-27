@@ -320,7 +320,10 @@ def mobile_get_report_id(
 
     report = _one(
         sb.table("inspection_reports")
-        .select("id, ticket_id, submitted_at")
+        .select(
+            "id, ticket_id, submitted_at, notes, sensor_working, severity, root_cause, "
+            "analyst_approved, analyst_approved_at, analyst_notes"
+        )
         .eq("ticket_id", ticket_id)
         .limit(1)
         .execute()

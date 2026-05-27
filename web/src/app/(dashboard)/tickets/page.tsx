@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Camera,
   ChevronDown,
   Download,
   ExternalLink,
@@ -11,6 +12,8 @@ import {
   Loader2,
   RefreshCw,
   Ticket,
+  Wifi,
+  WifiOff,
   X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -19,6 +22,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { TicketRowSkeleton } from "@/components/ui/Skeleton";
 import { ticketsApi } from "@/lib/api/tickets";
+import type { TicketReport } from "@/lib/api/tickets";
 import { cn } from "@/lib/cn";
 import type {
   TicketAttachment,
@@ -167,9 +171,10 @@ function DetailPanel({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* Meta */}
-          <div className="grid grid-cols-2 gap-3">
+        <div className="flex-1 overflow-y-auto p-5 space-y-5 stagger">
+
+          {/* Meta grid */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-3.5 rounded-xl bg-surface-alt border border-border">
             <MetaField label="Station" value={ticket.station_id} mono />
             <MetaField label="Created" value={new Date(ticket.created_at).toLocaleDateString()} />
             {ticket.assigned_at && (
@@ -180,6 +185,12 @@ function DetailPanel({
             )}
             {ticket.verified_at && (
               <MetaField label="Verified" value={new Date(ticket.verified_at).toLocaleDateString()} />
+            )}
+            {ticket.technician && (
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-0.5">Technician</p>
+                <p className="text-[13px] text-text">{ticket.technician.full_name}</p>
+              </div>
             )}
           </div>
 
@@ -193,6 +204,14 @@ function DetailPanel({
             </div>
           )}
 
+          {/* Inspection Report — shown for all statuses once a report exists */}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-1.5">
+              Inspection Report
+            </p>
+            <ReportSection ticketId={ticket.id} />
+          </div>
+
           {/* Attachments */}
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-1.5">
@@ -201,10 +220,10 @@ function DetailPanel({
             <AttachmentsSection ticketId={ticket.id} />
           </div>
 
-          {/* Technician */}
+          {/* Technician reassignment */}
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-1.5">
-              Assigned Technician
+              Reassign Technician
             </p>
             <select
               value={ticket.technician_id ?? ""}
@@ -224,7 +243,7 @@ function DetailPanel({
             </select>
           </div>
 
-          {/* Status */}
+          {/* Advance status */}
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-1.5">
               Advance Status
@@ -268,6 +287,151 @@ function DetailPanel({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const SEVERITY_TONE: Record<string, "neutral" | "warning" | "danger"> = {
+  low: "neutral",
+  medium: "warning",
+  high: "danger",
+};
+
+function ReportSection({ ticketId }: { ticketId: string }) {
+  const [report, setReport] = useState<TicketReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  useEffect(() => {
+    ticketsApi.report(ticketId)
+      .then(setReport)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [ticketId]);
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-[12px] text-text-tertiary py-1">
+      <Loader2 size={12} className="animate-spin" />
+      Loading report…
+    </div>
+  );
+  if (!report) return (
+    <p className="text-[12px] text-text-tertiary italic">No inspection report submitted yet.</p>
+  );
+
+  return (
+    <div className="space-y-3 p-3.5 rounded-xl border border-border bg-surface-alt/50">
+      {/* Status bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Badge tone={report.analyst_approved ? "success" : "warning"} dot>
+            {report.analyst_approved ? "Approved" : "Pending Review"}
+          </Badge>
+          {report.severity && (
+            <Badge tone={SEVERITY_TONE[report.severity]}>{report.severity} severity</Badge>
+          )}
+        </div>
+        {report.submitted_at && (
+          <span className="text-[11px] text-text-tertiary">
+            {new Date(report.submitted_at).toLocaleDateString()}
+          </span>
+        )}
+      </div>
+
+      {/* Sensor + severity grid */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-0.5">Sensor Working</p>
+          {report.sensor_working === null ? (
+            <p className="text-[12px] text-text-tertiary">Not recorded</p>
+          ) : report.sensor_working ? (
+            <span className="flex items-center gap-1.5 text-[12px] text-success">
+              <Wifi size={12} strokeWidth={2.4} /> Yes
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[12px] text-danger">
+              <WifiOff size={12} strokeWidth={2.4} /> No
+            </span>
+          )}
+        </div>
+      </div>
+
+      {report.notes && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-0.5">Field Observations</p>
+          <p className="text-[12px] text-text-secondary leading-relaxed">{report.notes}</p>
+        </div>
+      )}
+
+      {report.root_cause && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-0.5">Root Cause</p>
+          <p className="text-[12px] text-text-secondary leading-relaxed">{report.root_cause}</p>
+        </div>
+      )}
+
+      {/* Analyst remarks — prominent when approved */}
+      <div className={cn(
+        "rounded-lg p-3 border",
+        report.analyst_approved
+          ? "bg-success/5 border-success/20"
+          : "bg-surface border-border",
+      )}>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-1">
+          Analyst Remarks
+        </p>
+        {report.analyst_notes ? (
+          <p className="text-[12px] text-text-secondary leading-relaxed">{report.analyst_notes}</p>
+        ) : (
+          <p className="text-[12px] text-text-tertiary italic">
+            {report.analyst_approved ? "No remarks added." : "Awaiting analyst review."}
+          </p>
+        )}
+      </div>
+
+      {report.photos.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary mb-1.5">
+            <Camera size={11} className="inline mr-1" strokeWidth={2.2} />
+            Photos ({report.photos.length})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {report.photos.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setLightbox(p.photo_url)}
+                className="rounded-lg overflow-hidden border border-border hover:border-brand transition-colors focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.photo_url} alt="Inspection photo" className="w-20 h-16 object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-200 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 transition-colors grid place-items-center"
+          >
+            <X size={18} className="text-white" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt="Inspection photo"
+            className="max-w-full max-h-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
