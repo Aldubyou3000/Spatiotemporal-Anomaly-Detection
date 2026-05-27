@@ -1,27 +1,15 @@
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
-import { supabase } from '@/services/supabase';
-import type { Session, User } from '@supabase/supabase-js';
-
-export interface UserProfile {
-  id: string;
-  username: string;
-  full_name: string;
-  email: string;
-  role: 'analyst' | 'technician';
-  phone: string | null;
-  station_ids: string[];
-  is_active: boolean;
-}
+import * as SecureStore from 'expo-secure-store';
+import { apiGetMe, apiLogin, apiLogout, clearTokens, getAccessToken, UserProfile } from '@/services/api';
 
 type AppContextType = {
   isLoggedIn: boolean;
   isDarkMode: boolean;
   authLoading: boolean;
   technicianName: string;
-  user: User | null;
   profile: UserProfile | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (credential: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   toggleTheme: () => void;
 };
@@ -31,7 +19,6 @@ const fallbackAppContext: AppContextType = {
   isDarkMode: false,
   authLoading: true,
   technicianName: 'Technician',
-  user: null,
   profile: null,
   login: async () => {},
   logout: async () => {},
@@ -40,13 +27,14 @@ const fallbackAppContext: AppContextType = {
 
 const AppContext = createContext<AppContextType>(fallbackAppContext);
 
+const THEME_KEY = 'app_isDarkMode';
+
 async function readTheme(): Promise<boolean> {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return window.localStorage.getItem('maintenanceApp:isDarkMode') === 'true';
+    return window.localStorage.getItem(THEME_KEY) === 'true';
   }
   try {
-    const SecureStore = await import('expo-secure-store');
-    return (await SecureStore.getItemAsync('maintenanceApp:isDarkMode')) === 'true';
+    return (await SecureStore.getItemAsync(THEME_KEY)) === 'true';
   } catch {
     return false;
   }
@@ -55,103 +43,47 @@ async function readTheme(): Promise<boolean> {
 async function writeTheme(isDark: boolean): Promise<void> {
   const val = isDark ? 'true' : 'false';
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.localStorage.setItem('maintenanceApp:isDarkMode', val);
+    window.localStorage.setItem(THEME_KEY, val);
     return;
   }
   try {
-    const SecureStore = await import('expo-secure-store');
-    await SecureStore.setItemAsync('maintenanceApp:isDarkMode', val);
-  } catch {
-    // silently ignore
-  }
-}
-
-function isEmail(credential: string): boolean {
-  return credential.includes('@');
-}
-
-async function resolveCredentialToEmail(credential: string): Promise<string> {
-  const trimmedCred = credential.trim().toLowerCase();
-  
-  if (isEmail(trimmedCred)) {
-    return trimmedCred;
-  }
-  
-  // Resolve username to email via RPC
-  const { data, error } = await supabase.rpc('get_email_by_username', {
-    p_username: trimmedCred,
-  });
-  
-  if (error || !data) {
-    throw new Error('Username not found. Check with your analyst.');
-  }
-  
-  return data as string;
-}
-
-async function loadProfile(userId: string): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
-
-  if (error || !data) return null;
-  return data as UserProfile;
+    await SecureStore.setItemAsync(THEME_KEY, val);
+  } catch { /* ignore */ }
 }
 
 export function AppProvider({ children }: PropsWithChildren<{}>) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile]       = useState<UserProfile | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
     async function init() {
-      const savedDark = await readTheme();
-      if (isMounted) setIsDarkMode(savedDark);
+      const [savedDark, token] = await Promise.all([readTheme(), getAccessToken()]);
+      if (!mounted) return;
+      setIsDarkMode(savedDark);
 
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (isMounted) {
-        setSession(currentSession);
-        if (currentSession?.user) {
-          const p = await loadProfile(currentSession.user.id);
-          if (isMounted) setProfile(p);
-        }
-        setAuthLoading(false);
+      if (token) {
+        const me = await apiGetMe();
+        if (mounted) setProfile(me);
       }
+
+      if (mounted) setAuthLoading(false);
     }
 
     init();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      if (!isMounted) return;
-      setSession(newSession);
-      if (newSession?.user) {
-        const p = await loadProfile(newSession.user.id);
-        if (isMounted) setProfile(p);
-      } else {
-        setProfile(null);
-      }
-      setAuthLoading(false);
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
+    return () => { mounted = false; };
   }, []);
 
   const login = async (credential: string, password: string) => {
-    const email = await resolveCredentialToEmail(credential);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
+    const user = await apiLogin(credential, password);
+    setProfile(user);
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await apiLogout();
+    setProfile(null);
   };
 
   const toggleTheme = () => {
@@ -162,17 +94,16 @@ export function AppProvider({ children }: PropsWithChildren<{}>) {
 
   const value = useMemo(
     () => ({
-      isLoggedIn: !!session,
+      isLoggedIn: !!profile,
       isDarkMode,
       authLoading,
-      technicianName: profile?.full_name ?? session?.user?.email ?? 'Technician',
-      user: session?.user ?? null,
+      technicianName: profile?.full_name ?? 'Technician',
       profile,
       login,
       logout,
       toggleTheme,
     }),
-    [session, isDarkMode, authLoading, profile]
+    [profile, isDarkMode, authLoading],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

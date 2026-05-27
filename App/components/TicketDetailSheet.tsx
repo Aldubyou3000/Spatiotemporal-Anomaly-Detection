@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
-import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import {
@@ -11,6 +10,7 @@ import {
   Image,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,12 +27,13 @@ import { Text } from '@/components/Themed';
 import { duration, ease, spring } from '@/constants/Motion';
 import { useAppContext } from '@/context/AppContext';
 import {
+  downloadTicketPdf,
   fetchInspectionPhotos,
   fetchReportIdForTicket,
   fetchTicketAttachments,
   MaintenanceTicket,
   TicketAttachment,
-} from '@/services/supabaseApi';
+} from '@/services/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PANEL_HEIGHT = SCREEN_HEIGHT * 0.82;
@@ -120,98 +121,13 @@ export default function TicketDetailSheet({ ticket, onClose }: Props) {
   };
 
   const handleExportPdf = async () => {
-    if (!ticket) return;
+    if (!ticket?._dbId) return;
     setExporting(true);
     try {
-      const statusKey2 = ticket.dbStatus ?? 'assigned';
-      const scheduled = ticket.scheduledTime
-        ? new Date(ticket.scheduledTime).toLocaleDateString('en-US', {
-            weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-          })
-        : '—';
-
-      const row = (label: string, value: string) =>
-        `<tr><td class="label">${label}</td><td class="value">${value || '—'}</td></tr>`;
-
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<style>
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #0D1B3E; }
-  .header { background: #1E6FD9; color: #fff; padding: 20px 28px 16px; }
-  .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
-  .header p  { margin: 4px 0 0; font-size: 12px; opacity: 0.75; }
-  .body { padding: 24px 28px; }
-  .ticket-id { font-size: 13px; color: #6B7A99; font-weight: 500; margin-bottom: 4px; }
-  .title { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
-  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
-  .chip { padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; }
-  .section { margin-bottom: 20px; }
-  .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1E9DFF; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 6px 4px; font-size: 13px; vertical-align: top; }
-  td.label { color: #6B7A99; font-weight: 600; width: 140px; }
-  td.value { color: #0D1B3E; }
-  .desc { background: #F8FAFC; border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.6; color: #334155; }
-  .footer { border-top: 1px solid #e2e8f0; margin-top: 32px; padding-top: 10px; font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between; }
-</style></head><body>
-<div class="header">
-  <h1>Maintenance Ticket Report</h1>
-  <p>Spatiotemporal Anomaly Detection System</p>
-</div>
-<div class="body">
-  <div class="ticket-id">#${ticket.ticketId}</div>
-  <div class="title">${ticket.stationName}</div>
-  <div class="chips">
-    <span class="chip" style="background:#dbeafe;color:#1E6FD9;">${statusKey2.replace('-', ' ').toUpperCase()}</span>
-    <span class="chip" style="background:#fef3c7;color:#d97706;">${(ticket.priority ?? 'medium').toUpperCase()} PRIORITY</span>
-    ${ticket.anomalyZone ? `<span class="chip" style="background:#e0f2fe;color:#0369a1;">ZONE ${ticket.anomalyZone}</span>` : ''}
-  </div>
-
-  <div class="section">
-    <div class="section-title">Ticket Details</div>
-    <table>
-      ${row('Station', ticket.location)}
-      ${row('Coordinates', ticket.coordinates)}
-      ${row('Anomaly Zone', ticket.anomalyZone ? `Zone ${ticket.anomalyZone}` : '—')}
-      ${row('Scheduled Date', scheduled)}
-    </table>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Description</div>
-    <div class="desc">${ticket.flaggedAnomaly || 'No description provided.'}</div>
-  </div>
-
-  ${ticket.notes ? `
-  <div class="section">
-    <div class="section-title">Field Notes</div>
-    <div class="desc">${ticket.notes}</div>
-  </div>` : ''}
-
-  ${ticket.verificationStatus ? `
-  <div class="section">
-    <div class="section-title">Review Status</div>
-    <table>${row('Analyst Review', ticket.verificationStatus)}</table>
-  </div>` : ''}
-
-  <div class="footer">
-    <span>Ticket #${ticket.ticketId} · ${ticket.location}</span>
-    <span>Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-  </div>
-</div>
-</body></html>`;
-
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
-      const destUri = `${FileSystem.cacheDirectory}ticket_${ticket.ticketId}.pdf`;
-      await FileSystem.moveAsync({ from: uri, to: destUri });
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(destUri, { mimeType: 'application/pdf', dialogTitle: `Ticket #${ticket.ticketId}` });
-      } else {
-        Alert.alert('Saved', `PDF saved to: ${destUri}`);
-      }
-    } catch {
-      Alert.alert('Error', 'Could not generate PDF.');
+      const slug = ticket.stationName.replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+      await downloadTicketPdf(ticket._dbId, `ticket_${slug}.pdf`);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not export PDF.');
     } finally {
       setExporting(false);
     }
@@ -295,23 +211,22 @@ export default function TicketDetailSheet({ ticket, onClose }: Props) {
   const showPhotoSection = loadingPhotos || photoUrls.length > 0;
 
   return (
-    <>
-      <Modal
-        transparent
-        visible={visible}
-        animationType="none"
-        onRequestClose={onClose}
-        statusBarTranslucent
-      >
-        {/* Backdrop */}
-        <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        </Animated.View>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="none"
+      onRequestClose={viewerUri ? () => setViewerUri(null) : onClose}
+      statusBarTranslucent
+    >
+      {/* Backdrop */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      </Animated.View>
 
-        {/* Panel */}
-        <Animated.View
-          style={[styles.panel, { backgroundColor: sheetBg, height: PANEL_HEIGHT }, panelStyle]}
-        >
+      {/* Panel */}
+      <Animated.View
+        style={[styles.panel, { backgroundColor: sheetBg, height: PANEL_HEIGHT }, panelStyle]}
+      >
           {/* Drag handle */}
           <View style={[styles.handle, { backgroundColor: handleCol }]} />
 
@@ -564,18 +479,10 @@ export default function TicketDetailSheet({ ticket, onClose }: Props) {
             <View style={{ height: 16 }} />
           </ScrollView>
         </Animated.View>
-      </Modal>
 
-      {/* Full-screen photo viewer */}
-      <Modal
-        transparent
-        visible={!!viewerUri}
-        animationType="fade"
-        onRequestClose={() => setViewerUri(null)}
-        statusBarTranslucent
-      >
-        <View style={styles.viewer}>
-          {viewerUri ? (
+        {/* Full-screen photo viewer — inside the same Modal to avoid Android dual-Modal bug */}
+        {viewerUri ? (
+          <View style={[StyleSheet.absoluteFill, styles.viewer]}>
             <ScrollView
               style={styles.viewerZoom}
               contentContainerStyle={styles.viewerZoomContent}
@@ -592,29 +499,28 @@ export default function TicketDetailSheet({ ticket, onClose }: Props) {
                 resizeMode="contain"
               />
             </ScrollView>
-          ) : null}
-          {/* Top bar */}
-          <View style={styles.viewerTopBar}>
-            <Pressable
-              onPress={() => setViewerUri(null)}
-              style={({ pressed }) => [styles.viewerBackBtn, { opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Ionicons name="chevron-back" size={20} color="#fff" />
-              <Text style={styles.viewerBackLabel}>Back</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleDownload}
-              style={({ pressed }) => [styles.viewerDownloadBtn, { opacity: pressed ? 0.7 : 1 }]}
-            >
-              {downloading
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Ionicons name="download-outline" size={22} color="#fff" />
-              }
-            </Pressable>
+            {/* Top bar */}
+            <View style={styles.viewerTopBar}>
+              <Pressable
+                onPress={() => setViewerUri(null)}
+                style={({ pressed }) => [styles.viewerBackBtn, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Ionicons name="chevron-back" size={20} color="#fff" />
+                <Text style={styles.viewerBackLabel}>Back</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleDownload}
+                style={({ pressed }) => [styles.viewerDownloadBtn, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                {downloading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="download-outline" size={22} color="#fff" />
+                }
+              </Pressable>
+            </View>
           </View>
-        </View>
+        ) : null}
       </Modal>
-    </>
   );
 }
 

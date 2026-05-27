@@ -28,7 +28,7 @@ import {
   MaintenanceTicket,
   submitInspectionReport,
   uploadInspectionPhoto,
-} from '@/services/supabaseApi';
+} from '@/services/api';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const PRIORITY = {
@@ -129,7 +129,15 @@ export default function ReportScreen() {
 
   const launchGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission required', 'Photo library access is needed.'); return; }
+    if (status !== 'granted') {
+      Alert.alert(
+        'Gallery access limited',
+        Platform.OS === 'android'
+          ? 'Expo Go cannot access your gallery on Android. Use "Take Photo" instead — it works in all versions.'
+          : 'Photo library access is needed to pick from gallery.',
+      );
+      return;
+    }
     const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
     if (!r.canceled) { setPhotoUri(r.assets[0].uri); setPhotoMime(r.assets[0].mimeType ?? 'image/jpeg'); }
   };
@@ -150,10 +158,20 @@ export default function ReportScreen() {
         severity,
         rootCause.trim() || null,
       );
-      if (photoUri) await uploadInspectionPhoto(reportId, photoUri, photoMime);
+      if (photoUri) {
+        try {
+          await uploadInspectionPhoto(reportId, photoUri, photoMime);
+        } catch {
+          Alert.alert(
+            'Photo upload failed',
+            'Your report was saved but the photo could not be uploaded. You can retry from the ticket detail.',
+          );
+        }
+      }
       setShowSuccessSheet(true);
-    } catch {
-      Alert.alert('Submission failed', 'Could not submit the report. Check your connection and try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not submit the report.';
+      Alert.alert('Submission failed', msg + '\n\nCheck your connection and try again.');
     } finally {
       setSubmitting(false);
     }

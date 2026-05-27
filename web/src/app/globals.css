@@ -1,0 +1,298 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens ─────────────────────────────────────────────────────
+ * Single source of truth for the web app's visual language.
+ * Mirrors the design tokens used in the mobile app (App/constants/theme.ts)
+ * so both surfaces feel like one system.
+ *
+ * Principles:
+ *  • Strict 4 / 8-pt spacing grid
+ *  • Type scale: 11, 12, 13, 15, 17, 20, 28
+ *  • Semantic color names — never raw hex in components
+ *  • Light + dark surfaces tuned for WCAG AA contrast
+ * ─────────────────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme="light"] {
+  /* Surfaces */
+  --bg:             #F5F7FA;
+  --surface:        #FFFFFF;
+  --surface-alt:    #FFFFFF;
+  --surface-muted:  rgba(15, 23, 42, 0.04);
+  --surface-sunken: #EEF2F7;
+
+  /* Borders */
+  --border:         rgba(15, 23, 42, 0.06);
+  --border-strong:  #D1D9E8;
+  --border-focus:   #1E6FD9;
+
+  /* Text */
+  --text:           #0D1B3E;
+  --text-secondary: #6B7A99;
+  --text-tertiary:  #A8B4CC;
+  --text-inverse:   #FFFFFF;
+
+  /* Brand */
+  --brand:          #1E6FD9;
+  --brand-pressed:  #1B62C2;
+  --brand-soft:     rgba(30, 111, 217, 0.10);
+
+  /* Status */
+  --success:        #0DB976;
+  --success-soft:   rgba(13, 185, 118, 0.10);
+  --warning:        #F5A623;
+  --warning-soft:   rgba(245, 166, 35, 0.10);
+  --danger:         #E53535;
+  --danger-soft:    rgba(229, 53, 53, 0.10);
+  --info:           #1E9DFF;
+  --info-soft:      rgba(30, 157, 255, 0.10);
+  --accent:         #9B6DFF;
+  --accent-soft:    rgba(155, 109, 255, 0.10);
+
+  /* Shadows */
+  --shadow-sm:      0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md:      0 4px 12px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-lg:      0 12px 32px rgba(15, 23, 42, 0.10), 0 4px 8px rgba(15, 23, 42, 0.04);
+
+  /* Decorative — light mode grid */
+  --grid-line:      rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="dark"] {
+  /* Surfaces */
+  --bg:             #0A0F1E;
+  --surface:        #131929;
+  --surface-alt:    #0F1929;
+  --surface-muted:  rgba(255, 255, 255, 0.04);
+  --surface-sunken: #0A101E;
+
+  /* Borders */
+  --border:         rgba(255, 255, 255, 0.06);
+  --border-strong:  #1E2D47;
+  --border-focus:   #4D9CFF;
+
+  /* Text */
+  --text:           #F0F4FF;
+  --text-secondary: #7A8BAA;
+  --text-tertiary:  #3A4D6B;
+  --text-inverse:   #0D1B3E;
+
+  /* Brand */
+  --brand:          #4D9CFF;
+  --brand-pressed:  #75B5FF;
+  --brand-soft:     rgba(77, 156, 255, 0.14);
+
+  /* Status — brightened for dark surfaces */
+  --success:        #2DD4A0;
+  --success-soft:   rgba(45, 212, 160, 0.14);
+  --warning:        #FBBF24;
+  --warning-soft:   rgba(251, 191, 36, 0.14);
+  --danger:         #FF6B6B;
+  --danger-soft:    rgba(255, 107, 107, 0.14);
+  --info:           #60B5FF;
+  --info-soft:      rgba(96, 181, 255, 0.14);
+  --accent:         #B68FFF;
+  --accent-soft:    rgba(182, 143, 255, 0.14);
+
+  /* Shadows — softer in dark mode */
+  --shadow-sm:      0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md:      0 4px 12px rgba(0, 0, 0, 0.30), 0 1px 3px rgba(0, 0, 0, 0.20);
+  --shadow-lg:      0 12px 32px rgba(0, 0, 0, 0.40), 0 4px 8px rgba(0, 0, 0, 0.20);
+
+  /* Decorative — dark mode grid */
+  --grid-line:      rgba(255, 255, 255, 0.03);
+}
+
+/* ─── Tailwind v4 theme bridge ─────────────────────────────────────────
+ * Expose tokens as Tailwind utilities (bg-surface, text-secondary, etc.)
+ * ─────────────────────────────────────────────────────────────────────── */
+@theme inline {
+  --color-bg:             var(--bg);
+  --color-surface:        var(--surface);
+  --color-surface-alt:    var(--surface-alt);
+  --color-surface-muted:  var(--surface-muted);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border:         var(--border);
+  --color-border-strong:  var(--border-strong);
+  --color-border-focus:   var(--border-focus);
+  --color-text:           var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary:  var(--text-tertiary);
+  --color-text-inverse:   var(--text-inverse);
+  --color-brand:          var(--brand);
+  --color-brand-pressed:  var(--brand-pressed);
+  --color-brand-soft:     var(--brand-soft);
+  --color-success:        var(--success);
+  --color-success-soft:   var(--success-soft);
+  --color-warning:        var(--warning);
+  --color-warning-soft:   var(--warning-soft);
+  --color-danger:         var(--danger);
+  --color-danger-soft:    var(--danger-soft);
+  --color-info:           var(--info);
+  --color-info-soft:      var(--info-soft);
+  --color-accent:         var(--accent);
+  --color-accent-soft:    var(--accent-soft);
+
+  --font-sans:    var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-mono:    var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
+}
+
+/* ─── Base ─────────────────────────────────────────────────────────────── */
+html, body {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv01", "cv02";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Numerals — tabular for data, lining for text. JetBrains Mono is already tabular. */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Display headings — Fraunces with optical sizing */
+.font-display {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "opsz" 64, "SOFT" 0, "WONK" 0;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Selection ───────────────────────────────────────────────────────── */
+::selection {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* ─── Focus ring ───────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Scrollbars ──────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ─── Grid texture — appears behind dashboard shell ──────────────────── */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: -1px -1px;
+}
+
+/* ─── Motion ──────────────────────────────────────────────────────────── */
+
+/* Shared easing curve — spring-like deceleration */
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-enter: 240ms;
+}
+
+/* Smooth, consistent transitions on every interactive element */
+a, button, input, select, textarea, [role="button"], [role="switch"] {
+  transition-property: color, background-color, border-color, outline-color,
+                       box-shadow, opacity, transform;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-std);
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes pulse-anomaly {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(229, 53, 53, 0.55); }
+  50%      { opacity: 0.85; box-shadow: 0 0 0 8px rgba(229, 53, 53, 0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in-up     { animation: fade-in-up var(--duration-enter) var(--ease-out-expo) both; }
+.animate-fade-in        { animation: fade-in var(--duration-base) var(--ease-std) both; }
+.animate-scale-in       { animation: scale-in var(--duration-enter) var(--ease-out-expo) both; }
+.animate-slide-in-right { animation: slide-in-right var(--duration-enter) var(--ease-out-expo) both; }
+.animate-pulse-anom     { animation: pulse-anomaly 2s ease-in-out infinite; }
+.animate-spin           { animation: spin 700ms linear infinite; }
+.animate-sweep          { animation: sweep 1.4s ease-in-out infinite; }
+
+/* Staggered children — page load tables/lists */
+.stagger > * { animation: fade-in-up var(--duration-enter) var(--ease-out-expo) both; }
+.stagger > *:nth-child(1)  { animation-delay: 0ms;  }
+.stagger > *:nth-child(2)  { animation-delay: 40ms; }
+.stagger > *:nth-child(3)  { animation-delay: 70ms; }
+.stagger > *:nth-child(4)  { animation-delay: 100ms; }
+.stagger > *:nth-child(5)  { animation-delay: 130ms; }
+.stagger > *:nth-child(6)  { animation-delay: 160ms; }
+.stagger > *:nth-child(n+7){ animation-delay: 190ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Leaflet overrides — match theme ───────────────────────────────── */
+.leaflet-container {
+  background: var(--surface-sunken) !important;
+  font-family: var(--font-geist), system-ui, sans-serif !important;
+}
+.leaflet-control-attribution {
+  background: var(--surface) !important;
+  color: var(--text-secondary) !important;
+  font-size: 10px !important;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-md) !important;
+}

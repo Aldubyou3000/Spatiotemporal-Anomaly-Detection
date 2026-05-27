@@ -34,7 +34,7 @@ import {
   fetchTicketHistory,
   MaintenanceTicket,
   updateTicketStatus,
-} from '@/services/supabaseApi';
+} from '@/services/api';
 
 type TicketTab = 'active' | 'in-progress' | 'history';
 
@@ -356,7 +356,7 @@ export default function DashboardScreen() {
           {([
             { key: 'active',      label: 'Active',      count: activeTickets.length },
             { key: 'in-progress', label: 'In Progress', count: inProgressTickets.length },
-            { key: 'history',     label: 'History',     count: 0 },
+            { key: 'history',     label: 'History',     count: historyTickets.length },
           ] as { key: TicketTab; label: string; count: number }[]).map(({ key, label, count }) => {
             const isActive = activeTab === key;
             return (

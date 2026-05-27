@@ -7,7 +7,7 @@ const emptyShim = path.resolve(__dirname, 'shims/empty.js');
 
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
-  // Browserify shims for Node built-ins used by @supabase/realtime-js → ws
+  // Browserify shims for Node built-ins that some packages require in RN
   assert: require.resolve('assert'),
   buffer: require.resolve('buffer'),
   crypto: require.resolve('crypto-browserify'),
