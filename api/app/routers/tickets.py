@@ -12,7 +12,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from ..core.config import settings
-from ..core.dependencies import get_supabase, require_analyst
+from ..core.dependencies import _client_ip, get_supabase, require_analyst
+from ..services.audit_service import audit
 from ..schemas.tickets import TicketCreate, TicketDetail, TicketListResponse, TicketUpdate
 from .mobile import _signed_url
 
@@ -61,7 +62,14 @@ def create_ticket_endpoint(
     user: dict = Depends(require_analyst),
 ):
     sb = get_supabase()
-    return create_ticket(sb, user["id"], body)
+    ticket = create_ticket(sb, user["id"], body)
+    audit.ticket_created(
+        actor_id=str(user["id"]),
+        ticket_id=str(ticket["id"]),
+        ip=_client_ip(request),
+        meta={"title": ticket.get("title"), "priority": ticket.get("priority")},
+    )
+    return ticket
 
 
 @router.get("/{ticket_id}", response_model=TicketDetail)
@@ -84,12 +92,22 @@ def update_ticket_endpoint(
     request: Request,
     ticket_id: str,
     body: TicketUpdate,
-    _user: dict = Depends(require_analyst),
+    user: dict = Depends(require_analyst),
 ):
     sb = get_supabase()
+    old = get_ticket(sb, ticket_id)
     ticket = update_ticket(sb, ticket_id, body)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    old_snapshot = {k: old.get(k) for k in body.model_fields_set} if old else {}
+    new_snapshot = {k: ticket.get(k) for k in body.model_fields_set}
+    audit.ticket_updated(
+        actor_id=str(user["id"]),
+        ticket_id=ticket_id,
+        old=old_snapshot,
+        new=new_snapshot,
+        ip=_client_ip(request),
+    )
     return ticket
 
 
@@ -135,7 +153,7 @@ async def upload_ticket_attachment(
     request: Request,
     ticket_id: str,
     file: UploadFile = File(...),
-    _user: dict = Depends(require_analyst),
+    user: dict = Depends(require_analyst),
 ):
     """Upload a file attachment for a ticket (CSV, PDF, etc.)."""
     sb = get_supabase()
@@ -168,6 +186,14 @@ async def upload_ticket_attachment(
     }).execute()
 
     signed_url = _signed_url(sb, bucket, path, 3600)
+    audit.file_uploaded(
+        actor_id=str(user["id"]),
+        entity_type="ticket",
+        entity_id=ticket_id,
+        file_name=original_name,
+        file_size=len(data),
+        ip=_client_ip(request),
+    )
     return {"file_url": signed_url, "file_name": original_name, "path": path}
 
 

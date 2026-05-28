@@ -2,93 +2,316 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Ticket, ClipboardCheck, Users, Waves } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  Activity, ClipboardCheck, Layers, LogOut,
+  PanelLeftClose, PanelLeftOpen, ShieldCheck, Ticket, Users,
+} from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 interface NavItem {
   href: string;
   label: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-  description?: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  count?: number;
 }
 
 const NAV: NavItem[] = [
-  { href: "/zones",        label: "Zones",        icon: Activity,        description: "Anomaly pipeline" },
-  { href: "/tickets",      label: "Tickets",      icon: Ticket,          description: "Maintenance board" },
-  { href: "/reports",      label: "Reports",      icon: ClipboardCheck,  description: "Inspection reports" },
-  { href: "/technicians",  label: "Technicians",  icon: Users,           description: "Field team" },
+  { href: "/zones",       label: "Zones",       icon: Activity },
+  { href: "/tickets",     label: "Tickets",     icon: Ticket },
+  { href: "/reports",     label: "Reports",     icon: ClipboardCheck },
+  { href: "/technicians", label: "Technicians", icon: Users },
+  { href: "/audit",       label: "Audit Log",   icon: ShieldCheck },
 ];
+
+// Portalled tooltip — escapes overflow:hidden and any stacking context
+function SideTooltip({ label, anchor }: { label: string; anchor: DOMRect | null }) {
+  if (!anchor) return null;
+  const y = anchor.top + anchor.height / 2;
+  const x = anchor.right + 8;
+  return createPortal(
+    <span style={{
+      position: "fixed", left: x, top: y,
+      transform: "translateY(-50%)",
+      background: "var(--surface-overlay)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--r-md)",
+      padding: "4px 10px",
+      fontSize: "var(--font-sm)", fontWeight: 500,
+      color: "var(--text)",
+      whiteSpace: "nowrap",
+      boxShadow: "var(--shadow-lg)",
+      zIndex: 9999, pointerEvents: "none",
+    }}>
+      {label}
+    </span>,
+    document.body,
+  );
+}
+
+function NavTooltip({ label, children }: { label: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={() => ref.current && setAnchor(ref.current.getBoundingClientRect())}
+      onMouseLeave={() => setAnchor(null)}
+    >
+      {children}
+      <SideTooltip label={label} anchor={anchor} />
+    </div>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("sidebar-collapsed") === "true";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("sidebar-collapsed", String(collapsed));
+  }, [collapsed]);
+
+  const W = collapsed ? 52 : 220;
+
+  // Shared icon button style for collapsed state
+  function iconBtn(active = false): React.CSSProperties {
+    return {
+      display: "flex", alignItems: "center", justifyContent: "center",
+      width: 36, height: 36, margin: "0 auto",
+      borderRadius: "var(--r-md)",
+      background: active ? "var(--brand-soft)" : "transparent",
+      border: 0, cursor: "pointer",
+      transition: "background 0.12s ease",
+      color: active ? "var(--brand)" : "var(--text-muted)",
+      flexShrink: 0,
+    };
+  }
 
   return (
-    <aside className="hidden md:flex flex-col w-[248px] bg-surface border-r border-border shrink-0">
-      <div className="px-5 py-5 border-b border-border">
-        <Link href="/zones" className="flex items-center gap-2.5 group">
-          <div className="h-9 w-9 rounded-lg bg-brand grid place-items-center shadow-sm transition-transform group-hover:scale-105">
-            <Waves size={18} className="text-white" strokeWidth={2.4} />
+    <aside
+      className="hidden md:flex flex-col shrink-0 sticky top-0 h-screen"
+      style={{
+        width: W, minWidth: W,
+        background: "var(--surface)",
+        borderRight: "1px solid var(--border)",
+        transition: "width 0.2s ease, min-width 0.2s ease",
+        overflow: "hidden",
+        zIndex: 20,
+      }}
+    >
+      {collapsed ? (
+        /* ── Collapsed layout ── */
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", padding: "12px 0", gap: 2 }}>
+
+          {/* Brand icon */}
+          <div style={{
+            width: 32, height: 32, borderRadius: "var(--r-lg)", flexShrink: 0,
+            background: "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)",
+            display: "grid", placeItems: "center",
+            color: "var(--brand-fg)",
+            boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18)",
+            marginBottom: 10,
+          }}>
+            <Layers size={16} />
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
-              AWS QC Pipeline
-            </span>
-            <span className="text-[13px] font-semibold text-text">
+
+          {/* Expand toggle — TOP, right under brand */}
+          <NavTooltip label="Expand sidebar">
+            <button
+              onClick={() => setCollapsed(false)}
+              style={iconBtn()}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+            >
+              <PanelLeftOpen size={16} strokeWidth={1.8} />
+            </button>
+          </NavTooltip>
+
+          {/* Divider */}
+          <div style={{ width: 28, height: 1, background: "var(--divider)", margin: "6px 0" }} />
+
+          {/* Nav icons */}
+          {NAV.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const Icon = item.icon;
+            return (
+              <NavTooltip key={item.href} label={item.label}>
+                <Link
+                  href={item.href}
+                  style={{
+                    ...iconBtn(active),
+                    textDecoration: "none",
+                    color: active ? "var(--brand)" : "var(--text-muted)",
+                  }}
+                  onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
+                  onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; } }}
+                >
+                  <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+                </Link>
+              </NavTooltip>
+            );
+          })}
+
+          {/* Push sign-out to bottom */}
+          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, paddingTop: 12, borderTop: "1px solid var(--divider)", width: "100%" }}>
+            <NavTooltip label="Sign out">
+              <button
+                onClick={logout}
+                style={iconBtn()}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+              >
+                <LogOut size={16} strokeWidth={1.8} />
+              </button>
+            </NavTooltip>
+          </div>
+        </div>
+      ) : (
+        /* ── Expanded layout ── */
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "16px 12px", gap: 4 }}>
+
+          {/* Brand row */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "4px 8px 14px",
+            borderBottom: "1px solid var(--divider)",
+            marginBottom: 6,
+          }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: "var(--r-lg)", flexShrink: 0,
+              background: "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)",
+              display: "grid", placeItems: "center",
+              color: "var(--brand-fg)",
+              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18)",
+            }}>
+              <Layers size={15} />
+            </div>
+            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap" }}>
               Analyst Console
             </span>
           </div>
-        </Link>
-      </div>
 
-      <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-tertiary px-3 mb-2">
-          Workspace
-        </p>
-        {NAV.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg",
-                "text-[14px] font-medium transition-all duration-180 ease-in-out",
-                active
-                  ? "bg-brand-soft text-brand"
-                  : "text-text-secondary hover:text-text hover:bg-surface-muted"
-              )}
+          {/* Section label */}
+          <span style={{
+            fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em",
+            color: "var(--text-tertiary)", textTransform: "uppercase",
+            padding: "4px 10px 6px",
+          }}>
+            Workspace
+          </span>
+
+          {/* Nav items */}
+          <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {NAV.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 10px", height: 36,
+                    borderRadius: "var(--r-md)",
+                    fontSize: "var(--font-sm)", fontWeight: 500,
+                    textDecoration: "none",
+                    transition: "background 0.12s ease, color 0.12s ease",
+                    background: active ? "var(--brand-soft)" : "transparent",
+                    color: active ? "var(--on-brand-soft)" : "var(--text-secondary)",
+                  }}
+                  onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
+                  onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; } }}
+                >
+                  <span style={{ color: active ? "var(--brand)" : "var(--text-muted)", flexShrink: 0, display: "flex" }}>
+                    <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+                  </span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.count != null && (
+                    <span style={{
+                      fontSize: "var(--font-xs)", fontWeight: 500,
+                      color: active ? "var(--on-brand-soft)" : "var(--text-muted)",
+                      background: active ? "rgba(30,111,217,0.18)" : "var(--surface-sunken)",
+                      padding: "1px 6px", borderRadius: "var(--r-full)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}>
+                      {item.count}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Footer */}
+          <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--divider)", display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* Collapse button */}
+            <button
+              onClick={() => setCollapsed(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 10px", height: 36,
+                borderRadius: "var(--r-md)",
+                fontSize: "var(--font-sm)", fontWeight: 500,
+                color: "var(--text-secondary)",
+                background: "transparent", border: 0, width: "100%",
+                textAlign: "left", cursor: "pointer",
+                transition: "background 0.12s ease, color 0.12s ease",
+                fontFamily: "inherit",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
             >
-              <span
-                className={cn(
-                  "absolute left-0 top-2 bottom-2 w-0.75 rounded-r-full bg-brand",
-                  "transition-[transform,opacity] duration-200 ease-out",
-                  active ? "opacity-100 scale-y-100" : "opacity-0 scale-y-50"
-                )}
-                style={{ transformOrigin: "center" }}
-              />
-              <Icon
-                size={17}
-                strokeWidth={active ? 2.4 : 2}
-                className={cn(
-                  "transition-[color,stroke-width] duration-180",
-                  active ? "text-brand" : "text-text-tertiary group-hover:text-text-secondary"
-                )}
-              />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+              <span style={{ color: "var(--text-muted)", flexShrink: 0, display: "flex" }}>
+                <PanelLeftClose size={16} strokeWidth={1.8} />
+              </span>
+              Collapse
+            </button>
 
-      <div className="px-5 py-4 border-t border-border">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-tertiary mb-1">
-          System
-        </p>
-        <p className="font-mono tabular text-[11px] text-text-secondary">
-          v0.3.0 · phase 3
-        </p>
-      </div>
+            <button
+              onClick={logout}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 10px", height: 36,
+                borderRadius: "var(--r-md)",
+                fontSize: "var(--font-sm)", fontWeight: 500,
+                color: "var(--text-secondary)",
+                background: "transparent", border: 0, width: "100%",
+                textAlign: "left", cursor: "pointer",
+                transition: "background 0.12s ease, color 0.12s ease",
+                fontFamily: "inherit",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+            >
+              <span style={{ color: "var(--text-muted)", flexShrink: 0, display: "flex" }}>
+                <LogOut size={16} strokeWidth={1.8} />
+              </span>
+              Sign out
+            </button>
+
+            <div style={{
+              padding: "6px 10px 2px",
+              fontSize: "var(--font-xs)", color: "var(--text-muted)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--success)", animation: "live-pulse 2s ease-out infinite" }} />
+                All systems normal
+              </span>
+              <span style={{ fontFamily: "var(--font-mono)" }}>v2.4.1</span>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

@@ -27,7 +27,7 @@ interface DataTableProps<T> {
 export function DataTable<T>({
   data,
   columns,
-  pageSize = 25,
+  pageSize = 10,
   emptyMessage = "No rows.",
   onDownload,
   downloadLabel = "Download CSV",
@@ -44,7 +44,7 @@ export function DataTable<T>({
     <div className="bg-surface border border-border rounded-xl overflow-hidden" style={{ boxShadow: "var(--shadow-sm)" }}>
       {(caption || onDownload) && (
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border">
-          <div className="text-[12px] text-text-secondary">{caption}</div>
+          <div style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>{caption}</div>
           {onDownload && (
             <Button variant="secondary" size="sm" onClick={onDownload}>
               <Download size={14} strokeWidth={2.2} />
@@ -55,17 +55,22 @@ export function DataTable<T>({
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
+        <table style={{ width: "100%", fontSize: "var(--font-sm)" }}>
           <thead>
             <tr className="bg-surface-sunken border-b border-border">
               {columns.map((c) => (
                 <th
                   key={c.key}
-                  style={{ width: c.width }}
-                  className={cn(
-                    "px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-secondary",
-                    c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left",
-                  )}
+                  style={{
+                    width: c.width,
+                    fontSize: "var(--font-xs)",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    color: "var(--text-secondary)",
+                    padding: "10px 16px",
+                    textAlign: c.align === "right" ? "right" : c.align === "center" ? "center" : "left",
+                  }}
                 >
                   {c.header}
                 </th>
@@ -75,7 +80,10 @@ export function DataTable<T>({
           <tbody>
             {slice.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-12 text-center text-[13px] text-text-tertiary">
+                <td
+                  colSpan={columns.length}
+                  style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--font-sm)", color: "var(--text-tertiary)" }}
+                >
                   {emptyMessage}
                 </td>
               </tr>
@@ -94,11 +102,14 @@ export function DataTable<T>({
                     return (
                       <td
                         key={c.key}
-                        className={cn(
-                          "px-4 py-2.5",
-                          c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left",
-                          c.mono ? "font-mono tabular text-text" : "text-text",
-                        )}
+                        style={{
+                          padding: "10px 16px",
+                          textAlign: c.align === "right" ? "right" : c.align === "center" ? "center" : "left",
+                          fontFamily: c.mono ? "var(--font-mono)" : undefined,
+                          fontSize: "var(--font-sm)",
+                          color: "var(--text)",
+                          fontVariantNumeric: c.mono ? "tabular-nums" : undefined,
+                        }}
                       >
                         {content}
                       </td>
@@ -111,8 +122,15 @@ export function DataTable<T>({
         </table>
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border bg-surface-sunken/50">
-        <p className="text-[12px] text-text-secondary font-mono tabular">
+      <div
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 12, padding: "10px 20px",
+          borderTop: "1px solid var(--border)",
+          background: "color-mix(in oklab, var(--surface-sunken) 50%, transparent)",
+        }}
+      >
+        <p style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
           {data.length === 0 ? "0 rows" : `${start + 1}–${end} of ${data.length.toLocaleString()}`}
         </p>
         <div className="flex items-center gap-1">
@@ -125,7 +143,7 @@ export function DataTable<T>({
             <ChevronLeft size={14} strokeWidth={2.4} />
             Prev
           </Button>
-          <span className="text-[12px] text-text-secondary px-2 font-mono tabular">
+          <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", padding: "0 8px", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
             {safePage + 1} / {totalPages}
           </span>
           <Button
@@ -144,7 +162,7 @@ export function DataTable<T>({
 }
 
 function formatCell(value: unknown): React.ReactNode {
-  if (value === null || value === undefined) return <span className="text-text-tertiary">—</span>;
+  if (value === null || value === undefined) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
   if (typeof value === "boolean") return value ? "✓" : "—";
   if (typeof value === "number") return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2);
   return String(value);

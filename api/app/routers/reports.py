@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from ..core.dependencies import get_current_user, get_supabase, require_analyst
+from ..core.dependencies import _client_ip, get_current_user, get_supabase, require_analyst
+from ..services.audit_service import audit
 from ..schemas.auth import UserProfile
 from ..schemas.reports import InspectionReport, InspectionReportListResponse, ReportApprove
 from ..services.reports_service import approve_report, get_report, list_reports
@@ -82,10 +83,16 @@ def approve_report_endpoint(
     request: Request,
     report_id: str,
     body: ReportApprove,
-    _user: UserProfile = Depends(require_analyst),
+    user: UserProfile = Depends(require_analyst),
 ):
     sb = get_supabase()
     report = approve_report(sb, report_id, body)
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    audit.report_approved(
+        actor_id=str(user["id"]),
+        report_id=report_id,
+        ticket_id=str(report.get("ticket_id", "")),
+        ip=_client_ip(request),
+    )
     return report

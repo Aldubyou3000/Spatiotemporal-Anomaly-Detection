@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from ..core.dependencies import get_supabase, require_analyst
+from ..core.dependencies import _client_ip, get_supabase, require_analyst
+from ..services.audit_service import audit
 from ..schemas.auth import UserProfile
 from ..schemas.technicians import TechnicianCreate, TechnicianProfile
 from ..services.technicians_service import (
@@ -30,15 +31,21 @@ def list_technicians_endpoint(
 def create_technician_endpoint(
     request: Request,
     body: TechnicianCreate,
-    _user: UserProfile = Depends(require_analyst),
+    user: UserProfile = Depends(require_analyst),
 ):
     try:
-        return create_technician(body)
+        technician = create_technician(body)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+    audit.account_created(
+        actor_id=str(user["id"]),
+        new_user_id=str(technician["id"]),
+        ip=_client_ip(request),
+    )
+    return technician
 
 
 @router.patch("/{technician_id}/toggle-active", response_model=TechnicianProfile)
@@ -46,7 +53,7 @@ def create_technician_endpoint(
 def toggle_active_endpoint(
     request: Request,
     technician_id: str,
-    _user: UserProfile = Depends(require_analyst),
+    user: UserProfile = Depends(require_analyst),
 ):
     sb = get_supabase()
     # Fetch current state, then flip it
@@ -61,7 +68,14 @@ def toggle_active_endpoint(
     current_rows = current.data or []
     if not current_rows:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Technician not found")
-    result = toggle_technician_active(sb, technician_id, not current_rows[0]["is_active"])
+    new_active = not current_rows[0]["is_active"]
+    result = toggle_technician_active(sb, technician_id, new_active)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Technician not found")
+    audit.account_toggled(
+        actor_id=str(user["id"]),
+        target_id=technician_id,
+        is_active=new_active,
+        ip=_client_ip(request),
+    )
     return result

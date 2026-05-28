@@ -18,53 +18,70 @@ export function NeighborGroupsTab({ neighbors }: NeighborGroupsTabProps) {
   }, [neighbors, query]);
 
   return (
-    <div className="space-y-4 pt-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative w-full max-w-sm">
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ position: "relative", width: "100%", maxWidth: 384 }}>
           <Search
             size={14}
             strokeWidth={2.2}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
+            style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)", pointerEvents: "none" }}
           />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter by station id…"
-            className="w-full h-10 pl-9 pr-3 rounded-lg bg-surface text-text text-[14px] border border-border-strong placeholder:text-text-tertiary focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand-soft transition"
+            style={{
+              width: "100%", height: 40, paddingLeft: 36, paddingRight: 12,
+              borderRadius: "var(--r-lg)",
+              background: "var(--surface)", color: "var(--text)",
+              fontSize: "var(--font-sm)",
+              border: "1px solid var(--border-strong)",
+              outline: "none",
+              transition: "border-color 0.12s ease, box-shadow 0.12s ease",
+              fontFamily: "inherit",
+              boxSizing: "border-box",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "var(--brand)";
+              e.currentTarget.style.boxShadow = "0 0 0 4px var(--brand-soft)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "var(--border-strong)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
           />
         </div>
-        <p className="text-[12px] text-text-secondary font-mono tabular shrink-0">
+        <p style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
           {stations.length.toLocaleString()} stations
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
         {stations.map(([sid, list]) => (
           <div
             key={sid}
-            className="bg-surface border border-border rounded-xl p-5"
-            style={{ boxShadow: "var(--shadow-sm)" }}
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", padding: 20, boxShadow: "var(--shadow-sm)" }}
           >
-            <div className="flex items-center gap-2 mb-4">
-              <div className="h-7 w-7 rounded-md bg-brand-soft grid place-items-center">
-                <Compass size={13} className="text-brand" strokeWidth={2.2} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <div style={{ height: 28, width: 28, borderRadius: "var(--r-md)", background: "var(--brand-soft)", display: "grid", placeItems: "center" }}>
+                <Compass size={13} strokeWidth={2.2} style={{ color: "var(--brand)" }} />
               </div>
-              <span className="font-mono tabular text-[14px] font-semibold text-text">
+              <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>
                 {sid}
               </span>
             </div>
 
-            <ol className="space-y-2">
+            <ol style={{ display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
               {list.map((n, i) => (
-                <li key={n.neighbor_id} className="flex items-center gap-3">
-                  <span className="font-mono tabular text-[10px] text-text-tertiary w-4 shrink-0">
+                <li key={n.neighbor_id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", width: 16, flexShrink: 0 }}>
                     {i + 1}
                   </span>
-                  <span className="font-mono tabular text-[13px] text-text flex-1 truncate">
+                  <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-sm)", color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {n.neighbor_id}
                   </span>
-                  <span className="font-mono tabular text-[12px] text-text-secondary tabular shrink-0">
+                  <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: "var(--text-secondary)", flexShrink: 0 }}>
                     {n.distance_km.toFixed(2)} km
                   </span>
                 </li>
@@ -74,7 +91,7 @@ export function NeighborGroupsTab({ neighbors }: NeighborGroupsTabProps) {
         ))}
 
         {stations.length === 0 && (
-          <div className="col-span-full text-center py-16 text-text-tertiary text-[13px]">
+          <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "64px 16px", color: "var(--text-tertiary)", fontSize: "var(--font-sm)" }}>
             No stations match the filter.
           </div>
         )}

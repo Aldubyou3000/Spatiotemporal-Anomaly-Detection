@@ -20,7 +20,8 @@ from slowapi.util import get_remote_address
 
 from ..core.dependencies import get_supabase, require_technician_mobile
 from ..core.config import settings
-from ..services.auth_service import _resolve_to_email, _anon_client
+from ..services.audit_service import audit
+from ..services.auth_service import mobile_login as _mobile_login, refresh_session, revoke_session
 from supabase_auth.errors import AuthApiError
 
 router = APIRouter(prefix="/api/mobile", tags=["mobile"])
@@ -73,57 +74,41 @@ class MobileRefreshRequest(BaseModel):
 
 @router.post("/auth/login", response_model=MobileLoginResponse)
 @limiter.limit("10/minute")
-def mobile_login(request: Request, body: MobileLoginRequest):
+def mobile_login_endpoint(request: Request, body: MobileLoginRequest):
     """Technician login — returns tokens directly (stored in SecureStore, never cookies)."""
+    client_ip = request.client.host if request.client else "unknown"
+    fwd = request.headers.get("X-Forwarded-For")
+    if fwd:
+        client_ip = fwd.split(",")[0].strip()
     try:
-        email = _resolve_to_email(body.credential)
+        result = _mobile_login(body.credential, body.password, client_ip=client_ip,
+                               user_agent=request.headers.get("User-Agent", ""))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
-
-    anon = _anon_client()
-    try:
-        auth_res = anon.auth.sign_in_with_password({"email": email, "password": body.password})
-    except AuthApiError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-
-    if not auth_res.user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
-
-    sb = get_supabase()
-    profile = _one(sb.table("profiles").select("*").eq("id", auth_res.user.id).limit(1).execute())
-
-    if not profile or profile.get("role") != "technician":
-        anon.auth.sign_out()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: technician accounts only.")
-
-    return {
-        "access_token": auth_res.session.access_token,
-        "refresh_token": auth_res.session.refresh_token,
-        "user": profile,
-    }
+    return result
 
 
 @router.post("/auth/refresh")
 @limiter.limit("30/minute")
 def mobile_refresh(request: Request, body: MobileRefreshRequest):
     """Exchange a refresh token for new tokens."""
-    anon = _anon_client()
     try:
-        res = anon.auth.refresh_session(body.refresh_token)
-    except AuthApiError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-    if not res.session:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token.")
-    return {
-        "access_token": res.session.access_token,
-        "refresh_token": res.session.refresh_token,
-    }
+        result = refresh_session(body.refresh_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+    return result
 
 
 @router.post("/auth/logout")
 @limiter.limit("30/minute")
-def mobile_logout(request: Request, user: dict = Depends(require_technician_mobile)):
-    """Invalidate the current session on the Supabase side."""
+def mobile_logout(request: Request, body: MobileRefreshRequest, user: dict = Depends(require_technician_mobile)):
+    """Invalidate the current session on the Supabase side using the refresh token."""
+    client_ip = request.client.host if request.client else "unknown"
+    fwd = request.headers.get("X-Forwarded-For")
+    if fwd:
+        client_ip = fwd.split(",")[0].strip()
+    revoke_session(body.refresh_token)
+    audit.logout(user_id=str(user["id"]), ip=client_ip, platform="mobile")
     return {"ok": True}
 
 
@@ -210,6 +195,18 @@ def mobile_update_ticket_status(
         patch["completed_at"] = now
 
     sb.table("tickets").update(patch).eq("id", ticket_id).execute()
+
+    client_ip = request.client.host if request.client else "unknown"
+    fwd = request.headers.get("X-Forwarded-For")
+    if fwd:
+        client_ip = fwd.split(",")[0].strip()
+    audit.ticket_status_changed(
+        actor_id=str(user["id"]),
+        ticket_id=ticket_id,
+        old_status=existing["status"],
+        new_status=body.status,
+        ip=client_ip,
+    )
     return {"id": ticket_id, "status": body.status, "updated_at": now}
 
 
@@ -295,7 +292,18 @@ def mobile_submit_report(
 
     sb.table("tickets").update({"status": "completed", "completed_at": now, "updated_at": now}).eq("id", body.ticket_id).execute()
 
-    return report_res.data[0]
+    report_row = report_res.data[0]
+    mob_ip = request.client.host if request.client else "unknown"
+    fwd2 = request.headers.get("X-Forwarded-For")
+    if fwd2:
+        mob_ip = fwd2.split(",")[0].strip()
+    audit.report_submitted(
+        actor_id=str(user["id"]),
+        report_id=str(report_row["id"]),
+        ticket_id=body.ticket_id,
+        ip=mob_ip,
+    )
+    return report_row
 
 
 @router.get("/tickets/{ticket_id}/report-id")
@@ -468,6 +476,19 @@ async def mobile_upload_photo(
     sb.table("inspection_photos").insert({"report_id": report_id, "photo_url": path}).execute()
 
     signed_url = _signed_url(sb, "inspection-photos", path, 3600)
+
+    ph_ip = request.client.host if request.client else "unknown"
+    fwd3 = request.headers.get("X-Forwarded-For")
+    if fwd3:
+        ph_ip = fwd3.split(",")[0].strip()
+    audit.file_uploaded(
+        actor_id=str(user["id"]),
+        entity_type="inspection_report",
+        entity_id=report_id,
+        file_name=photo.filename or path,
+        file_size=len(data),
+        ip=ph_ip,
+    )
     return {"photo_url": signed_url, "path": path}
 
 

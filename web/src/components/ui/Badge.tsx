@@ -1,36 +1,59 @@
 import { HTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
-type Tone = "neutral" | "brand" | "success" | "warning" | "danger" | "info";
+type Tone = "neutral" | "brand" | "success" | "warning" | "danger" | "info" | "accent" | "teal";
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   tone?: Tone;
   dot?: boolean;
+  size?: "sm" | "md";
 }
 
-const TONES: Record<Tone, { bg: string; text: string; dot: string }> = {
-  neutral: { bg: "bg-surface-muted", text: "text-text-secondary", dot: "bg-text-tertiary" },
-  brand:   { bg: "bg-brand-soft",    text: "text-brand",          dot: "bg-brand" },
-  success: { bg: "bg-success-soft",  text: "text-success",        dot: "bg-success" },
-  warning: { bg: "bg-warning-soft",  text: "text-warning",        dot: "bg-warning" },
-  danger:  { bg: "bg-danger-soft",   text: "text-danger",         dot: "bg-danger" },
-  info:    { bg: "bg-info-soft",     text: "text-info",           dot: "bg-info" },
+const TONES: Record<Tone, { bg: string; color: string }> = {
+  neutral: { bg: "var(--surface-sunken)",  color: "var(--text-secondary)" },
+  brand:   { bg: "var(--brand-soft)",      color: "var(--on-brand-soft)" },
+  success: { bg: "var(--success-soft)",    color: "var(--success-on)" },
+  warning: { bg: "var(--warning-soft)",    color: "var(--warning-on)" },
+  danger:  { bg: "var(--danger-soft)",     color: "var(--danger-on)" },
+  info:    { bg: "var(--info-soft)",       color: "var(--info-on)" },
+  accent:  { bg: "var(--accent-soft)",     color: "var(--accent-on)" },
+  teal:    { bg: "var(--teal-soft)",       color: "var(--teal-on)" },
 };
 
-export function Badge({ tone = "neutral", dot, className, children, ...rest }: BadgeProps) {
+export function Badge({ tone = "neutral", dot, size = "sm", className, style, children, ...rest }: BadgeProps) {
   const t = TONES[tone];
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full",
-        "text-[11px] font-semibold uppercase tracking-[0.06em]",
-        t.bg,
-        t.text,
-        className
-      )}
+      className={cn(className)}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        height: size === "md" ? 22 : 20,
+        padding: size === "md" ? "0 8px" : "0 7px",
+        borderRadius: "var(--r-sm)",
+        fontSize: size === "md" ? 11.5 : 11,
+        fontWeight: 500,
+        letterSpacing: "0.01em",
+        background: t.bg,
+        color: t.color,
+        border: "1px solid transparent",
+        whiteSpace: "nowrap",
+        ...style,
+      }}
       {...rest}
     >
-      {dot && <span className={cn("h-1.5 w-1.5 rounded-full", t.dot)} />}
+      {dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "var(--r-full)",
+            background: "currentColor",
+            flexShrink: 0,
+          }}
+        />
+      )}
       {children}
     </span>
   );

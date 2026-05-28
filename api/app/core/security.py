@@ -1,18 +1,27 @@
-"""JWT verification for Supabase access tokens.
+"""JWT verification and session fingerprinting.
 
-Supports both:
-  - Legacy HS256 (symmetric, shared JWT secret) — older projects
-  - Modern ES256/RS256 (asymmetric, public key via JWKS) — projects created
-    after Supabase's 2024 default to asymmetric signing
+JWT verification supports:
+  - Legacy HS256 (symmetric, shared JWT secret)
+  - Modern ES256/RS256 (asymmetric, public key via JWKS)
 
-The algorithm is read from the unverified JWT header and routed accordingly.
-JWKS keys are cached (default TTL 1h via PyJWKClient.lifespan).
+Session fingerprinting binds every session to a (IP, User-Agent) hash stored
+in a non-sensitive opaque cookie.  A mismatch on a protected request is a
+signal of session hijacking and triggers re-authentication.
+
+The fingerprint is a HMAC-SHA256 of "ip:ua" keyed by csrf_secret so an
+attacker who can read the cookie cannot forge a valid fingerprint for a
+different IP/UA combination.
 """
 
+import hashlib
+import hmac
+import logging
 from functools import lru_cache
 
 import jwt
 from jwt import PyJWKClient
+
+logger = logging.getLogger("auth.security")
 
 
 @lru_cache(maxsize=4)
@@ -52,3 +61,39 @@ def verify_supabase_token(token: str, jwt_secret: str, supabase_url: str | None 
         return {}
     except jwt.PyJWTError:
         return {}
+
+
+# ─── Session fingerprinting ───────────────────────────────────────────────────
+
+def make_session_fingerprint(ip: str, user_agent: str, secret: str) -> str:
+    """Return an opaque HMAC fingerprint for a (IP, UA) pair.
+
+    Stored in the `session_fp` cookie (httpOnly, same attributes as
+    access_token) and compared on every protected request.
+    """
+    raw = f"{ip}:{user_agent}"
+    return hmac.new(secret.encode(), raw.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_session_fingerprint(
+    stored_fp: str | None,
+    current_ip: str,
+    current_ua: str,
+    secret: str,
+    user_id: str = "",
+) -> bool:
+    """Return True if the stored fingerprint matches the current request context.
+
+    A missing fingerprint returns False so old sessions without one are
+    invalidated and the user is asked to re-authenticate.
+    """
+    if not stored_fp:
+        return False
+    expected = make_session_fingerprint(current_ip, current_ua, secret)
+    match = hmac.compare_digest(stored_fp, expected)
+    if not match:
+        logger.warning(
+            "[security] fingerprint MISMATCH — possible hijack: user_id=%s ip=%s",
+            user_id, current_ip,
+        )
+    return match

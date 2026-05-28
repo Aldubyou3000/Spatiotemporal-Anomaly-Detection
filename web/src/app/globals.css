@@ -14,124 +14,222 @@
 
 :root,
 [data-theme="light"] {
-  /* Surfaces */
-  --bg:             #F5F7FA;
-  --surface:        #FFFFFF;
-  --surface-alt:    #FFFFFF;
-  --surface-muted:  rgba(15, 23, 42, 0.04);
-  --surface-sunken: #EEF2F7;
-
-  /* Borders */
-  --border:         rgba(15, 23, 42, 0.06);
-  --border-strong:  #D1D9E8;
-  --border-focus:   #1E6FD9;
-
-  /* Text */
-  --text:           #0D1B3E;
-  --text-secondary: #6B7A99;
-  --text-tertiary:  #A8B4CC;
-  --text-inverse:   #FFFFFF;
-
   /* Brand */
   --brand:          #1E6FD9;
-  --brand-pressed:  #1B62C2;
-  --brand-soft:     rgba(30, 111, 217, 0.10);
+  --brand-hover:    #1758B3;
+  --brand-active:   #134A96;
+  --brand-soft:     #EBF2FC;
+  --brand-softer:   #F5F8FD;
+  --brand-fg:       #FFFFFF;
+  --on-brand-soft:  #1758B3;
+
+  /* Surfaces — Stripe-style subtle warm grays */
+  --bg:             #F6F7F9;
+  --bg-app:         #FAFBFC;
+  --surface:        #FFFFFF;
+  --surface-alt:    #F9FAFB;
+  --surface-muted:  rgba(16, 24, 40, 0.04);
+  --surface-sunken: #F3F4F6;
+  --surface-overlay: rgba(255, 255, 255, 0.85);
+
+  /* Borders */
+  --border:         #E4E7EB;
+  --border-soft:    #EEF0F3;
+  --border-strong:  #D0D5DD;
+  --border-focus:   #1E6FD9;
+  --divider:        #F1F3F5;
+
+  /* Text */
+  --text:           #0B1220;
+  --text-secondary: #374151;
+  --text-muted:     #6B7280;
+  --text-tertiary:  #A1A9B4;
+  --text-inverse:   #FFFFFF;
 
   /* Status */
-  --success:        #0DB976;
-  --success-soft:   rgba(13, 185, 118, 0.10);
-  --warning:        #F5A623;
-  --warning-soft:   rgba(245, 166, 35, 0.10);
-  --danger:         #E53535;
-  --danger-soft:    rgba(229, 53, 53, 0.10);
-  --info:           #1E9DFF;
-  --info-soft:      rgba(30, 157, 255, 0.10);
-  --accent:         #9B6DFF;
-  --accent-soft:    rgba(155, 109, 255, 0.10);
+  --success:        #16A34A;
+  --success-soft:   #E8F5EC;
+  --success-on:     #15803D;
+  --warning:        #D97706;
+  --warning-soft:   #FEF3E2;
+  --warning-on:     #B45309;
+  --danger:         #DC2626;
+  --danger-soft:    #FEECEC;
+  --danger-on:      #B91C1C;
+  --info:           #0891B2;
+  --info-soft:      #E0F7FA;
+  --info-on:        #0E7490;
+  --accent:         #7C3AED;
+  --accent-soft:    #F3EDFE;
+  --accent-on:      #6D28D9;
+  --teal:           #0D9488;
+  --teal-soft:      #E5F5F3;
+  --teal-on:        #0F766E;
 
-  /* Shadows */
-  --shadow-sm:      0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md:      0 4px 12px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
-  --shadow-lg:      0 12px 32px rgba(15, 23, 42, 0.10), 0 4px 8px rgba(15, 23, 42, 0.04);
+  /* Shadows — soft & layered, Stripe style */
+  --shadow-xs:      0 1px 1px rgba(16, 24, 40, 0.04);
+  --shadow-sm:      0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-md:      0 2px 4px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.06);
+  --shadow-lg:      0 4px 8px rgba(16, 24, 40, 0.04), 0 12px 28px rgba(16, 24, 40, 0.08);
+  --shadow-xl:      0 8px 16px rgba(16, 24, 40, 0.06), 0 24px 48px rgba(16, 24, 40, 0.12);
+  --shadow-focus:   0 0 0 4px rgba(30, 111, 217, 0.16);
 
-  /* Decorative — light mode grid */
-  --grid-line:      rgba(15, 23, 42, 0.04);
+  /* Radii */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 12px;
+  --r-2xl: 16px;
+  --r-full: 9999px;
+
+  /* Layout */
+  --sidebar-w:  240px;
+  --topbar-h:   62px;
+
+  /* Density — balanced default */
+  --row-h:       44px;
+  --pad-x:       20px;
+  --pad-y:       16px;
+  --gap-card:    16px;
+  --gap-section: 28px;
+  --font-base:   15px;
+  --font-sm:     14px;
+  --font-xs:     12.5px;
+
+  /* Decorative */
+  --grid-line:  rgba(16, 24, 40, 0.04);
+}
+
+[data-density="compact"] {
+  --row-h:       38px;
+  --pad-x:       16px;
+  --pad-y:       12px;
+  --gap-card:    12px;
+  --gap-section: 22px;
+  --font-base:   14px;
+  --font-sm:     13px;
+  --font-xs:     12px;
+}
+
+[data-density="roomy"] {
+  --row-h:       52px;
+  --pad-x:       24px;
+  --pad-y:       20px;
+  --gap-card:    20px;
+  --gap-section: 36px;
 }
 
 [data-theme="dark"] {
-  /* Surfaces */
-  --bg:             #0A0F1E;
-  --surface:        #131929;
-  --surface-alt:    #0F1929;
-  --surface-muted:  rgba(255, 255, 255, 0.04);
-  --surface-sunken: #0A101E;
-
-  /* Borders */
-  --border:         rgba(255, 255, 255, 0.06);
-  --border-strong:  #1E2D47;
-  --border-focus:   #4D9CFF;
-
-  /* Text */
-  --text:           #F0F4FF;
-  --text-secondary: #7A8BAA;
-  --text-tertiary:  #3A4D6B;
-  --text-inverse:   #0D1B3E;
-
   /* Brand */
   --brand:          #4D9CFF;
-  --brand-pressed:  #75B5FF;
-  --brand-soft:     rgba(77, 156, 255, 0.14);
+  --brand-hover:    #6FAEFF;
+  --brand-active:   #8BC0FF;
+  --brand-soft:     #0F2138;
+  --brand-softer:   #0B1A2C;
+  --brand-fg:       #07101D;
+  --on-brand-soft:  #B6D4FF;
+
+  /* Surfaces */
+  --bg:             #0A0D12;
+  --bg-app:         #07090D;
+  --surface:        #11151B;
+  --surface-alt:    #161B22;
+  --surface-muted:  rgba(255, 255, 255, 0.04);
+  --surface-sunken: #0D1117;
+  --surface-overlay: rgba(17, 21, 27, 0.85);
+
+  /* Borders */
+  --border:         #1F2530;
+  --border-soft:    #181D26;
+  --border-strong:  #2A3140;
+  --border-focus:   #4D9CFF;
+  --divider:        #161B22;
+
+  /* Text */
+  --text:           #F3F5F8;
+  --text-secondary: #C4CBD8;
+  --text-muted:     #8993A4;
+  --text-tertiary:  #4E5868;
+  --text-inverse:   #0B1220;
 
   /* Status — brightened for dark surfaces */
-  --success:        #2DD4A0;
-  --success-soft:   rgba(45, 212, 160, 0.14);
+  --success:        #34D399;
+  --success-soft:   #0F2920;
+  --success-on:     #6EE7B7;
   --warning:        #FBBF24;
-  --warning-soft:   rgba(251, 191, 36, 0.14);
-  --danger:         #FF6B6B;
-  --danger-soft:    rgba(255, 107, 107, 0.14);
-  --info:           #60B5FF;
-  --info-soft:      rgba(96, 181, 255, 0.14);
-  --accent:         #B68FFF;
-  --accent-soft:    rgba(182, 143, 255, 0.14);
+  --warning-soft:   #2A1F0E;
+  --warning-on:     #FCD34D;
+  --danger:         #F87171;
+  --danger-soft:    #2B1414;
+  --danger-on:      #FCA5A5;
+  --info:           #22D3EE;
+  --info-soft:      #0E2A30;
+  --info-on:        #67E8F9;
+  --accent:         #A78BFA;
+  --accent-soft:    #1F1638;
+  --accent-on:      #C4B5FD;
+  --teal:           #2DD4BF;
+  --teal-soft:      #0E2624;
+  --teal-on:        #5EEAD4;
 
-  /* Shadows — softer in dark mode */
-  --shadow-sm:      0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md:      0 4px 12px rgba(0, 0, 0, 0.30), 0 1px 3px rgba(0, 0, 0, 0.20);
-  --shadow-lg:      0 12px 32px rgba(0, 0, 0, 0.40), 0 4px 8px rgba(0, 0, 0, 0.20);
+  /* Shadows */
+  --shadow-xs:      0 1px 1px rgba(0, 0, 0, 0.30);
+  --shadow-sm:      0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-md:      0 2px 4px rgba(0, 0, 0, 0.30), 0 4px 12px rgba(0, 0, 0, 0.40);
+  --shadow-lg:      0 4px 8px rgba(0, 0, 0, 0.40), 0 12px 28px rgba(0, 0, 0, 0.50);
+  --shadow-xl:      0 8px 16px rgba(0, 0, 0, 0.50), 0 24px 48px rgba(0, 0, 0, 0.60);
+  --shadow-focus:   0 0 0 4px rgba(77, 156, 255, 0.24);
 
-  /* Decorative — dark mode grid */
-  --grid-line:      rgba(255, 255, 255, 0.03);
+  /* Decorative */
+  --grid-line:  rgba(255, 255, 255, 0.03);
 }
 
 /* ─── Tailwind v4 theme bridge ─────────────────────────────────────────
  * Expose tokens as Tailwind utilities (bg-surface, text-secondary, etc.)
  * ─────────────────────────────────────────────────────────────────────── */
 @theme inline {
-  --color-bg:             var(--bg);
-  --color-surface:        var(--surface);
-  --color-surface-alt:    var(--surface-alt);
-  --color-surface-muted:  var(--surface-muted);
-  --color-surface-sunken: var(--surface-sunken);
-  --color-border:         var(--border);
-  --color-border-strong:  var(--border-strong);
-  --color-border-focus:   var(--border-focus);
-  --color-text:           var(--text);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary:  var(--text-tertiary);
-  --color-text-inverse:   var(--text-inverse);
-  --color-brand:          var(--brand);
-  --color-brand-pressed:  var(--brand-pressed);
-  --color-brand-soft:     var(--brand-soft);
-  --color-success:        var(--success);
-  --color-success-soft:   var(--success-soft);
-  --color-warning:        var(--warning);
-  --color-warning-soft:   var(--warning-soft);
-  --color-danger:         var(--danger);
-  --color-danger-soft:    var(--danger-soft);
-  --color-info:           var(--info);
-  --color-info-soft:      var(--info-soft);
-  --color-accent:         var(--accent);
-  --color-accent-soft:    var(--accent-soft);
+  --color-bg:               var(--bg);
+  --color-bg-app:           var(--bg-app);
+  --color-surface:          var(--surface);
+  --color-surface-alt:      var(--surface-alt);
+  --color-surface-muted:    var(--surface-muted);
+  --color-surface-sunken:   var(--surface-sunken);
+  --color-surface-overlay:  var(--surface-overlay);
+  --color-border:           var(--border);
+  --color-border-soft:      var(--border-soft);
+  --color-border-strong:    var(--border-strong);
+  --color-border-focus:     var(--border-focus);
+  --color-divider:          var(--divider);
+  --color-text:             var(--text);
+  --color-text-secondary:   var(--text-secondary);
+  --color-text-muted:       var(--text-muted);
+  --color-text-tertiary:    var(--text-tertiary);
+  --color-text-inverse:     var(--text-inverse);
+  --color-brand:            var(--brand);
+  --color-brand-hover:      var(--brand-hover);
+  --color-brand-active:     var(--brand-active);
+  --color-brand-soft:       var(--brand-soft);
+  --color-brand-fg:         var(--brand-fg);
+  --color-on-brand-soft:    var(--on-brand-soft);
+  --color-success:          var(--success);
+  --color-success-soft:     var(--success-soft);
+  --color-success-on:       var(--success-on);
+  --color-warning:          var(--warning);
+  --color-warning-soft:     var(--warning-soft);
+  --color-warning-on:       var(--warning-on);
+  --color-danger:           var(--danger);
+  --color-danger-soft:      var(--danger-soft);
+  --color-danger-on:        var(--danger-on);
+  --color-info:             var(--info);
+  --color-info-soft:        var(--info-soft);
+  --color-info-on:          var(--info-on);
+  --color-accent:           var(--accent);
+  --color-accent-soft:      var(--accent-soft);
+  --color-accent-on:        var(--accent-on);
+  --color-teal:             var(--teal);
+  --color-teal-soft:        var(--teal-soft);
+  --color-teal-on:          var(--teal-on);
 
   --font-sans:    var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-fraunces), Georgia, serif;
@@ -225,6 +323,15 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   transition-timing-function: var(--ease-std);
 }
 
+@keyframes live-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 50%, transparent); }
+  70%  { box-shadow: 0 0 0 5px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes skel {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 @keyframes fade-in-up {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

@@ -2,11 +2,11 @@ import logging
 from functools import lru_cache
 
 import jwt
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from supabase import Client, create_client
 
 from .config import settings
-from .security import verify_supabase_token
+from .security import verify_session_fingerprint, verify_supabase_token
 
 logger = logging.getLogger("auth")
 
@@ -16,17 +16,30 @@ def get_supabase() -> Client:
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
+def _client_ip(request: Request) -> str:
+    """Best-effort real IP — reads X-Forwarded-For when behind a proxy."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _client_ua(request: Request) -> str:
+    return request.headers.get("User-Agent", "")
+
+
 def _verify_and_load_profile(token: str) -> dict:
     """Shared token verification + profile load used by both cookie and Bearer paths."""
     try:
         header = jwt.get_unverified_header(token)
         unverified = jwt.decode(token, options={"verify_signature": False})
         logger.info(
-            f"[auth] Token alg={header.get('alg')} kid={header.get('kid')} "
-            f"sub={unverified.get('sub')} iss={unverified.get('iss')}"
+            "[auth] Token alg=%s kid=%s sub=%s iss=%s",
+            header.get("alg"), header.get("kid"),
+            unverified.get("sub"), unverified.get("iss"),
         )
     except Exception as e:
-        logger.warning(f"[auth] Could not parse token: {e}")
+        logger.warning("[auth] Could not parse token: %s", e)
 
     payload = verify_supabase_token(
         token,
@@ -53,19 +66,61 @@ def _verify_and_load_profile(token: str) -> dict:
     if not rows:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User profile not found")
 
-    return rows[0]
+    profile = rows[0]
+
+    if not profile.get("is_active", True):
+        logger.warning("[auth] Login attempt by disabled account: user_id=%s", user_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
+    return profile
 
 
-def get_current_user(access_token: str | None = Cookie(default=None)) -> dict:
-    """Cookie-based auth — used by the web dashboard."""
+def get_current_user(
+    request: Request,
+    access_token: str | None = Cookie(default=None),
+    session_fp: str | None = Cookie(default=None),
+) -> dict:
+    """Cookie-based auth for the web dashboard.
+
+    Also validates the session fingerprint cookie to detect hijacking.
+    On mismatch the session is treated as compromised and a 401 is returned,
+    forcing re-authentication and issuing a fresh fingerprint.
+    """
     if not access_token:
-        logger.warning("[auth] No access_token cookie received")
+        logger.warning("[auth] No access_token cookie received from ip=%s", _client_ip(request))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return _verify_and_load_profile(access_token)
+
+    profile = _verify_and_load_profile(access_token)
+
+    # Fingerprint check — warn and reject on mismatch
+    if not verify_session_fingerprint(
+        session_fp,
+        _client_ip(request),
+        _client_ua(request),
+        settings.csrf_secret,
+        user_id=profile.get("id", ""),
+    ):
+        logger.warning(
+            "[auth] Session fingerprint missing or mismatched: user_id=%s ip=%s",
+            profile.get("id"), _client_ip(request),
+        )
+        # Lazy import avoids circular dependency between core and services
+        from ..services.audit_service import audit as _audit
+        _audit.session_hijack_attempt(
+            user_id=str(profile["id"]),
+            ip=_client_ip(request),
+            user_agent=_client_ua(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalid — please log in again",
+        )
+
+    return profile
 
 
 def get_mobile_user(authorization: str | None = Header(default=None)) -> dict:
-    """Bearer token auth — used by the mobile app (token stored in SecureStore)."""
+    """Bearer token auth for the mobile app (token stored in SecureStore)."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     token = authorization.removeprefix("Bearer ").strip()

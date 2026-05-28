@@ -8,16 +8,22 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, hint, error, className, id, ...rest },
+  { label, hint, error, className, id, style, ...rest },
   ref
 ) {
   const inputId = id ?? rest.name;
+  const descId = inputId ? `${inputId}-desc` : undefined;
+
   return (
-    <div className="flex flex-col gap-1.5">
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {label && (
         <label
           htmlFor={inputId}
-          className="text-[12px] font-medium uppercase tracking-[0.06em] text-text-secondary"
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            color: "var(--text-secondary)",
+          }}
         >
           {label}
         </label>
@@ -25,22 +31,42 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       <input
         ref={ref}
         id={inputId}
-        className={cn(
-          "h-11 px-3.5 rounded-lg bg-surface-alt text-text text-[14px]",
-          "border border-border-strong",
-          "placeholder:text-text-tertiary",
-          "transition-[border-color,box-shadow] duration-150",
-          "focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand-soft",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
-          error && "border-danger focus:border-danger focus:ring-danger-soft",
-          className
-        )}
+        aria-describedby={(hint || error) ? descId : undefined}
+        aria-invalid={error ? true : undefined}
+        className={cn(className)}
+        style={{
+          width: "100%",
+          height: 34,
+          padding: "0 12px",
+          borderRadius: "var(--r-md)",
+          border: `1px solid ${error ? "var(--danger)" : "var(--border)"}`,
+          background: "var(--surface)",
+          color: "var(--text)",
+          fontSize: "var(--font-sm)",
+          outline: "none",
+          boxShadow: "var(--shadow-xs)",
+          transition: "border-color 0.12s ease, box-shadow 0.12s ease",
+          fontFamily: "inherit",
+          ...style,
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = error ? "var(--danger)" : "var(--brand)";
+          e.currentTarget.style.boxShadow = error ? "0 0 0 4px rgba(220,38,38,0.12)" : "var(--shadow-focus)";
+          rest.onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = error ? "var(--danger)" : "var(--border)";
+          e.currentTarget.style.boxShadow = "var(--shadow-xs)";
+          rest.onBlur?.(e);
+        }}
         {...rest}
       />
       {hint && !error && (
-        <p className="text-[12px] text-text-tertiary">{hint}</p>
+        <p id={descId} style={{ margin: 0, fontSize: 11, color: "var(--text-muted)" }}>{hint}</p>
       )}
-      {error && <p className="text-[12px] text-danger">{error}</p>}
+      {error && (
+        <p id={descId} style={{ margin: 0, fontSize: 11, color: "var(--danger)" }}>{error}</p>
+      )}
     </div>
   );
 });

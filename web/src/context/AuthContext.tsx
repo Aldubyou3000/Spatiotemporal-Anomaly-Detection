@@ -31,7 +31,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function logout() {
-    await authApi.logout();
+    try {
+      await authApi.logout();
+    } catch {
+      // best-effort — server-side revocation may fail if session already expired
+    }
     setUser(null);
     router.replace("/login");
   }
