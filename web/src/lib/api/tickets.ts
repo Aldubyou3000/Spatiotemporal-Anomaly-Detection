@@ -20,14 +20,25 @@ export interface TicketListParams {
 export interface TicketReport {
   id: string;
   notes: string | null;
-  sensor_working: boolean | null;
   severity: "low" | "medium" | "high" | null;
   root_cause: string | null;
+  corrective_action: string | null;
+  issue_resolved: boolean | null;
   submitted_at: string | null;
   analyst_approved: boolean;
   analyst_approved_at: string | null;
   analyst_notes: string | null;
+  /** The analyst note that sent THIS round back (archived rounds only; null if not recorded). */
+  follow_up_notes: string | null;
+  round: number;
+  is_active: boolean;
   photos: { id: string; photo_url: string }[];
+}
+
+/** Full inspection history for a ticket: the active round + every archived round. */
+export interface TicketReportHistory {
+  current: TicketReport | null;
+  history: TicketReport[]; // archived rounds, ascending by round (oldest-first)
 }
 
 export const ticketsApi = {
@@ -46,6 +57,18 @@ export const ticketsApi = {
   listTechnicians: () =>
     apiClient.get<Technician[]>("/api/tickets/technicians"),
 
+  assignTechnicians: (id: string, technician_ids: string[], reason?: string) =>
+    apiClient.post<TicketDetail>(`/api/tickets/${id}/technicians`, { technician_ids, reason }),
+
+  removeTechnician: (id: string, userId: string, reason?: string) =>
+    apiClient.delete<TicketDetail>(`/api/tickets/${id}/technicians/${userId}`, reason ? { params: { reason } } : {}),
+
+  requestFollowUp: (id: string, follow_up_notes: string) =>
+    apiClient.post<TicketDetail>(`/api/tickets/${id}/follow-up`, { follow_up_notes }),
+
+  cancelTicket: (id: string, reason: string) =>
+    apiClient.post<TicketDetail>(`/api/tickets/${id}/cancel`, { reason }),
+
   attachments: (id: string) =>
     apiClient.get<TicketAttachment[]>(`/api/tickets/${id}/attachments`),
 
@@ -59,7 +82,7 @@ export const ticketsApi = {
   },
 
   report: (id: string) =>
-    apiClient.get<TicketReport | null>(`/api/tickets/${id}/report`),
+    apiClient.get<TicketReportHistory>(`/api/tickets/${id}/report`),
 
   downloadPdf: async (id: string, filename: string) => {
     const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";

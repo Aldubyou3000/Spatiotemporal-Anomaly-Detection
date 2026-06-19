@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from .core.config import settings
-from .routers import audit, auth, mobile, reports, technicians, tickets, zones
+from .routers import audit, auth, events, mobile, mobile_events, reports, technicians, tickets, zones
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -78,13 +78,52 @@ app.include_router(tickets.router)
 app.include_router(reports.router)
 app.include_router(technicians.router)
 app.include_router(mobile.router)
+app.include_router(mobile_events.router)
 app.include_router(audit.router)
+app.include_router(events.router)
 
 
 @app.on_event("startup")
 async def _startup_audit():
+    from .services import audit_service as _as
+    from .services import events_service
     from .services.audit_service import audit, AuditEvent
+
+    # Capture the running loop so sync/threadpool producers can publish SSE
+    # events via call_soon_threadsafe. Must run inside the loop (it does here).
+    events_service.init_loop()
+
+    # Reload the last stored chain hash so integrity survives restarts
+    try:
+        from .core.dependencies import get_supabase
+        sb = get_supabase()
+        res = (
+            sb.table("audit_log")
+            .select("chain_hash")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if rows and rows[0].get("chain_hash"):
+            with _as._chain_lock:
+                _as._prev_hash = rows[0]["chain_hash"]
+    except Exception:
+        pass  # non-fatal — chain continues from "genesis" if DB unreachable at startup
+
     audit.log(event=AuditEvent.SYSTEM_STARTUP, meta={"version": "1.0.0"})
+
+
+@app.on_event("shutdown")
+async def _shutdown_audit():
+    from .services import events_service
+    from .services.audit_service import _writer
+
+    # Close open SSE streams first so clients disconnect cleanly.
+    await events_service.shutdown()
+
+    _writer.shutdown()
+    _writer.join(timeout=10)  # wait up to 10 s for the queue to drain
 
 
 @app.get("/health")

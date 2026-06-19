@@ -19,6 +19,7 @@ import { Text } from './Themed';
 
 export type SheetAction = {
   label: string;
+  subtitle?: string;
   onPress: () => void;
   variant?: 'default' | 'danger' | 'primary';
 };
@@ -115,6 +116,11 @@ export default function BottomSheet({ visible, onClose, title, message, actions 
               >
                 {action.label}
               </Text>
+              {action.subtitle ? (
+                <Text style={[styles.actionSubtitle, { color: theme.textTertiary }]}>
+                  {action.subtitle}
+                </Text>
+              ) : null}
             </Pressable>
           ))}
         </View>
@@ -170,5 +176,10 @@ const styles = StyleSheet.create({
   actionLabel: {
     fontSize: typography.body.size,
     lineHeight: typography.body.lineHeight,
+  },
+  actionSubtitle: {
+    fontSize: typography.caption.size,
+    lineHeight: typography.caption.lineHeight,
+    marginTop: 2,
   },
 });

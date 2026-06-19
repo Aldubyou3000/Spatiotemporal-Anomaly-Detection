@@ -1,19 +1,19 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+/**
+ * Base colors for the themed <Text>/<View> primitives in components/Themed.tsx.
+ * Kept in sync with the light/dark Theme objects in theme.ts so a <Text> with no
+ * explicit color still renders the correct token (not pure #000 / #fff).
+ */
+import { lightTheme, darkTheme, palette } from './theme';
 
 export default {
   light: {
-    text: '#000',
-    background: '#fff',
-    tint: tintColorLight,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorLight,
+    text: lightTheme.text,
+    background: lightTheme.bg,
+    tint: palette.brand,
   },
   dark: {
-    text: '#fff',
-    background: '#000',
-    tint: tintColorDark,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorDark,
+    text: darkTheme.text,
+    background: darkTheme.bg,
+    tint: palette.brand,
   },
 };

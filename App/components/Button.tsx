@@ -1,11 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
 import { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, TextStyle, View, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
-import { palette, radius, spacing, typography } from '@/constants/theme';
-import { duration, press, spring } from '@/constants/Motion';
+import { palette, radius, spacing } from '@/constants/theme';
+import { duration, press } from '@/constants/Motion';
 import { useTheme } from '@/hooks/useTheme';
+import Icon, { type IconName } from './Icon';
 import { Text } from './Themed';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -18,7 +18,7 @@ type ButtonProps = {
   disabled?: boolean;
   variant?: ButtonVariant;
   size?:    ButtonSize;
-  icon?:    React.ComponentProps<typeof Ionicons>['name'];
+  icon?:    IconName;
   iconRight?: boolean;
   style?:     StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
@@ -28,9 +28,9 @@ type ButtonProps = {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const SIZE_MAP: Record<ButtonSize, { padV: number; padH: number; fontSize: number; iconSize: number; height: number }> = {
-  sm: { padV: 8,  padH: spacing.sm, fontSize: 13, iconSize: 14, height: 36 },
-  md: { padV: 12, padH: spacing.md, fontSize: 15, iconSize: 16, height: 44 },
-  lg: { padV: 14, padH: spacing.lg, fontSize: 15, iconSize: 18, height: 52 },
+  sm: { padV: 8,  padH: spacing.sm, fontSize: 14, iconSize: 15, height: 38 },
+  md: { padV: 12, padH: spacing.md, fontSize: 16, iconSize: 17, height: 46 },
+  lg: { padV: 14, padH: spacing.lg, fontSize: 16, iconSize: 18, height: 54 },
 };
 
 export default function Button({
@@ -75,7 +75,7 @@ export default function Button({
     danger: {
       bg: palette.dangerSoft,
       text: palette.danger,
-      border: 'rgba(229,53,53,0.20)',
+      border: palette.danger + '33',
     },
   };
 
@@ -119,7 +119,7 @@ export default function Button({
       ) : (
         <View style={styles.inner}>
           {icon && !iconRight ? (
-            <Ionicons name={icon} size={sz.iconSize} color={finalTextColor} style={{ marginRight: spacing.xs }} />
+            <Icon name={icon} size={sz.iconSize} color={finalTextColor} style={{ marginRight: spacing.xs }} />
           ) : null}
           <Text style={[
             styles.label,
@@ -132,7 +132,7 @@ export default function Button({
             {label}
           </Text>
           {icon && iconRight ? (
-            <Ionicons name={icon} size={sz.iconSize} color={finalTextColor} style={{ marginLeft: spacing.xs }} />
+            <Icon name={icon} size={sz.iconSize} color={finalTextColor} style={{ marginLeft: spacing.xs }} />
           ) : null}
         </View>
       )}
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
-    fontWeight: typography.bodyBold.weight,
+    fontWeight: '700',
     letterSpacing: 0.1,
   },
 });

@@ -1,30 +1,36 @@
-import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 
+import { LinearGradient } from 'expo-linear-gradient';
+
+import AppScrollView from '@/components/AppScrollView';
 import BottomSheet from '@/components/BottomSheet';
 import Button from '@/components/Button';
+import ConfirmSheet from '@/components/ConfirmSheet';
+import SuccessSheet from '@/components/SuccessSheet';
 import Card from '@/components/Card';
 import Pill from '@/components/Pill';
+import Icon, { type IconName } from '@/components/Icon';
 import SectionHeader from '@/components/SectionHeader';
 import { Text } from '@/components/Themed';
-import { palette, radius, spacing, typography } from '@/constants/theme';
+import { icons } from '@/constants/icons';
+import { elevation, palette, radius, spacing, typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
+import { useTicketDetail } from '@/hooks/useTickets';
 import {
-  getTicketById,
   MaintenanceTicket,
   submitInspectionReport,
   uploadInspectionPhoto,
@@ -37,17 +43,32 @@ const PRIORITY = {
   low:    { label: 'Low',    color: palette.success, bg: palette.successSoft },
 } as const;
 
-// ─── Toggle group (used for sensor + severity) ───────────────────────────────
+const MAX_PHOTOS = 5;
+
+// Photo grid tile math: 2-column square matrix inside the report card.
+// screenWidth − (2 × 16 screen pad) − (2 × 16 card pad) − (1 × 8 gap) ÷ 2.
+const PHOTO_COLS = 2;
+const PHOTO_GAP = spacing.xs; // 8
+const PHOTO_TILE = Math.floor(
+  (Dimensions.get('window').width - spacing.md * 2 - spacing.md * 2 - PHOTO_GAP * (PHOTO_COLS - 1)) / PHOTO_COLS,
+);
+
+interface PhotoEntry { uri: string; mime: string }
+
+// ─── Segmented track control ─────────────────────────────────────────────────
+// A unified track (soft grey, 8px radius) with the active option rendered as a
+// floating white capsule + soft shadow (Stripe/Linear style). Only the active
+// label carries the semantic color; the track itself stays unified.
 function ToggleGroup<T extends string | boolean>({
   options, value, onChange,
 }: {
-  options: { value: T; label: string; color: string; icon?: React.ComponentProps<typeof Ionicons>['name'] }[];
+  options: { value: T; label: string; color: string; icon?: IconName }[];
   value: T | null;
   onChange: (v: T | null) => void;
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.toggleRow}>
+    <View style={[styles.segTrack, { backgroundColor: theme.surfaceAlt }]}>
       {options.map((opt) => {
         const active = value === opt.value;
         return (
@@ -55,16 +76,15 @@ function ToggleGroup<T extends string | boolean>({
             key={String(opt.value)}
             onPress={() => onChange(active ? null : opt.value)}
             style={({ pressed }) => [
-              styles.toggleBtn,
-              {
-                backgroundColor: active ? opt.color + '12' : theme.surface,
-                borderColor: active ? opt.color : theme.borderStrong,
-                opacity: pressed ? 0.78 : 1,
-              },
+              styles.segItem,
+              // Active = floating white capsule with a soft shadow. Inactive =
+              // transparent (sits flat on the track).
+              active && [styles.segItemActive, { backgroundColor: theme.surface, shadowColor: theme.shadow }],
+              pressed && !active && { opacity: 0.6 },
             ]}
           >
             {opt.icon ? (
-              <Ionicons
+              <Icon
                 name={opt.icon}
                 size={15}
                 color={active ? opt.color : theme.textSecondary}
@@ -73,9 +93,10 @@ function ToggleGroup<T extends string | boolean>({
             ) : null}
             <Text
               style={[
-                styles.toggleLabel,
+                styles.segLabel,
                 { color: active ? opt.color : theme.textSecondary },
               ]}
+              numberOfLines={1}
             >
               {opt.label}
             </Text>
@@ -88,85 +109,95 @@ function ToggleGroup<T extends string | boolean>({
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function ReportScreen() {
-  const router = useRouter();
-  const theme  = useTheme();
-  const params = useLocalSearchParams();
+  const router  = useRouter();
+  const theme   = useTheme();
+  const params  = useLocalSearchParams();
   const ticketId = (params.id ?? params.ticketId) as string | undefined;
 
-  const [ticket, setTicket]               = useState<MaintenanceTicket | null>(null);
-  const [notes, setNotes]                 = useState('');
-  const [sensorWorking, setSensorWorking] = useState<boolean | null>(null);
-  const [severity, setSeverity]           = useState<'low' | 'medium' | 'high' | null>(null);
-  const [rootCause, setRootCause]         = useState('');
-  const [photoUri, setPhotoUri]           = useState<string | null>(null);
-  const [photoMime, setPhotoMime]         = useState('image/jpeg');
-  const [loading, setLoading]             = useState(true);
-  const [submitting, setSubmitting]       = useState(false);
-  const [notesError, setNotesError]       = useState('');
+  // Seed from TicketDetailSheet — renders ticket context instantly.
+  const seed: MaintenanceTicket | null = params.seed
+    ? JSON.parse(params.seed as string) as MaintenanceTicket
+    : null;
+  const { data: ticket, isLoading: loading, isError } = useTicketDetail(ticketId ?? null, seed);
+
+  const [notes, setNotes]                     = useState('');
+  const [severity, setSeverity]               = useState<'low' | 'medium' | 'high' | null>(null);
+  const [rootCause, setRootCause]             = useState('');
+  const [correctiveAction, setCorrectiveAction] = useState('');
+  const [issueResolved, setIssueResolved]     = useState<boolean | null>(null);
+  const [photos, setPhotos]                   = useState<PhotoEntry[]>([]);
+  const [submitting, setSubmitting]           = useState(false);
+  const [notesError, setNotesError]           = useState('');
   const [showPhotoSheet, setShowPhotoSheet]     = useState(false);
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
+  const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  // Hero: the AI/system anomaly text can be a wall of prose. Collapse to 2 lines
+  // by default; the tech expands it only if they need the full analysis.
+  const [descExpanded, setDescExpanded]       = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      if (!ticketId) return;
-      const found = await getTicketById(ticketId);
-      if (mounted) {
-        setTicket(found);
-        setLoading(false);
-      }
-    }
-    load();
-    return () => { mounted = false; };
-  }, [ticketId]);
+  const addPhoto = (uri: string, mime: string) => {
+    setPhotos((prev) => {
+      if (prev.length >= MAX_PHOTOS) return prev;
+      return [...prev, { uri, mime }];
+    });
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const launchCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed.'); return; }
     const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
-    if (!r.canceled) { setPhotoUri(r.assets[0].uri); setPhotoMime(r.assets[0].mimeType ?? 'image/jpeg'); }
+    if (!r.canceled) addPhoto(r.assets[0].uri, r.assets[0].mimeType ?? 'image/jpeg');
   };
 
   const launchGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
+    // 'limited' = Android 13+ partial photo access — still lets us pick photos.
+    if (status !== 'granted' && status !== 'limited') {
       Alert.alert(
-        'Gallery access limited',
-        Platform.OS === 'android'
-          ? 'Expo Go cannot access your gallery on Android. Use "Take Photo" instead — it works in all versions.'
-          : 'Photo library access is needed to pick from gallery.',
+        'Gallery access required',
+        'Please allow photo library access in your device settings.',
       );
       return;
     }
-    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
-    if (!r.canceled) { setPhotoUri(r.assets[0].uri); setPhotoMime(r.assets[0].mimeType ?? 'image/jpeg'); }
+    const remaining = MAX_PHOTOS - photos.length;
+    if (remaining <= 0) return;
+    const r = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+      quality: 0.8,
+    });
+    if (!r.canceled) {
+      r.assets.forEach((a) => addPhoto(a.uri, a.mimeType ?? 'image/jpeg'));
+    }
   };
 
-  const handleSubmit = async () => {
+  const doSubmit = async () => {
     if (!ticket) return;
-    if (!notes.trim()) {
-      setNotesError('Field observations are required.');
-      return;
-    }
     setNotesError('');
     setSubmitting(true);
     try {
       const { reportId } = await submitInspectionReport(
         ticket._dbId ?? ticket.ticketId,
         notes.trim(),
-        sensorWorking,
         severity,
         rootCause.trim() || null,
+        correctiveAction.trim() || null,
+        issueResolved,
       );
-      if (photoUri) {
-        try {
-          await uploadInspectionPhoto(reportId, photoUri, photoMime);
-        } catch {
-          Alert.alert(
-            'Photo upload failed',
-            'Your report was saved but the photo could not be uploaded. You can retry from the ticket detail.',
-          );
-        }
+      let failed = 0;
+      for (const p of photos) {
+        try { await uploadInspectionPhoto(reportId, p.uri, p.mime); } catch { failed++; }
+      }
+      if (failed > 0) {
+        Alert.alert(
+          'Some photos failed to upload',
+          `${failed} of ${photos.length} photo${photos.length > 1 ? 's' : ''} could not be uploaded. The report was saved — please check your connection and try again.`,
+        );
       }
       setShowSuccessSheet(true);
     } catch (err: unknown) {
@@ -177,23 +208,27 @@ export default function ReportScreen() {
     }
   };
 
+  const handleSubmit = () => {
+    if (!ticket) return;
+    if (!notes.trim()) { setNotesError('Field observations are required.'); return; }
+    setShowConfirmSubmit(true);
+  };
+
   // ── Loading / error states ─────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
+      <View style={[styles.centered, { backgroundColor: theme.surfaceAlt }]}>
         <ActivityIndicator color={palette.brand} />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-          Loading ticket…
-        </Text>
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading ticket…</Text>
       </View>
     );
   }
   if (!ticket) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <Ionicons name="alert-circle-outline" size={36} color={palette.danger} />
+      <View style={[styles.centered, { backgroundColor: theme.surfaceAlt }]}>
+        <Icon name={icons.error} size={36} color={palette.danger} />
         <Text style={[styles.errorTitle, { color: palette.danger }]}>
-          Ticket not found
+          {isError ? "Couldn't load ticket" : 'Ticket not found'}
         </Text>
       </View>
     );
@@ -203,24 +238,53 @@ export default function ReportScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.bg }}
+      style={{ flex: 1, backgroundColor: theme.surfaceAlt }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView
+      <AppScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        extraBottomPad={0}
       >
         {/* ── Ticket summary ──────────────────────────────────────────── */}
         <SectionHeader label="Ticket" />
         <Card style={styles.section}>
-          <Text style={[styles.ticketTitle, { color: theme.text }]}>
-            {ticket.stationName}
-          </Text>
-          <Text style={[styles.ticketDesc, { color: theme.textSecondary }]}>
-            {ticket.flaggedAnomaly}
-          </Text>
+          <Text style={[styles.ticketTitle, { color: theme.text }]}>{ticket.stationName}</Text>
+          {ticket.flaggedAnomaly ? (
+            <Pressable
+              onPress={() => setDescExpanded((v) => !v)}
+              style={({ pressed }) => [styles.descBlock, { opacity: pressed ? 0.85 : 1 }]}
+            >
+              <View>
+                <Text
+                  style={[styles.ticketDesc, { color: theme.textSecondary }]}
+                  numberOfLines={descExpanded ? undefined : 2}
+                >
+                  {ticket.flaggedAnomaly}
+                </Text>
+                {/* Collapsed: a smooth white→transparent fade over the last line
+                    instead of a hard cut. (theme.surface is the card bg.) */}
+                {!descExpanded && (
+                  <LinearGradient
+                    colors={['transparent', theme.surface]}
+                    style={styles.descFade}
+                    pointerEvents="none"
+                  />
+                )}
+              </View>
+              {/* Sleek low-profile chevron — signifies the container expands.
+                  Rotated 180° when expanded (no separate up-glyph needed). */}
+              <View style={styles.descChevron}>
+                <Icon
+                  name={icons.chevronDown}
+                  size={16}
+                  color={theme.textTertiary}
+                  style={descExpanded ? { transform: [{ rotate: '180deg' }] } : undefined}
+                />
+              </View>
+            </Pressable>
+          ) : null}
 
           <View style={styles.ticketChips}>
             {ticket.priority ? (
@@ -233,63 +297,54 @@ export default function ReportScreen() {
 
           {ticket.coordinates ? (
             <View style={[styles.coordRow, { borderTopColor: theme.border }]}>
-              <Ionicons name="navigate-outline" size={14} color={theme.textSecondary} />
-              <Text style={[styles.coordText, { color: theme.textSecondary }]}>
-                {ticket.coordinates}
-              </Text>
+              <Icon name={icons.coordinates} size={14} color={theme.textSecondary} />
+              <Text style={[styles.coordText, { color: theme.textSecondary }]}>{ticket.coordinates}</Text>
             </View>
           ) : null}
         </Card>
 
-        {/* ── Field observations ──────────────────────────────────────── */}
-        <SectionHeader label="Field Observations" spaced />
-        <Card style={styles.section}>
-          <Text style={[styles.fieldLabel, { color: theme.text }]}>
-            What did you observe? <Text style={{ color: palette.danger }}>*</Text>
-          </Text>
-          <TextInput
-            style={[
-              styles.textarea,
-              {
-                backgroundColor: theme.surfaceAlt,
-                color: theme.text,
-                borderColor: notesError ? palette.danger : theme.borderStrong,
-              },
-            ]}
-            multiline
-            placeholder="Describe what you saw on site…"
-            placeholderTextColor={theme.textTertiary}
-            value={notes}
-            onChangeText={(v) => { setNotes(v); if (v.trim()) setNotesError(''); }}
-            textAlignVertical="top"
-          />
-          {notesError ? (
-            <View style={styles.errorRow}>
-              <Ionicons name="alert-circle" size={13} color={palette.danger} />
-              <Text style={styles.errorText}>{notesError}</Text>
-            </View>
-          ) : null}
-
-          {/* Sensor status */}
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.fieldLabel, { color: theme.text }]}>
-              Is the sensor working?
+        {/* ── Follow-up callout ──────────────────────────────────────── */}
+        {ticket.isFollowUp && (
+          <View style={{ marginBottom: spacing.md, padding: spacing.sm, borderRadius: radius.md, backgroundColor: palette.warningSoft, borderWidth: 1, borderColor: theme.status.warning + '4D' }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.status.warning, marginBottom: 4 }}>
+              Follow-up visit{(ticket.followUpCount ?? 0) > 1 ? ` #${ticket.followUpCount}` : ''} — analyst instructions
             </Text>
-            <ToggleGroup
-              value={sensorWorking}
-              onChange={setSensorWorking}
-              options={[
-                { value: true,  label: 'Yes', color: palette.success, icon: 'checkmark-circle-outline' },
-                { value: false, label: 'No',  color: palette.danger,  icon: 'close-circle-outline' },
-              ]}
+            <Text style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 18 }}>
+              {ticket.followUpNotes || 'No additional instructions provided.'}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Report fields — one unified card; sections separated by 0.5px
+            hairline dividers (seamless settings-list look, no input boxes). ── */}
+        <SectionHeader label="Inspection Report" spaced />
+        <Card style={[styles.section, styles.formCard]}>
+
+          {/* Field observations */}
+          <View style={[styles.fieldBlock, { borderBottomColor: theme.divider }]}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Field Observations <Text style={{ color: palette.danger }}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.bareInput, styles.bareMultiline, { color: theme.text }]}
+              multiline
+              placeholder="Describe what you observed on site…"
+              placeholderTextColor={theme.textTertiary}
+              value={notes}
+              onChangeText={(v) => { setNotes(v); if (v.trim()) setNotesError(''); }}
+              textAlignVertical="top"
             />
+            {notesError ? (
+              <View style={styles.errorRow}>
+                <Icon name={icons.errorFill} size={13} color={palette.danger} />
+                <Text style={styles.errorText}>{notesError}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Severity */}
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.fieldLabel, { color: theme.text }]}>
-              Severity
-            </Text>
+          <View style={[styles.fieldBlock, { borderBottomColor: theme.divider }]}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>Severity</Text>
             <ToggleGroup
               value={severity}
               onChange={setSeverity}
@@ -302,23 +357,14 @@ export default function ReportScreen() {
           </View>
 
           {/* Root cause */}
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.fieldLabel, { color: theme.text }]}>
-              Root cause{' '}
-              <Text style={[styles.fieldOptional, { color: theme.textTertiary }]}>
-                (optional)
-              </Text>
+          <View style={[styles.fieldBlock, { borderBottomColor: theme.divider }]}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Root Cause{' '}
+              <Text style={[styles.fieldOptional, { color: theme.textTertiary }]}>(optional)</Text>
             </Text>
             <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.surfaceAlt,
-                  color: theme.text,
-                  borderColor: theme.borderStrong,
-                },
-              ]}
-              placeholder="e.g. sensor malfunction, clogged gauge"
+              style={[styles.bareInput, { color: theme.text }]}
+              placeholder="e.g. clogged gauge, cable fault, sediment build-up"
               placeholderTextColor={theme.textTertiary}
               value={rootCause}
               onChangeText={setRootCause}
@@ -326,45 +372,74 @@ export default function ReportScreen() {
               textAlignVertical="top"
             />
           </View>
+
+          {/* Corrective action & recommendations */}
+          <View style={[styles.fieldBlock, { borderBottomColor: theme.divider }]}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              Corrective Action & Recommendations{' '}
+              <Text style={[styles.fieldOptional, { color: theme.textTertiary }]}>(optional)</Text>
+            </Text>
+            <TextInput
+              style={[styles.bareInput, styles.bareMultiline, { color: theme.text }]}
+              multiline
+              placeholder="Describe what you did to fix the issue, and any recommendations for future maintenance…"
+              placeholderTextColor={theme.textTertiary}
+              value={correctiveAction}
+              onChangeText={setCorrectiveAction}
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* Issue resolved — last block, no divider */}
+          <View style={styles.fieldBlockLast}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>Issue Resolved?</Text>
+            <ToggleGroup
+              value={issueResolved}
+              onChange={setIssueResolved}
+              options={[
+                { value: true,  label: 'Yes — Fixed',      color: palette.success, icon: icons.success },
+                { value: false, label: 'No — Needs Work',  color: palette.danger,  icon: icons.cancelled },
+              ]}
+            />
+          </View>
         </Card>
 
-        {/* ── Photo ──────────────────────────────────────────────────── */}
+        {/* ── Photo evidence ─────────────────────────────────────────── */}
         <SectionHeader label="Photo Evidence" spaced />
         <Card style={styles.section}>
-          {photoUri ? (
-            <View>
-              <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-              <Pressable
-                onPress={() => { setPhotoUri(null); setPhotoMime('image/jpeg'); }}
-                style={({ pressed }) => [styles.removeBtn, { opacity: pressed ? 0.7 : 1 }]}
-              >
-                <Ionicons name="trash-outline" size={14} color={palette.danger} />
-                <Text style={styles.removeBtnText}>Remove photo</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable
-              onPress={() => setShowPhotoSheet(true)}
-              style={({ pressed }) => [
-                styles.photoPicker,
-                {
-                  borderColor: theme.borderStrong,
-                  backgroundColor: theme.surfaceMuted,
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
-            >
-              <View style={[styles.photoIconWrap, { backgroundColor: palette.brandSoft }]}>
-                <Ionicons name="camera-outline" size={22} color={palette.brand} />
+          <Text style={[styles.photoCount, { color: theme.textSecondary }]}>
+            {photos.length} / {MAX_PHOTOS} photos
+          </Text>
+
+          {/* Uniform square grid: each photo is a square; the Add-Photo trigger
+              is the final square tile in the sequence (until MAX is reached). */}
+          <View style={styles.photoGrid}>
+            {photos.map((p, i) => (
+              <View key={i} style={styles.photoTile}>
+                <Image source={{ uri: p.uri }} style={styles.photoImg} resizeMode="cover" />
+                <Pressable
+                  onPress={() => removePhoto(i)}
+                  style={({ pressed }) => [styles.thumbRemove, { opacity: pressed ? 0.7 : 1 }]}
+                  hitSlop={8}
+                >
+                  <Icon name={icons.close} size={13} color={palette.white} />
+                </Pressable>
               </View>
-              <Text style={[styles.photoTitle, { color: theme.text }]}>
-                Attach a photo
-              </Text>
-              <Text style={[styles.photoSub, { color: theme.textSecondary }]}>
-                Camera or gallery — optional
-              </Text>
-            </Pressable>
-          )}
+            ))}
+
+            {photos.length < MAX_PHOTOS && (
+              <Pressable
+                onPress={() => setShowPhotoSheet(true)}
+                style={({ pressed }) => [
+                  styles.photoTile,
+                  styles.addTile,
+                  { backgroundColor: palette.brandSoft, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Icon name={icons.camera} size={24} color={palette.brand} />
+              </Pressable>
+            )}
+          </View>
         </Card>
 
         {/* ── Submit ──────────────────────────────────────────────────── */}
@@ -373,11 +448,11 @@ export default function ReportScreen() {
             label={submitting ? 'Submitting…' : 'Submit Report'}
             onPress={handleSubmit}
             loading={submitting}
-            icon={submitting ? undefined : 'paper-plane-outline'}
+            icon={submitting ? undefined : icons.send}
             iconRight
           />
         </View>
-      </ScrollView>
+      </AppScrollView>
 
       {/* Photo source sheet */}
       <BottomSheet
@@ -385,21 +460,38 @@ export default function ReportScreen() {
         onClose={() => setShowPhotoSheet(false)}
         title="Attach Photo"
         actions={[
-          { label: 'Take Photo',           variant: 'primary', onPress: launchCamera },
-          { label: 'Choose from Gallery',                       onPress: launchGallery },
-          { label: 'Cancel',                                    onPress: () => {} },
+          { label: 'Take Photo', variant: 'primary', onPress: launchCamera },
+          {
+            label: 'Choose from Gallery',
+            subtitle: `Select up to ${MAX_PHOTOS - photos.length} photo${MAX_PHOTOS - photos.length === 1 ? '' : 's'} at once`,
+            onPress: launchGallery,
+          },
+          { label: 'Cancel', onPress: () => {} },
         ]}
       />
 
+      {/* Submit confirmation */}
+      <ConfirmSheet
+        visible={showConfirmSubmit}
+        title={ticket?.isFollowUp ? 'Submit Follow-up?' : 'Submit Report?'}
+        message={
+          ticket?.isFollowUp
+            ? 'Your updated findings will be sent to the analyst for review.'
+            : 'Your findings will be submitted for analyst review. This cannot be undone.'
+        }
+        confirmLabel="Submit"
+        cancelLabel="Go back"
+        icon={icons.send}
+        onConfirm={() => { setShowConfirmSubmit(false); doSubmit(); }}
+        onCancel={() => setShowConfirmSubmit(false)}
+      />
+
       {/* Success sheet */}
-      <BottomSheet
+      <SuccessSheet
         visible={showSuccessSheet}
-        onClose={() => {}}
         title="Report Submitted"
         message="Your report was sent to the analyst for review."
-        actions={[
-          { label: 'Done', variant: 'primary', onPress: () => router.back() },
-        ]}
+        onAction={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
       />
     </KeyboardAvoidingView>
   );
@@ -428,7 +520,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
 
-  section: { marginBottom: 0 }, // SectionHeader provides spacing
+  section: { marginBottom: 0 },
 
   // Ticket summary ─────────────────────────────────────────────────────────
   ticketTitle: {
@@ -438,10 +530,25 @@ const styles = StyleSheet.create({
     letterSpacing: typography.subtitle.letterSpacing,
     marginBottom: spacing.xxs + 2,
   },
+  descBlock: {
+    marginBottom: spacing.sm,
+  },
   ticketDesc: {
     fontSize: typography.callout.size,
     lineHeight: typography.callout.lineHeight + 2,
-    marginBottom: spacing.sm,
+  },
+  // White→transparent fade pinned over the bottom of the collapsed text.
+  descFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 28,
+  },
+  // Low-profile centered chevron beneath the description.
+  descChevron: {
+    alignItems: 'center',
+    paddingTop: spacing.xxs,
   },
   ticketChips: {
     flexDirection: 'row',
@@ -461,34 +568,55 @@ const styles = StyleSheet.create({
     lineHeight: typography.caption.lineHeight,
   },
 
-  // Form fields ────────────────────────────────────────────────────────────
-  fieldGroup: { marginTop: spacing.md },
-  fieldLabel: {
-    fontSize: typography.callout.size,
-    lineHeight: typography.callout.lineHeight,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
+  // Unified form card — sections inside are separated by hairline dividers, so
+  // the card itself has no inner padding (each block owns its padding).
+  formCard: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  // A seamless section row: vertical padding + a 0.5px bottom divider. The last
+  // block drops the divider.
+  fieldBlock: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  fieldBlockLast: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
   },
   fieldOptional: {
     fontSize: typography.caption.size,
     fontWeight: '400',
   },
 
-  textarea: {
-    minHeight: 100,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: spacing.sm,
+  // Bare inputs — no fill, no border, no radius. Just text on the card surface,
+  // so the entry reads as part of the seamless list.
+  // Borderless, document-style input. multiline TextInputs grow with their
+  // content natively; we only set a small minHeight floor so an empty field
+  // reads as one clean line (pristine), not a tall empty box — it expands
+  // fluidly from there as the tech types.
+  bareInput: {
+    padding: 0,
+    paddingTop: 2,            // optical: nudges first line off the microheader
     fontSize: typography.body.size,
     lineHeight: typography.body.lineHeight,
+    fontWeight: '400',
+    minHeight: typography.body.lineHeight + 4,   // ~one line, then grows
   },
-  input: {
-    minHeight: 56,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: spacing.sm,
-    fontSize: typography.body.size,
-    lineHeight: typography.body.lineHeight,
+  // The two long-form entries start at a comfortable two-ish lines, then expand.
+  bareMultiline: {
+    minHeight: typography.body.lineHeight * 2 + 4,
   },
 
   errorRow: {
@@ -504,74 +632,68 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Toggle group ───────────────────────────────────────────────────────────
-  toggleRow: {
+  // Segmented track control ──────────────────────────────────────────────────
+  segTrack: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    borderRadius: radius.sm,   // 8
+    padding: 3,                // inset so the active capsule floats within
   },
-  toggleBtn: {
+  segItem: {
     flex: 1,
     flexDirection: 'row',
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.xs,   // 6 — capsule corners nest inside the 8 track
+    minHeight: 38,
   },
-  toggleLabel: {
+  segItemActive: {
+    ...elevation.sm,
+  },
+  segLabel: {
     fontSize: typography.callout.size,
     lineHeight: typography.callout.lineHeight,
     fontWeight: '600',
   },
 
   // Photo ──────────────────────────────────────────────────────────────────
-  photo: {
-    width: '100%',
-    height: 200,
-    borderRadius: radius.md,
-  },
-  photoPicker: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: radius.md,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  photoIconWrap: {
-    width: 48, height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  photoTitle: {
-    fontSize: typography.bodyBold.size,
-    lineHeight: typography.bodyBold.lineHeight,
-    fontWeight: typography.bodyBold.weight,
-  },
-  photoSub: {
+  photoCount: {
     fontSize: typography.caption.size,
     lineHeight: typography.caption.lineHeight,
-    marginTop: 2,
+    marginBottom: spacing.sm,
+    fontWeight: '500',
   },
-
-  removeBtn: {
+  // Uniform square grid — photos + the inline Add-Photo tile, wrapping rows.
+  photoGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    marginTop: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: palette.dangerSoft,
+    flexWrap: 'wrap',
+    gap: PHOTO_GAP,
   },
-  removeBtnText: {
-    color: palette.danger,
-    fontWeight: '600',
-    fontSize: typography.caption.size,
+  photoTile: {
+    width: PHOTO_TILE,
+    height: PHOTO_TILE,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoImg: { width: '100%', height: '100%' },
+  // Inline Add tile — soft brand-blue square, centered camera, no text wrapper.
+  addTile: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Modern native delete: dark semi-transparent circle + white X, inset in the
+  // top-right corner of the tile.
+  thumbRemove: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(17,24,39,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Submit ─────────────────────────────────────────────────────────────────

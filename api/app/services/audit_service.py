@@ -79,6 +79,12 @@ class AuditEvent:
     REPORT_SUBMITTED   = "report_submitted"
     REPORT_APPROVED    = "report_approved"
     REPORT_VIEWED      = "report_viewed"
+    FOLLOW_UP_REQUESTED = "follow_up_requested"
+    # Technician assignment
+    TECHNICIAN_ASSIGNED = "technician_assigned"
+    TECHNICIAN_REMOVED  = "technician_removed"
+    # Ticket cancellation
+    TICKET_CANCELLED    = "ticket_cancelled"
     # Files
     FILE_UPLOADED      = "file_uploaded"
     FILE_DOWNLOADED    = "file_downloaded"
@@ -276,6 +282,21 @@ class AuditService:
 
         _writer.enqueue(row_content)
 
+        # Real-time fan-out: translate this audit event into SSE invalidation
+        # signal(s) for the web dashboard. Non-blocking and best-effort — a
+        # failure here must never affect the audited operation. Local import
+        # keeps module load order independent of the events broker.
+        try:
+            from .events_service import publish_from_audit
+            publish_from_audit(
+                event=event,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                meta=meta,
+            )
+        except Exception:  # pragma: no cover - defensive; never break audit
+            logger.error("[audit] event publish failed", exc_info=True)
+
     # ── Convenience wrappers ────────────────────────────────────────────────
 
     def login_success(self, *, user_id: str, credential: str, ip: str, user_agent: str, platform: str = "web") -> None:
@@ -345,6 +366,38 @@ class AuditService:
         self.log(event=AuditEvent.FILE_UPLOADED, user_id=actor_id,
                  entity_type=entity_type, entity_id=entity_id, ip=ip,
                  meta={"file_name": file_name, "file_size_bytes": file_size})
+
+    def follow_up_requested(self, *, actor_id: str, ticket_id: str, notes: str, ip: str) -> None:
+        self.log(event=AuditEvent.FOLLOW_UP_REQUESTED, user_id=actor_id,
+                 entity_type="ticket", entity_id=ticket_id, ip=ip,
+                 meta={"follow_up_notes": notes[:256]})
+
+    def technician_assigned(self, *, actor_id: str, ticket_id: str,
+                            added_ids: list[str], all_ids: list[str], ip: str,
+                            reason: str | None = None) -> None:
+        meta: dict[str, Any] = {"added": added_ids}
+        if reason:
+            meta["reason"] = reason[:256]
+        self.log(event=AuditEvent.TECHNICIAN_ASSIGNED, user_id=actor_id,
+                 entity_type="ticket", entity_id=ticket_id, ip=ip,
+                 new_value={"technician_ids": all_ids},
+                 meta=meta)
+
+    def technician_removed(self, *, actor_id: str, ticket_id: str,
+                           removed_id: str, remaining_ids: list[str], ip: str,
+                           reason: str | None = None) -> None:
+        meta: dict[str, Any] | None = {"reason": reason[:256]} if reason else None
+        self.log(event=AuditEvent.TECHNICIAN_REMOVED, user_id=actor_id,
+                 entity_type="ticket", entity_id=ticket_id, ip=ip,
+                 old_value={"removed_technician_id": removed_id},
+                 new_value={"technician_ids": remaining_ids},
+                 meta=meta)
+
+    def ticket_cancelled(self, *, actor_id: str, ticket_id: str, reason: str, ip: str) -> None:
+        self.log(event=AuditEvent.TICKET_CANCELLED, user_id=actor_id,
+                 entity_type="ticket", entity_id=ticket_id, ip=ip,
+                 new_value={"status": "cancelled"},
+                 meta={"reason": reason[:256]})
 
     def zone_pipeline_run(self, *, actor_id: str, ip: str,
                           anomaly_count: int, station_count: int) -> None:

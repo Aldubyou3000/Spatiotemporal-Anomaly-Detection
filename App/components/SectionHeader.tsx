@@ -6,13 +6,11 @@ import { Text } from './Themed';
 
 type SectionHeaderProps = {
   label: string;
-  /** Right-aligned slot (button, count, action). */
-  accessory?: React.ReactNode;
   /** Add extra top margin to break up sections more strongly. */
   spaced?: boolean;
 };
 
-export default function SectionHeader({ label, accessory, spaced = false }: SectionHeaderProps) {
+export default function SectionHeader({ label, spaced = false }: SectionHeaderProps) {
   const theme = useTheme();
 
   return (
@@ -20,7 +18,6 @@ export default function SectionHeader({ label, accessory, spaced = false }: Sect
       <Text style={[styles.label, { color: theme.textSecondary }]}>
         {label.toUpperCase()}
       </Text>
-      {accessory}
     </View>
   );
 }

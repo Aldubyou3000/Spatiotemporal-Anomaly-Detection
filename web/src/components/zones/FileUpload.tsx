@@ -4,34 +4,38 @@ import { useCallback, useRef, useState } from "react";
 import { FileSpreadsheet, UploadCloud, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface FileUploadProps {
   file: File | null;
   onFileChange: (file: File | null) => void;
+  /** Called instead of onFileChange(null) when the user confirms removal */
+  onRemove: () => void;
   disabled?: boolean;
   className?: string;
 }
 
 const MAX_SIZE_MB = 20;
 
-export function FileUpload({ file, onFileChange, disabled, className }: FileUploadProps) {
+export function FileUpload({ file, onFileChange, onRemove, disabled, className }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleFile = useCallback(
     (next: File | null) => {
-      setError(null);
+      setValidationError(null);
       if (!next) {
         onFileChange(null);
         return;
       }
       if (!next.name.toLowerCase().endsWith(".csv")) {
-        setError("Only .csv files are supported.");
+        setValidationError("Only .csv files are supported.");
         return;
       }
       if (next.size > MAX_SIZE_MB * 1024 * 1024) {
-        setError(`File exceeds ${MAX_SIZE_MB} MB limit.`);
+        setValidationError(`File exceeds ${MAX_SIZE_MB} MB limit.`);
         return;
       }
       onFileChange(next);
@@ -104,7 +108,7 @@ export function FileUpload({ file, onFileChange, disabled, className }: FileUplo
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                handleFile(null);
+                setConfirmOpen(true);
               }}
               disabled={disabled}
             >
@@ -132,8 +136,22 @@ export function FileUpload({ file, onFileChange, disabled, className }: FileUplo
         )}
       </div>
 
-      {error && (
-        <p className="text-[12px] text-danger mt-2">{error}</p>
+      {validationError && (
+        <p className="text-[12px] text-danger mt-2">{validationError}</p>
+      )}
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="Remove file and reset session?"
+          message="All pipeline results and analysis data will be cleared. This cannot be undone."
+          confirmLabel="Remove file"
+          isDangerous
+          onConfirm={() => {
+            setConfirmOpen(false);
+            onRemove();
+          }}
+          onCancel={() => setConfirmOpen(false)}
+        />
       )}
     </div>
   );

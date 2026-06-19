@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
 /* ─── Design Tokens ─────────────────────────────────────────────────────
  * Single source of truth for the web app's visual language.
  * Mirrors the design tokens used in the mobile app (App/constants/theme.ts)
@@ -96,6 +101,11 @@
   --font-base:   15px;
   --font-sm:     14px;
   --font-xs:     12.5px;
+  /* Detail panel scale — derived so text-size picker affects the whole UI */
+  --font-md:     14px;
+  --font-lg:     16px;
+  --font-xl:     20px;
+  --font-metric: 16px;
 
   /* Decorative */
   --grid-line:  rgba(16, 24, 40, 0.04);
@@ -110,6 +120,10 @@
   --font-base:   14px;
   --font-sm:     13px;
   --font-xs:     12px;
+  --font-md:     13px;
+  --font-lg:     15px;
+  --font-xl:     18px;
+  --font-metric: 15px;
 }
 
 [data-density="roomy"] {
@@ -118,6 +132,10 @@
   --pad-y:       20px;
   --gap-card:    20px;
   --gap-section: 36px;
+  --font-md:     15px;
+  --font-lg:     17px;
+  --font-xl:     22px;
+  --font-metric: 18px;
 }
 
 [data-theme="dark"] {
@@ -359,6 +377,42 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+/* Gentle vertical bob — hints that a collapsed panel can be pulled open */
+@keyframes dock-nudge {
+  0%, 88%, 100% { transform: translateY(0); }
+  94%           { transform: translateY(-3px); }
+}
+/* Soft attention-pulse on the review icon — breathing brand glow */
+@keyframes review-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 40%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in oklab, var(--brand) 0%, transparent); }
+}
+/* One-shot attention flash when a ticket is first selected.
+ * Applied to a zero-size overlay child so it doesn't conflict with
+ * the parent's own box-shadow. */
+@keyframes dock-ping {
+  0%   { opacity: 0; transform: scaleY(0.6); }
+  18%  { opacity: 1; transform: scaleY(1); }
+  100% { opacity: 0; transform: scaleY(1); }
+}
+.dock-ping {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-top: 2px solid color-mix(in oklab, var(--brand) 60%, transparent);
+  border-radius: inherit;
+  animation: dock-ping 750ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  transform-origin: top;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-ping { animation: none !important; opacity: 0 !important; }
+}
+/* Pop-in for avatar stack items — staggered via animation-delay inline */
+@keyframes avatar-pop {
+  0%   { opacity: 0; transform: scale(0.55) translateX(-4px); }
+  60%  { transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1) translateX(0); }
+}
 
 .animate-fade-in-up     { animation: fade-in-up var(--duration-enter) var(--ease-out-expo) both; }
 .animate-fade-in        { animation: fade-in var(--duration-base) var(--ease-std) both; }
@@ -367,6 +421,42 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 .animate-pulse-anom     { animation: pulse-anomaly 2s ease-in-out infinite; }
 .animate-spin           { animation: spin 700ms linear infinite; }
 .animate-sweep          { animation: sweep 1.4s ease-in-out infinite; }
+
+/* ─── Action-dock grab handle ───────────────────────────────────────────
+ * The pill-shaped "pull tab" at the top of a collapsible bottom panel.
+ * Widens + darkens on hover; bobs periodically while collapsed to advertise it.
+ * ─────────────────────────────────────────────────────────────────────── */
+.dock-handle {
+  width: 40px;
+  height: 5px;
+  border-radius: var(--r-full);
+  background: var(--border-strong);
+  transition: width var(--duration-fast) var(--ease-std),
+              background var(--duration-fast) var(--ease-std);
+}
+.dock-handle[data-collapsed="true"] {
+  animation: dock-nudge 3.4s ease-in-out infinite;
+}
+.dock-strip:hover .dock-handle {
+  width: 52px;
+  background: var(--brand);
+}
+/* Arrow chevron — bigger, animated version of the old grab handle */
+.dock-arrow {
+  color: var(--text-tertiary);
+  transition: color var(--duration-fast) var(--ease-std),
+              transform var(--duration-fast) var(--ease-std);
+}
+.dock-arrow[data-collapsed="true"] {
+  animation: dock-nudge 3.4s ease-in-out infinite;
+}
+.dock-strip:hover .dock-arrow {
+  color: var(--brand);
+}
+/* Breathing pulse on the review-state icon — draws the eye without being jarring */
+.dock-review-icon {
+  animation: review-pulse 2.4s ease-in-out infinite;
+}
 
 /* Staggered children — page load tables/lists */
 .stagger > * { animation: fade-in-up var(--duration-enter) var(--ease-out-expo) both; }
@@ -384,11 +474,295 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   .animate-fade-in,
   .animate-scale-in,
   .animate-slide-in-right,
+  .dock-handle[data-collapsed="true"],
+  .dock-arrow[data-collapsed="true"],
+  .dock-review-icon,
   .stagger > * {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+    box-shadow: none !important;
   }
+}
+
+/* ─── Dashboard shell utilities ─────────────────────────────────────────
+ * Shared interactive patterns for Sidebar and Header.
+ * CSS-driven hover/active so JS onMouseEnter handlers are not needed.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* Sidebar navigation row */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  height: 38px;
+  border-radius: var(--r-md);
+  font-size: var(--font-base);
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  position: relative;
+  transition: background var(--duration-fast) var(--ease-std),
+              color var(--duration-fast) var(--ease-std);
+}
+
+.nav-item:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.nav-item[data-active="true"] {
+  background: var(--brand-soft);
+  color: var(--on-brand-soft);
+}
+
+/* Active left-accent stripe */
+.nav-item[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 var(--r-full) var(--r-full) 0;
+  background: var(--brand);
+}
+
+.nav-item__icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+}
+
+.nav-item[data-active="true"] .nav-item__icon {
+  color: var(--brand);
+}
+
+.nav-item:hover:not([data-active="true"]) .nav-item__icon {
+  color: var(--text-secondary);
+}
+
+/* Collapsed sidebar: icon-only square button */
+.nav-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-std),
+              color var(--duration-fast) var(--ease-std);
+}
+
+.nav-icon-btn:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.nav-icon-btn[data-active="true"] {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* Topbar small icon button (theme toggle, etc.) */
+.topbar-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-std),
+              color var(--duration-fast) var(--ease-std),
+              border-color var(--duration-fast) var(--ease-std);
+}
+
+.topbar-btn:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* User chip in topbar */
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-std),
+              border-color var(--duration-fast) var(--ease-std);
+}
+
+.user-chip:hover {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+}
+
+/* Dropdown menu item */
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  font-size: var(--font-sm);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--duration-fast) var(--ease-std);
+}
+
+.menu-item:hover {
+  background: var(--surface-sunken);
+}
+
+.menu-item--danger {
+  color: var(--danger);
+}
+
+.menu-item--danger:hover {
+  background: var(--danger-soft);
+}
+
+.menu-item--disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ─── Collapsible card header toggle ────────────────────────────────────
+ * Full-width button that acts as a card section header toggle.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+.card-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-std);
+}
+
+.card-toggle:hover {
+  background: var(--surface-sunken);
+}
+
+/* ─── Export / secondary action buttons ─────────────────────────────────
+ * Small inline buttons in tab bars, filter rows, and headers.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-std),
+              color var(--duration-fast) var(--ease-std),
+              border-color var(--duration-fast) var(--ease-std);
+}
+
+.export-btn:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.export-btn--primary {
+  background: var(--brand);
+  color: var(--brand-fg);
+  border-color: var(--brand);
+}
+
+.export-btn--primary:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  color: var(--brand-fg);
+}
+
+/* ─── List row & interactive card ───────────────────────────────────────
+ * Used in split-view list panels (Tickets, Reports) and any clickable row.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+.list-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--divider);
+  cursor: pointer;
+  display: block;
+  position: relative;
+  transition: background var(--duration-fast) var(--ease-std);
+}
+
+.list-row:last-child {
+  border-bottom: 0;
+}
+
+.list-row:hover {
+  background: var(--surface-sunken);
+}
+
+.list-row[data-selected="true"] {
+  background: var(--brand-soft);
+}
+
+/* Active left accent stripe — consistent with nav-item active */
+.list-row[data-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 var(--r-full) var(--r-full) 0;
+  background: var(--brand);
+}
+
+/* Photo thumbnail hover scale */
+.photo-thumb {
+  transition: transform var(--duration-fast) var(--ease-out-quart),
+              box-shadow var(--duration-fast) var(--ease-std);
+}
+
+.photo-thumb:hover {
+  transform: scale(1.03);
+  box-shadow: var(--shadow-md);
 }
 
 /* ─── Leaflet overrides — match theme ───────────────────────────────── */
@@ -407,4 +781,54 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   color: var(--text) !important;
   border: 1px solid var(--border) !important;
   box-shadow: var(--shadow-md) !important;
+}
+
+/* ─── Station permanent labels ───────────────────────────────────────── */
+.station-label {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r-sm) !important;
+  box-shadow: var(--shadow-sm) !important;
+  color: var(--text) !important;
+  font-family: var(--font-mono, ui-monospace) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  padding: 2px 6px !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+/* Hide the default tooltip arrow */
+.station-label::before { display: none !important; }
+
+/* Popup pane must overflow the map's rounded container so content is never clipped */
+.leaflet-pane.leaflet-popup-pane {
+  overflow: visible !important;
+  z-index: 700;
+}
+.leaflet-popup {
+  /* Ensure the popup itself never clips its own tip */
+  overflow: visible !important;
+}
+.leaflet-popup-content {
+  margin: 12px 16px !important;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: var(--r-xl) !important;
+  padding: 0 !important;
+}
+/* Close button */
+.leaflet-popup-close-button {
+  color: var(--text-muted) !important;
+  font-size: 16px !important;
+  line-height: 20px !important;
+  top: 8px !important;
+  right: 10px !important;
+  width: 20px !important;
+  height: 20px !important;
+}
+.leaflet-popup-close-button:hover {
+  color: var(--text) !important;
+  background: var(--surface-sunken) !important;
+  border-radius: var(--r-sm) !important;
 }

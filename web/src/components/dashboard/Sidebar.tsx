@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Activity, ClipboardCheck, Layers, LogOut,
+  Activity, Layers, LogOut,
   PanelLeftClose, PanelLeftOpen, ShieldCheck, Ticket, Users,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useReports } from "@/hooks/useReports";
 
 interface NavItem {
   href: string;
@@ -16,14 +17,6 @@ interface NavItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
   count?: number;
 }
-
-const NAV: NavItem[] = [
-  { href: "/zones",       label: "Zones",       icon: Activity },
-  { href: "/tickets",     label: "Tickets",     icon: Ticket },
-  { href: "/reports",     label: "Reports",     icon: ClipboardCheck },
-  { href: "/technicians", label: "Technicians", icon: Users },
-  { href: "/audit",       label: "Audit Log",   icon: ShieldCheck },
-];
 
 // Portalled tooltip — escapes overflow:hidden and any stacking context
 function SideTooltip({ label, anchor }: { label: string; anchor: DOMRect | null }) {
@@ -34,15 +27,16 @@ function SideTooltip({ label, anchor }: { label: string; anchor: DOMRect | null 
     <span style={{
       position: "fixed", left: x, top: y,
       transform: "translateY(-50%)",
-      background: "var(--surface-overlay)",
+      background: "var(--surface)",
       border: "1px solid var(--border)",
       borderRadius: "var(--r-md)",
       padding: "4px 10px",
-      fontSize: "var(--font-sm)", fontWeight: 500,
+      fontSize: "var(--font-xs)", fontWeight: 500,
       color: "var(--text)",
       whiteSpace: "nowrap",
       boxShadow: "var(--shadow-lg)",
       zIndex: 9999, pointerEvents: "none",
+      letterSpacing: "0.01em",
     }}>
       {label}
     </span>,
@@ -69,16 +63,27 @@ function NavTooltip({ label, children }: { label: string; children: React.ReactN
 export function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("sidebar-collapsed") === "true";
-    }
-    return false;
-  });
+  const { pending } = useReports();
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Sync from localStorage after mount only — avoids SSR/client hydration mismatch
+  useEffect(() => {
+    const stored = localStorage.getItem("sidebar-collapsed");
+    if (stored === "true") setCollapsed(true);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(collapsed));
   }, [collapsed]);
+
+  const pendingCount = pending.length || undefined;
+
+  const nav: NavItem[] = [
+    { href: "/zones",       label: "Zones",       icon: Activity },
+    { href: "/tickets",     label: "Tickets",     icon: Ticket, count: pendingCount },
+    { href: "/technicians", label: "Technicians", icon: Users },
+    { href: "/audit",       label: "Audit Log",   icon: ShieldCheck },
+  ];
 
   const W = collapsed ? 52 : 220;
 
@@ -140,23 +145,33 @@ export function Sidebar() {
           <div style={{ width: 28, height: 1, background: "var(--divider)", margin: "6px 0" }} />
 
           {/* Nav icons */}
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return (
-              <NavTooltip key={item.href} label={item.label}>
-                <Link
-                  href={item.href}
-                  style={{
-                    ...iconBtn(active),
-                    textDecoration: "none",
-                    color: active ? "var(--brand)" : "var(--text-muted)",
-                  }}
-                  onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
-                  onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; } }}
-                >
-                  <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
-                </Link>
+              <NavTooltip key={item.href} label={item.count != null ? `${item.label} (${item.count})` : item.label}>
+                <div style={{ position: "relative" }}>
+                  <Link
+                    href={item.href}
+                    style={{
+                      ...iconBtn(active),
+                      textDecoration: "none",
+                      color: active ? "var(--brand)" : "var(--text-muted)",
+                    }}
+                    onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
+                    onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; } }}
+                  >
+                    <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+                  </Link>
+                  {item.count != null && (
+                    <span style={{
+                      position: "absolute", top: 3, right: 3,
+                      width: 8, height: 8, borderRadius: 999,
+                      background: "var(--danger)",
+                      pointerEvents: "none",
+                    }} />
+                  )}
+                </div>
               </NavTooltip>
             );
           })}
@@ -195,9 +210,18 @@ export function Sidebar() {
             }}>
               <Layers size={15} />
             </div>
-            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap" }}>
+            <span style={{ flex: 1, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap" }}>
               Analyst Console
             </span>
+            <button
+              onClick={() => setCollapsed(true)}
+              aria-label="Collapse sidebar"
+              style={{ ...iconBtn(), width: 28, height: 28, flexShrink: 0 }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+            >
+              <PanelLeftClose size={14} strokeWidth={1.8} />
+            </button>
           </div>
 
           {/* Section label */}
@@ -211,7 +235,7 @@ export function Sidebar() {
 
           {/* Nav items */}
           <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
               return (
@@ -220,9 +244,9 @@ export function Sidebar() {
                   href={item.href}
                   style={{
                     display: "flex", alignItems: "center", gap: 10,
-                    padding: "8px 10px", height: 36,
+                    padding: "8px 10px", height: 38,
                     borderRadius: "var(--r-md)",
-                    fontSize: "var(--font-sm)", fontWeight: 500,
+                    fontSize: "var(--font-base)", fontWeight: 500,
                     textDecoration: "none",
                     transition: "background 0.12s ease, color 0.12s ease",
                     background: active ? "var(--brand-soft)" : "transparent",
@@ -238,12 +262,13 @@ export function Sidebar() {
                   {item.count != null && (
                     <span style={{
                       fontSize: "var(--font-xs)", fontWeight: 500,
-                      color: active ? "var(--on-brand-soft)" : "var(--text-muted)",
-                      background: active ? "rgba(30,111,217,0.18)" : "var(--surface-sunken)",
+                      color: "#fff",
+                      background: "var(--danger)",
                       padding: "1px 6px", borderRadius: "var(--r-full)",
                       fontVariantNumeric: "tabular-nums",
+                      minWidth: 18, textAlign: "center",
                     }}>
-                      {item.count}
+                      {item.count > 99 ? "99+" : item.count}
                     </span>
                   )}
                 </Link>
@@ -253,36 +278,13 @@ export function Sidebar() {
 
           {/* Footer */}
           <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--divider)", display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* Collapse button */}
-            <button
-              onClick={() => setCollapsed(true)}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "8px 10px", height: 36,
-                borderRadius: "var(--r-md)",
-                fontSize: "var(--font-sm)", fontWeight: 500,
-                color: "var(--text-secondary)",
-                background: "transparent", border: 0, width: "100%",
-                textAlign: "left", cursor: "pointer",
-                transition: "background 0.12s ease, color 0.12s ease",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
-            >
-              <span style={{ color: "var(--text-muted)", flexShrink: 0, display: "flex" }}>
-                <PanelLeftClose size={16} strokeWidth={1.8} />
-              </span>
-              Collapse
-            </button>
-
             <button
               onClick={logout}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
-                padding: "8px 10px", height: 36,
+                padding: "8px 10px", height: 38,
                 borderRadius: "var(--r-md)",
-                fontSize: "var(--font-sm)", fontWeight: 500,
+                fontSize: "var(--font-base)", fontWeight: 500,
                 color: "var(--text-secondary)",
                 background: "transparent", border: 0, width: "100%",
                 textAlign: "left", cursor: "pointer",

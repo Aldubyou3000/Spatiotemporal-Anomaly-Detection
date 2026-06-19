@@ -37,22 +37,27 @@ def _one(table_res) -> dict | None:
 
 
 def _signed_url(sb, bucket: str, path: str, expires: int = 3600) -> str:
-    """Generate a signed URL, handling all supabase-py v2 response shapes."""
+    """Generate a signed URL for a single path (kept for one-off use)."""
+    result = _signed_urls_batch(sb, bucket, [path], expires)
+    return result.get(path, "")
+
+
+def _signed_urls_batch(sb, bucket: str, paths: list[str], expires: int = 3600) -> dict[str, str]:
+    """Sign multiple storage paths in one HTTP call. Returns {path: signed_url}.
+    Falls back gracefully — missing entries return empty string."""
+    if not paths:
+        return {}
     try:
-        res = sb.storage.from_(bucket).create_signed_url(path, expires)
-        if isinstance(res, dict):
-            return (
-                res.get("signedURL") or res.get("signedUrl") or
-                res.get("signed_url") or ""
-            )
-        # Object with attribute (some supabase-py versions return a dataclass)
-        return (
-            getattr(res, "signed_url", None) or
-            getattr(res, "signedURL", None) or
-            getattr(res, "signedUrl", None) or ""
-        )
+        res = sb.storage.from_(bucket).create_signed_urls(paths, expires)
+        out: dict[str, str] = {}
+        for item in (res if isinstance(res, list) else []):
+            p = item.get("path", "")
+            url = item.get("signedURL") or item.get("signedUrl") or item.get("signed_url") or ""
+            if p:
+                out[p] = url
+        return out
     except Exception:
-        return ""
+        return {}
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -120,18 +125,52 @@ def mobile_me(request: Request, user: dict = Depends(require_technician_mobile))
 
 # ─── Tickets ──────────────────────────────────────────────────────────────────
 
+def _technician_ticket_ids(sb, user_id: str) -> list[str]:
+    """Return ticket_ids where the technician has an active (not removed) assignment."""
+    res = (
+        sb.table("ticket_technicians")
+        .select("ticket_id")
+        .eq("user_id", user_id)
+        .is_("removed_at", "null")
+        .execute()
+    )
+    return [r["ticket_id"] for r in (res.data or [])]
+
+
+def _assert_ticket_membership(sb, ticket_id: str, user_id: str) -> None:
+    """Raise 404 if the technician does not have an active assignment on this ticket."""
+    res = (
+        sb.table("ticket_technicians")
+        .select("ticket_id")
+        .eq("ticket_id", ticket_id)
+        .eq("user_id", user_id)
+        .is_("removed_at", "null")
+        .limit(1)
+        .execute()
+    )
+    if not (res.data or []):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+
+
+_TICKET_FIELDS = (
+    "id, ticket_number, title, description, station_id, status, priority, anomaly_zone, "
+    "anomaly_data, follow_up_count, follow_up_notes, cancelled_at, cancellation_reason, "
+    "created_at, assigned_at, completed_at, updated_at"
+)
+
+
 @router.get("/tickets")
 @limiter.limit("60/minute")
 def mobile_list_tickets(request: Request, user: dict = Depends(require_technician_mobile)):
     """Return all tickets assigned to the authenticated technician."""
     sb = get_supabase()
+    ticket_ids = _technician_ticket_ids(sb, user["id"])
+    if not ticket_ids:
+        return []
     res = (
         sb.table("tickets")
-        .select(
-            "id, title, description, station_id, status, priority, anomaly_zone, "
-            "anomaly_data, created_at, assigned_at, completed_at, updated_at"
-        )
-        .eq("technician_id", user["id"])
+        .select(_TICKET_FIELDS)
+        .in_("id", ticket_ids)
         .order("created_at", desc=True)
         .execute()
     )
@@ -141,21 +180,80 @@ def mobile_list_tickets(request: Request, user: dict = Depends(require_technicia
 @router.get("/tickets/{ticket_id}")
 @limiter.limit("60/minute")
 def mobile_get_ticket(request: Request, ticket_id: str, user: dict = Depends(require_technician_mobile)):
-    """Get a single ticket — only if it belongs to the technician."""
+    """Get a single ticket with all inspection report rounds — only if the technician is assigned."""
     sb = get_supabase()
+    _assert_ticket_membership(sb, ticket_id, user["id"])
     ticket = _one(
         sb.table("tickets")
-        .select(
-            "id, title, description, station_id, status, priority, anomaly_zone, "
-            "anomaly_data, created_at, assigned_at, completed_at, updated_at"
-        )
+        .select(_TICKET_FIELDS)
         .eq("id", ticket_id)
-        .eq("technician_id", user["id"])
         .limit(1)
         .execute()
     )
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+
+    # Attach all report rounds so the technician can reference prior visits.
+    # follow_up_notes is the analyst note that sent THAT round back — mirrors the
+    # web's prior-round history.
+    reports_res = (
+        sb.table("inspection_reports")
+        .select(
+            "id, round, is_active, submitted_at, notes, severity, root_cause, "
+            "corrective_action, issue_resolved, analyst_approved, analyst_notes, "
+            "follow_up_notes"
+        )
+        .eq("ticket_id", ticket_id)
+        .order("round", desc=False)
+        .execute()
+    )
+    reports = reports_res.data or []
+
+    # Fetch all photos for all report rounds, then sign every path in one batch
+    # call instead of N serial create_signed_url calls.
+    report_ids = [r["id"] for r in reports]
+    if report_ids:
+        photos_res = (
+            sb.table("inspection_photos")
+            .select("id, report_id, photo_url, uploaded_at")
+            .in_("report_id", report_ids)
+            .order("uploaded_at")
+            .execute()
+        )
+        bucket = "inspection-photos"
+        photo_rows = photos_res.data or []
+
+        # Resolve each row to its storage path (plain path or embedded in a URL).
+        storage_paths: list[str] = []
+        row_paths: dict[str, str] = {}  # photo row id → storage path
+        for row in photo_rows:
+            stored = row.get("photo_url") or ""
+            if stored.startswith("http"):
+                marker = f"/{bucket}/"
+                path = stored.split(marker)[1].split("?")[0] if marker in stored else None
+            else:
+                path = stored or None
+            if path:
+                storage_paths.append(path)
+                row_paths[row["id"]] = path
+
+        # One batch call instead of N serial calls.
+        signed = _signed_urls_batch(sb, bucket, storage_paths, 3600)
+
+        by_report: dict[str, list[dict]] = {rid: [] for rid in report_ids}
+        for row in photo_rows:
+            path = row_paths.get(row["id"])
+            url = signed.get(path, "") if path else ""
+            by_report.setdefault(row["report_id"], []).append(
+                {"id": row["id"], "photo_url": url or row.get("photo_url", "")}
+            )
+        for r in reports:
+            r["photos"] = by_report.get(r["id"], [])
+    else:
+        for r in reports:
+            r["photos"] = []
+
+    ticket["reports"] = reports
     return ticket
 
 
@@ -171,30 +269,38 @@ def mobile_update_ticket_status(
     body: TicketStatusUpdate,
     user: dict = Depends(require_technician_mobile),
 ):
-    """Update ticket status — technician can only set 'in-progress' or 'completed'."""
-    allowed = {"in-progress", "completed"}
-    if body.status not in allowed:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Status must be one of: {allowed}")
+    """Update ticket status — technician can only set 'in-progress'.
+    Report submission handles the pending_review transition automatically.
+    """
+    if body.status != "in-progress":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Technicians can only set status to 'in-progress'. Submit a report to advance to pending_review.",
+        )
 
     sb = get_supabase()
+    _assert_ticket_membership(sb, ticket_id, user["id"])
 
     existing = _one(
         sb.table("tickets")
-        .select("id, technician_id, status")
+        .select("id, status")
         .eq("id", ticket_id)
-        .eq("technician_id", user["id"])
         .limit(1)
         .execute()
     )
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
-    now = datetime.now(timezone.utc).isoformat()
-    patch = {"status": body.status, "updated_at": now}
-    if body.status == "completed":
-        patch["completed_at"] = now
+    # Allow transition from assigned or follow_up to in-progress
+    allowed_from = {"assigned", "follow_up"}
+    if existing["status"] not in allowed_from:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot set in-progress from '{existing['status']}' status",
+        )
 
-    sb.table("tickets").update(patch).eq("id", ticket_id).execute()
+    now = datetime.now(timezone.utc).isoformat()
+    sb.table("tickets").update({"status": "in-progress", "updated_at": now}).eq("id", ticket_id).execute()
 
     client_ip = request.client.host if request.client else "unknown"
     fwd = request.headers.get("X-Forwarded-For")
@@ -204,10 +310,10 @@ def mobile_update_ticket_status(
         actor_id=str(user["id"]),
         ticket_id=ticket_id,
         old_status=existing["status"],
-        new_status=body.status,
+        new_status="in-progress",
         ip=client_ip,
     )
-    return {"id": ticket_id, "status": body.status, "updated_at": now}
+    return {"id": ticket_id, "status": "in-progress", "updated_at": now}
 
 
 # ─── Reports ──────────────────────────────────────────────────────────────────
@@ -215,9 +321,10 @@ def mobile_update_ticket_status(
 class ReportSubmit(BaseModel):
     ticket_id: str
     notes: str
-    sensor_working: bool | None = None
     severity: str | None = None
     root_cause: str | None = None
+    corrective_action: str | None = None
+    issue_resolved: bool | None = None
 
 
 @router.post("/reports", status_code=status.HTTP_201_CREATED)
@@ -227,35 +334,55 @@ def mobile_submit_report(
     body: ReportSubmit,
     user: dict = Depends(require_technician_mobile),
 ):
-    """Submit an inspection report for a ticket owned by this technician."""
+    """Submit an inspection report for a ticket the technician is assigned to.
+
+    Idempotent for the active round: returns the existing active report if already submitted
+    (unless the ticket is in follow_up status, in which case a new round is always created).
+    """
     sb = get_supabase()
+    _assert_ticket_membership(sb, body.ticket_id, user["id"])
 
     ticket = _one(
         sb.table("tickets")
-        .select("id, technician_id, status")
+        .select("id, status")
         .eq("id", body.ticket_id)
-        .eq("technician_id", user["id"])
         .limit(1)
         .execute()
     )
     if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found or not assigned to you")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
     if body.severity and body.severity not in {"low", "medium", "high"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="severity must be low, medium, or high")
 
     now = datetime.now(timezone.utc).isoformat()
+    ticket_status = ticket["status"]
 
-    # Return existing report if one already exists for this ticket
-    existing_rows = (
+    # Idempotency: return active report if one exists AND ticket is not in follow_up
+    # (follow_up means analyst explicitly asked for a new visit, so always allow a new round)
+    if ticket_status != "follow_up":
+        active = _one(
+            sb.table("inspection_reports")
+            .select("id, ticket_id, submitted_at, round")
+            .eq("ticket_id", body.ticket_id)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+        if active:
+            return active
+
+    # Compute next round number
+    max_round_res = (
         sb.table("inspection_reports")
-        .select("id, ticket_id, submitted_at")
+        .select("round")
         .eq("ticket_id", body.ticket_id)
+        .order("round", desc=True)
         .limit(1)
         .execute()
     )
-    if existing_rows.data:
-        return existing_rows.data[0]
+    max_round = (max_round_res.data or [{}])[0].get("round", 0) if max_round_res.data else 0
+    next_round = max_round + 1
 
     try:
         report_res = (
@@ -264,22 +391,26 @@ def mobile_submit_report(
                 "ticket_id": body.ticket_id,
                 "technician_id": user["id"],
                 "notes": body.notes,
-                "sensor_working": body.sensor_working,
                 "severity": body.severity,
                 "root_cause": body.root_cause or None,
+                "corrective_action": body.corrective_action or None,
+                "issue_resolved": body.issue_resolved,
                 "submitted_at": now,
+                "round": next_round,
+                "is_active": True,
             })
-            .select("id, ticket_id, submitted_at")
+            .select("id, ticket_id, submitted_at, round")
             .execute()
         )
     except Exception as e:
         err = str(e)
         if "unique" in err.lower() or "duplicate" in err.lower():
-            # Race condition — another request inserted first
+            # Race condition — return whatever is now active
             fallback = _one(
                 sb.table("inspection_reports")
-                .select("id, ticket_id, submitted_at")
+                .select("id, ticket_id, submitted_at, round")
                 .eq("ticket_id", body.ticket_id)
+                .eq("is_active", True)
                 .limit(1)
                 .execute()
             )
@@ -290,7 +421,11 @@ def mobile_submit_report(
     if not report_res.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Report insert returned no data")
 
-    sb.table("tickets").update({"status": "completed", "completed_at": now, "updated_at": now}).eq("id", body.ticket_id).execute()
+    sb.table("tickets").update({
+        "status": "pending_review",
+        "completed_at": now,
+        "updated_at": now,
+    }).eq("id", body.ticket_id).execute()
 
     report_row = report_res.data[0]
     mob_ip = request.client.host if request.client else "unknown"
@@ -313,30 +448,60 @@ def mobile_get_report_id(
     ticket_id: str,
     user: dict = Depends(require_technician_mobile),
 ):
-    """Return the inspection report ID for a ticket (if one exists)."""
+    """Return the active inspection report for a ticket (if one exists)."""
     sb = get_supabase()
+    _assert_ticket_membership(sb, ticket_id, user["id"])
+
+    report = _one(
+        sb.table("inspection_reports")
+        .select(
+            "id, ticket_id, submitted_at, notes, severity, root_cause, corrective_action, issue_resolved, "
+            "analyst_approved, analyst_approved_at, analyst_notes, round, is_active"
+        )
+        .eq("ticket_id", ticket_id)
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+    )
+    return report  # None if no active report — frontend handles this
+
+
+@router.get("/tickets/{ticket_id}/follow-up-context")
+@limiter.limit("60/minute")
+def mobile_get_follow_up_context(
+    request: Request,
+    ticket_id: str,
+    user: dict = Depends(require_technician_mobile),
+):
+    """Return follow-up metadata for a ticket so the mobile report screen can show context."""
+    sb = get_supabase()
+    _assert_ticket_membership(sb, ticket_id, user["id"])
+
     ticket = _one(
         sb.table("tickets")
-        .select("id")
+        .select("follow_up_count, follow_up_notes")
         .eq("id", ticket_id)
-        .eq("technician_id", user["id"])
         .limit(1)
         .execute()
     )
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
-    report = _one(
+    # Return summary of all prior (inactive) reports as history
+    history_res = (
         sb.table("inspection_reports")
-        .select(
-            "id, ticket_id, submitted_at, notes, sensor_working, severity, root_cause, "
-            "analyst_approved, analyst_approved_at, analyst_notes"
-        )
+        .select("round, submitted_at, severity")
         .eq("ticket_id", ticket_id)
-        .limit(1)
+        .eq("is_active", False)
+        .order("round")
         .execute()
     )
-    return report  # None if no report yet — frontend handles this
+
+    return {
+        "follow_up_count": ticket.get("follow_up_count") or 0,
+        "follow_up_notes": ticket.get("follow_up_notes"),
+        "previous_reports": history_res.data or [],
+    }
 
 
 @router.get("/tickets/{ticket_id}/attachments")
@@ -348,16 +513,7 @@ def mobile_get_ticket_attachments(
 ):
     """Return CSV/file attachments for a ticket."""
     sb = get_supabase()
-    ticket = _one(
-        sb.table("tickets")
-        .select("id")
-        .eq("id", ticket_id)
-        .eq("technician_id", user["id"])
-        .limit(1)
-        .execute()
-    )
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    _assert_ticket_membership(sb, ticket_id, user["id"])
 
     res = (
         sb.table("ticket_attachments")
@@ -368,16 +524,20 @@ def mobile_get_ticket_attachments(
     )
     rows = res.data or []
 
+    bucket = "ticket-attachments"
+    marker = f"/{bucket}/"
+    paths = [
+        row["file_url"].split(marker)[1].split("?")[0]
+        for row in rows
+        if marker in row["file_url"]
+    ]
+    signed = _signed_urls_batch(sb, bucket, paths, 3600)
+
     result = []
     for row in rows:
-        bucket = "ticket-attachments"
-        marker = f"/{bucket}/"
         path = row["file_url"].split(marker)[1].split("?")[0] if marker in row["file_url"] else None
-        if path:
-            fresh = _signed_url(sb, bucket, path, 3600)
-            if fresh:
-                row = {**row, "file_url": fresh}
-        result.append(row)
+        fresh = signed.get(path, "") if path else ""
+        result.append({**row, "file_url": fresh or row["file_url"]})
     return result
 
 
@@ -390,16 +550,17 @@ def mobile_get_report_photos(
 ):
     """Return signed photo URLs for an inspection report."""
     sb = get_supabase()
+    # Verify report exists and technician is assigned to the ticket
     report = _one(
         sb.table("inspection_reports")
-        .select("id, technician_id")
+        .select("id, ticket_id")
         .eq("id", report_id)
-        .eq("technician_id", user["id"])
         .limit(1)
         .execute()
     )
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    _assert_ticket_membership(sb, report["ticket_id"], user["id"])
 
     res = (
         sb.table("inspection_photos")
@@ -411,20 +572,26 @@ def mobile_get_report_photos(
     rows = res.data or []
 
     bucket = "inspection-photos"
+    marker = f"/{bucket}/"
+
+    # Resolve each row to its storage path.
+    row_paths: dict[str, str] = {}
+    for row in rows:
+        stored = row["photo_url"] or ""
+        if stored.startswith("http"):
+            path = stored.split(marker)[1].split("?")[0] if marker in stored else None
+        else:
+            path = stored or None
+        if path:
+            row_paths[row["id"]] = path
+
+    signed = _signed_urls_batch(sb, bucket, list(row_paths.values()), 3600)
+
     result = []
     for row in rows:
-        stored = row["photo_url"]
-        # stored is either a plain path (new) or a full signed URL (legacy rows)
-        if stored.startswith("http"):
-            marker = f"/{bucket}/"
-            storage_path = stored.split(marker)[1].split("?")[0] if marker in stored else None
-        else:
-            storage_path = stored or None
-        if storage_path:
-            fresh = _signed_url(sb, bucket, storage_path, 3600)
-            if fresh:
-                row = {**row, "photo_url": fresh}
-        result.append(row)
+        path = row_paths.get(row["id"])
+        fresh = signed.get(path, "") if path else ""
+        result.append({**row, "photo_url": fresh or row["photo_url"]})
     return result
 
 
@@ -445,14 +612,14 @@ async def mobile_upload_photo(
 
     report = _one(
         sb.table("inspection_reports")
-        .select("id, technician_id")
+        .select("id, ticket_id")
         .eq("id", report_id)
-        .eq("technician_id", user["id"])
         .limit(1)
         .execute()
     )
     if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found or not yours")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    _assert_ticket_membership(sb, report["ticket_id"], user["id"])
 
     allowed_types = {"image/jpeg", "image/png", "image/webp", "image/heic"}
     content_type = photo.content_type or "image/jpeg"
@@ -510,7 +677,7 @@ def mobile_download_ticket_pdf(
 ):
     """Generate and stream a PDF report for a ticket assigned to this technician."""
     sb = get_supabase()
-
+    _assert_ticket_membership(sb, ticket_id, user["id"])
     ticket = _one(
         sb.table("tickets")
         .select(
@@ -518,12 +685,11 @@ def mobile_download_ticket_pdf(
             "analyst_id, technician_id, created_at, assigned_at, completed_at, verified_at, updated_at"
         )
         .eq("id", ticket_id)
-        .eq("technician_id", user["id"])
         .limit(1)
         .execute()
     )
     if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found or not assigned to you")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -650,3 +816,91 @@ def mobile_download_ticket_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ─── Activity feed ─────────────────────────────────────────────────────────────
+# A technician-scoped, sanitised view of the audit log: every lifecycle event on
+# tickets the technician is (or was) assigned to. The raw audit_log holds IPs,
+# user agents, chain hashes and other users' identities — NONE of that crosses
+# this boundary. We emit only: event, the related ticket (id/number/title for
+# tap-to-open), a coarse actor flag (you | analyst | system), and a timestamp.
+
+# Audit events that belong on a technician's activity feed. Auth, security,
+# pipeline and account noise are intentionally excluded.
+_ACTIVITY_EVENTS = (
+    "ticket_created",
+    "ticket_status_changed",
+    "ticket_updated",
+    "technician_assigned",
+    "report_submitted",
+    "report_approved",
+    "follow_up_requested",
+    "ticket_cancelled",
+    "file_uploaded",
+    "photo_uploaded",
+)
+
+
+@router.get("/activity")
+@limiter.limit("60/minute")
+def mobile_activity(request: Request, user: dict = Depends(require_technician_mobile)):
+    """Sanitised, technician-scoped audit feed for tickets assigned to this user."""
+    sb = get_supabase()
+    uid = user["id"]
+
+    ticket_ids = _technician_ticket_ids(sb, uid)
+    if not ticket_ids:
+        return []
+    ticket_id_set = set(ticket_ids)
+
+    # Map ticket_id → {number, title} for human-readable rows (one round-trip).
+    tickets_res = (
+        sb.table("tickets")
+        .select("id, ticket_number, title")
+        .in_("id", ticket_ids)
+        .execute()
+    )
+    ticket_meta = {
+        t["id"]: {"number": t.get("ticket_number"), "title": t.get("title")}
+        for t in (tickets_res.data or [])
+    }
+
+    # Pull recent audit rows for the relevant events. We over-fetch a little and
+    # filter to this technician's tickets in Python, because report events store
+    # the ticket linkage in meta.ticket_id rather than entity_id.
+    rows = (
+        sb.table("audit_log")
+        .select("id, created_at, event, user_id, entity_type, entity_id, meta")
+        .in_("event", list(_ACTIVITY_EVENTS))
+        .order("created_at", desc=True)
+        .limit(300)
+        .execute()
+    ).data or []
+
+    out: list[dict] = []
+    for r in rows:
+        meta = r.get("meta") or {}
+        # Resolve which ticket this row is about.
+        if r.get("entity_type") == "ticket":
+            tid = r.get("entity_id")
+        else:  # inspection_report / file / photo events carry ticket_id in meta
+            tid = meta.get("ticket_id")
+
+        if tid not in ticket_id_set:
+            continue  # not this technician's ticket → never surface it
+
+        tm = ticket_meta.get(tid, {})
+        # Coarse actor flag only — never expose another user's identity.
+        actor = "you" if r.get("user_id") == uid else "analyst"
+
+        out.append({
+            "id": r["id"],
+            "event": r["event"],
+            "ticket_id": tid,
+            "ticket_number": tm.get("number"),
+            "ticket_title": tm.get("title"),
+            "actor": actor,
+            "created_at": r["created_at"],
+        })
+
+    return out

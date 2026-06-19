@@ -1,7 +1,7 @@
 import { PropsWithChildren } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
-import { radius, spacing } from '@/constants/theme';
+import { elevation, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
 type CardProps = PropsWithChildren<{
@@ -15,16 +15,16 @@ type CardProps = PropsWithChildren<{
 export default function Card({ children, style, compact = false, transparent = false }: CardProps) {
   const theme = useTheme();
 
+  // Two-tone: a white surface that lifts off the grey screen backdrop with a
+  // soft diffused shadow (no border). `transparent` opts out entirely.
   return (
     <View
       style={[
         styles.card,
-        {
-          backgroundColor: transparent ? 'transparent' : theme.surface,
-          borderColor: theme.border,
-          borderWidth: transparent ? 0 : StyleSheet.hairlineWidth,
-          padding: compact ? spacing.sm : spacing.md,
-        },
+        transparent
+          ? { backgroundColor: 'transparent' }
+          : { ...elevation.md, backgroundColor: theme.surface, shadowColor: theme.shadow },
+        { padding: compact ? spacing.sm : spacing.md },
         style,
       ]}
     >
@@ -36,6 +36,6 @@ export default function Card({ children, style, compact = false, transparent = f
 const styles = StyleSheet.create({
   card: {
     width: '100%',
-    borderRadius: radius.lg,
+    borderRadius: radius.lg,   // 16
   },
 });

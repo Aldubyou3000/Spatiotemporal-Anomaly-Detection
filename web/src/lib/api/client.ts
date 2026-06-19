@@ -6,27 +6,44 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
-/**
- * Read the csrf_token cookie value (set by the backend, readable by JS — not httpOnly).
- * Returns an empty string if the cookie is absent (e.g., not yet authenticated).
- */
 function getCsrfToken(): string {
   if (typeof document === "undefined") return "";
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-/**
- * Attach X-CSRF-Token header to all state-mutating requests.
- * The backend validates that the header value matches the httpOnly csrf_token cookie
- * (double-submit pattern).  A cross-site attacker cannot read the cookie, so they
- * cannot supply the correct header.
- */
 function withCsrf(method: string, headers: HeadersInit): HeadersInit {
   if (!MUTATING_METHODS.has(method.toUpperCase())) return headers;
   const token = getCsrfToken();
   if (!token) return headers;
   return { ...headers as Record<string, string>, "X-CSRF-Token": token };
+}
+
+// Single in-flight refresh promise shared across all concurrent requests.
+// When multiple requests get a 401 simultaneously, only one refresh call is
+// made; all callers await the same promise and retry with the rotated cookies.
+let _refreshPromise: Promise<boolean> | null = null;
+
+async function _doRefresh(): Promise<boolean> {
+  try {
+    const res = await fetch(new URL("/api/auth/refresh", BASE_URL).toString(), {
+      method: "POST",
+      credentials: "include",
+      headers: withCsrf("POST", {}),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    _refreshPromise = null;
+  }
+}
+
+function _refresh(): Promise<boolean> {
+  if (!_refreshPromise) {
+    _refreshPromise = _doRefresh();
+  }
+  return _refreshPromise;
 }
 
 async function request<T>(path: string, init: RequestInit, params?: RequestOptions["params"]): Promise<T> {
@@ -44,18 +61,9 @@ async function request<T>(path: string, init: RequestInit, params?: RequestOptio
   const res = await fetch(url.toString(), enrichedInit);
 
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
-    // Access token expired — attempt silent refresh
-    const refreshRes = await fetch(
-      new URL("/api/auth/refresh", BASE_URL).toString(),
-      {
-        method: "POST",
-        credentials: "include",
-        // Refresh also needs the CSRF token (the cookie is still present)
-        headers: withCsrf("POST", {}),
-      },
-    );
-    if (refreshRes.ok) {
-      // Re-attach a fresh CSRF token (the refresh response rotated it)
+    const refreshed = await _refresh();
+    if (refreshed) {
+      // Re-read CSRF after rotation (the refresh endpoint rotated it)
       const retryHeaders = withCsrf(method, init.headers ?? {});
       const retryRes = await fetch(url.toString(), {
         ...init,

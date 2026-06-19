@@ -66,12 +66,15 @@ def verify_supabase_token(token: str, jwt_secret: str, supabase_url: str | None 
 # ─── Session fingerprinting ───────────────────────────────────────────────────
 
 def make_session_fingerprint(ip: str, user_agent: str, secret: str) -> str:
-    """Return an opaque HMAC fingerprint for a (IP, UA) pair.
+    """Return an opaque HMAC fingerprint bound to User-Agent only.
 
-    Stored in the `session_fp` cookie (httpOnly, same attributes as
-    access_token) and compared on every protected request.
+    IP is intentionally excluded: mobile users change IP constantly (cellular
+    handoff, VPN, NAT) so binding to IP causes spurious session invalidations.
+    UA is stable for the lifetime of a browser/app install and is sufficient
+    to detect the most common session-hijacking patterns (cross-device theft).
+    IP is still logged at login time for audit purposes.
     """
-    raw = f"{ip}:{user_agent}"
+    raw = f"ua:{user_agent}"
     return hmac.new(secret.encode(), raw.encode(), hashlib.sha256).hexdigest()
 
 

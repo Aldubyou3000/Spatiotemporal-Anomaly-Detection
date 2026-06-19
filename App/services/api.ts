@@ -15,7 +15,10 @@ import { Platform } from 'react-native';
 if (!process.env.EXPO_PUBLIC_API_URL) {
   console.warn('[api] EXPO_PUBLIC_API_URL is not set — defaulting to http://localhost:8000');
 }
-const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+
+/** URL of the technician real-time SSE stream (content-free nudges, Bearer auth). */
+export const EVENTS_URL = `${API_URL}/api/mobile/events`;
 
 const TOKEN_KEY   = 'app_access_token';
 const REFRESH_KEY = 'app_refresh_token';
@@ -58,6 +61,21 @@ export async function clearTokens(): Promise<void> {
 
 // ─── Base fetch wrapper ───────────────────────────────────────────────────────
 
+/**
+ * Error thrown by `request()` for any non-OK HTTP response. Carries the status
+ * so callers can tell a genuine 404 (resource really gone) apart from a
+ * transient 5xx / network failure — critical for not flipping a valid ticket to
+ * "not found" on a momentary blip.
+ */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 let isRefreshing = false;
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -88,14 +106,14 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
       const body = await res.json();
       detail = body?.detail ?? detail;
     } catch { /* ignore parse errors */ }
-    throw new Error(detail);
+    throw new ApiError(res.status, detail);
   }
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
-async function tryRefresh(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
   const refresh = await getRefreshToken();
   if (!refresh) return false;
   try {
@@ -146,8 +164,12 @@ export async function apiLogin(credential: string, password: string): Promise<Us
 }
 
 export async function apiLogout(): Promise<void> {
+  // Always clear local tokens — even if the server call fails or the session
+  // is already expired, the user must be able to log out from the app.
   try {
     await request('/api/mobile/auth/logout', { method: 'POST' });
+  } catch {
+    // Intentionally swallowed — expired/invalid token is not an error for logout
   } finally {
     await clearTokens();
   }
@@ -165,12 +187,19 @@ export async function apiGetMe(): Promise<UserProfile | null> {
 
 export interface MaintenanceTicket {
   ticketId: string;
+  // Clean, unmashed fields (mirror the web row). stationName/location/etc. are
+  // kept below for backward compatibility with report.tsx + the PDF flow.
+  ticketNumber: number;
+  stationId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
   stationName: string;
   location: string;
   coordinates: string;
   flaggedAnomaly: string;
   scheduledTime: string;
-  status: 'Pending' | 'Completed';
+  status: 'Pending' | 'Completed' | 'Cancelled';
   dbStatus: string;
   priority: 'low' | 'medium' | 'high' | null;
   anomalyZone: string | null;
@@ -179,10 +208,20 @@ export interface MaintenanceTicket {
   imageUri?: string | null;
   _dbId?: string;
   _technicianId?: string;
+  // Follow-up fields
+  isFollowUp?: boolean;
+  followUpCount?: number;
+  followUpNotes?: string | null;
+  // Cancellation fields
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
+  // All report rounds (populated by detail endpoint)
+  reports?: TicketReportSummary[];
 }
 
 interface ApiTicket {
   id: string;
+  ticket_number: number;
   station_id: string;
   status: string;
   priority: 'low' | 'medium' | 'high' | null;
@@ -193,51 +232,108 @@ interface ApiTicket {
   created_at: string;
   assigned_at: string | null;
   completed_at: string | null;
+  follow_up_count?: number;
+  follow_up_notes?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
+  reports?: TicketReportSummary[];
 }
 
 function mapTicket(row: ApiTicket): MaintenanceTicket {
-  const isPending = ['created', 'assigned', 'in-progress'].includes(row.status);
+  const isPending = ['created', 'assigned', 'in-progress', 'follow_up'].includes(row.status);
+  const isCancelled = row.status === 'cancelled';
   return {
-    ticketId: row.id.slice(0, 8).toUpperCase(),
+    ticketId: String(row.ticket_number),
+    ticketNumber: row.ticket_number,
+    stationId: row.station_id,
+    title: row.title,
+    createdAt: row.created_at,
+    // Mobile API has no true updated_at — best-available recency proxy.
+    updatedAt: row.completed_at ?? row.assigned_at ?? row.created_at,
     stationName: `${row.station_id} — ${row.title}`,
     location: row.station_id,
     coordinates: (row.anomaly_data as { coordinates?: string } | null)?.coordinates ?? '',
     flaggedAnomaly: row.description ?? row.title,
     scheduledTime: row.assigned_at ?? row.created_at,
-    status: isPending ? 'Pending' : 'Completed',
+    status: isCancelled ? 'Cancelled' : isPending ? 'Pending' : 'Completed',
     dbStatus: row.status,
     priority: row.priority ?? null,
     anomalyZone: row.anomaly_zone ?? null,
     verificationStatus:
       row.status === 'verified' ? 'Approved by Analyst'
-      : row.status === 'completed' ? 'Pending Verification'
+      : row.status === 'pending_review' ? 'Pending Verification'
       : undefined,
     _dbId: row.id,
+    isFollowUp: row.status === 'follow_up',
+    followUpCount: row.follow_up_count ?? 0,
+    followUpNotes: row.follow_up_notes ?? null,
+    cancellationReason: row.cancellation_reason ?? null,
+    cancelledAt: row.cancelled_at ?? null,
+    reports: row.reports ?? [],
   };
 }
 
-export async function fetchActiveTickets(): Promise<MaintenanceTicket[]> {
+/**
+ * All of the technician's tickets (every status). The endpoint is already
+ * per-technician filtered server-side; the dashboard buckets them into the
+ * 5 status tabs client-side. Replaces the old active/in-progress/history
+ * fetchers, which mis-routed pending_review into "history".
+ */
+export async function fetchAllTickets(): Promise<MaintenanceTicket[]> {
   const all = await request<ApiTicket[]>('/api/mobile/tickets');
-  return all.filter((t) => ['created', 'assigned'].includes(t.status)).map(mapTicket);
-}
-
-export async function fetchInProgressTickets(): Promise<MaintenanceTicket[]> {
-  const all = await request<ApiTicket[]>('/api/mobile/tickets');
-  return all.filter((t) => t.status === 'in-progress').map(mapTicket);
-}
-
-export async function fetchTicketHistory(): Promise<MaintenanceTicket[]> {
-  const all = await request<ApiTicket[]>('/api/mobile/tickets');
-  return all.filter((t) => ['completed', 'verified'].includes(t.status)).map(mapTicket);
+  return all.map(mapTicket);
 }
 
 export async function getTicketById(ticketId: string): Promise<MaintenanceTicket | null> {
   try {
     const ticket = await request<ApiTicket>(`/api/mobile/tickets/${ticketId}`);
     return mapTicket(ticket);
-  } catch {
-    return null;
+  } catch (err) {
+    // Only a genuine 404 means the ticket is gone → return null so the screen
+    // shows "not found". Any other failure (network blip, 401, 5xx) is transient:
+    // re-throw so TanStack Query keeps the last-good/seed data and retries,
+    // instead of silently replacing a valid ticket with null.
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
   }
+}
+
+// ─── Activity feed ─────────────────────────────────────────────────────────
+// A sanitised, technician-scoped slice of the server audit log. The backend
+// strips IP / user-agent / other-user identity before this ever reaches us.
+
+export interface ActivityItem {
+  id: number;
+  event: string;                 // audit event name, e.g. 'report_approved'
+  ticketId: string;              // db UUID — used to open the ticket detail
+  ticketNumber: number | null;   // human ticket number (TKT-N)
+  ticketTitle: string | null;
+  actor: 'you' | 'analyst' | 'system';
+  createdAt: string;             // ISO timestamp
+}
+
+interface ApiActivityItem {
+  id: number;
+  event: string;
+  ticket_id: string;
+  ticket_number: number | null;
+  ticket_title: string | null;
+  actor: 'you' | 'analyst' | 'system';
+  created_at: string;
+}
+
+/** Recent lifecycle events across all of the technician's tickets, newest first. */
+export async function fetchActivity(): Promise<ActivityItem[]> {
+  const rows = await request<ApiActivityItem[]>('/api/mobile/activity');
+  return rows.map((r) => ({
+    id: r.id,
+    event: r.event,
+    ticketId: r.ticket_id,
+    ticketNumber: r.ticket_number,
+    ticketTitle: r.ticket_title,
+    actor: r.actor,
+    createdAt: r.created_at,
+  }));
 }
 
 export async function updateTicketStatus(dbTicketId: string, ticketStatus: 'in-progress'): Promise<void> {
@@ -304,9 +400,10 @@ export async function downloadTicketPdf(dbTicketId: string, fileName: string): P
 export async function submitInspectionReport(
   dbTicketId: string,
   notes: string,
-  sensorWorking: boolean | null,
   severity: 'low' | 'medium' | 'high' | null,
   rootCause: string | null,
+  correctiveAction: string | null,
+  issueResolved: boolean | null,
 ): Promise<{ success: true; reportId: string; ticketId: string; submittedAt: string }> {
   const data = await request<{ id: string; ticket_id: string; submitted_at: string }>(
     '/api/mobile/reports',
@@ -315,13 +412,19 @@ export async function submitInspectionReport(
       body: JSON.stringify({
         ticket_id: dbTicketId,
         notes,
-        sensor_working: sensorWorking,
         severity,
         root_cause: rootCause || null,
+        corrective_action: correctiveAction || null,
+        issue_resolved: issueResolved,
       }),
     },
   );
   return { success: true, reportId: data.id, ticketId: data.ticket_id, submittedAt: data.submitted_at };
+}
+
+export interface ReportPhoto {
+  id: string;
+  photo_url: string;
 }
 
 export interface TicketReportSummary {
@@ -329,12 +432,19 @@ export interface TicketReportSummary {
   ticket_id: string;
   submitted_at: string;
   notes: string | null;
-  sensor_working: boolean | null;
   severity: 'low' | 'medium' | 'high' | null;
   root_cause: string | null;
+  corrective_action: string | null;
+  issue_resolved: boolean | null;
   analyst_approved: boolean;
   analyst_approved_at: string | null;
   analyst_notes: string | null;
+  /** Analyst note that sent THIS round back (mirrors web PriorRound.followUpNotes). */
+  follow_up_notes?: string | null;
+  /** Signed photo URLs for this round (populated by the detail endpoint). */
+  photos?: ReportPhoto[];
+  round?: number;
+  is_active?: boolean;
 }
 
 export async function fetchReportForTicket(ticketId: string): Promise<TicketReportSummary | null> {
@@ -345,12 +455,6 @@ export async function fetchReportForTicket(ticketId: string): Promise<TicketRepo
   } catch {
     return null;
   }
-}
-
-/** @deprecated use fetchReportForTicket */
-export async function fetchReportIdForTicket(ticketId: string): Promise<string | null> {
-  const report = await fetchReportForTicket(ticketId);
-  return report?.id ?? null;
 }
 
 export interface TicketAttachment {

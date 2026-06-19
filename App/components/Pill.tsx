@@ -1,7 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View, ViewStyle, StyleProp } from 'react-native';
 
 import { radius, spacing, typography } from '@/constants/theme';
+import Icon, { type IconName } from './Icon';
 import { Text } from './Themed';
 
 type PillProps = {
@@ -12,7 +12,7 @@ type PillProps = {
   /** Show a colored dot to the left of the label. */
   dot?: boolean;
   /** Show a vector icon to the left of the label. */
-  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  icon?: IconName;
   /** Outline pill instead of filled. */
   outline?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -36,7 +36,7 @@ export default function Pill({
       ]}
     >
       {dot ? <View style={[styles.dot, { backgroundColor: color }]} /> : null}
-      {icon ? <Ionicons name={icon} size={11} color={color} style={{ marginRight: 4 }} /> : null}
+      {icon ? <Icon name={icon} size={11} color={color} style={{ marginRight: 4 }} /> : null}
       <Text style={[styles.label, { color }]} numberOfLines={1}>
         {label}
       </Text>

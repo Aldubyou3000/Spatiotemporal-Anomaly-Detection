@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useAuditLogs, useAuditStats } from "@/hooks/useAuditLogs";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -9,7 +10,6 @@ import {
   Download,
   LogOut,
   Play,
-  Plus,
   RefreshCw,
   Search,
   Shield,
@@ -374,51 +374,15 @@ const EVENT_OPTIONS = [
 ];
 
 export default function AuditPage() {
-  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
-  const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState<AuditStatEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<AuditFilters>({});
   const [offset, setOffset] = useState(0);
   const [query, setQuery] = useState("");
   const [eventFilter, setEventFilter] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState("");
 
-  const fetchLogs = useCallback(async (f: AuditFilters, off: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await auditApi.list(f, PAGE_SIZE, off);
-      setEntries(data.items);
-      setTotal(data.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load audit logs.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchStats = useCallback(async () => {
-    setStatsLoading(true);
-    try {
-      const data = await auditApi.stats();
-      setStats(data.slice(0, 6));
-    } catch {
-      // non-critical
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchLogs(filters, offset);
-  }, [fetchLogs, filters, offset]);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+  const { entries, total, isLoading: loading, error: fetchError, refresh } = useAuditLogs(filters, PAGE_SIZE, offset);
+  const { stats, isLoading: statsLoading } = useAuditStats();
+  const error = fetchError?.message ?? null;
 
   function applyFilters(event: string, outcome: string, ip: string) {
     const f: AuditFilters = {};
@@ -490,32 +454,10 @@ export default function AuditPage() {
         description={`${total.toLocaleString()} events recorded · append-only, SHA-256 chain-hashed`}
         live
         actions={
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Button size="sm" variant="secondary" onClick={handleExport}>
-              <Download size={13} strokeWidth={2.2} />
-              Export
-            </Button>
-            <button
-              type="button"
-              onClick={() => fetchLogs(filters, offset)}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "var(--r-md)",
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "var(--text-secondary)",
-                display: "grid",
-                placeItems: "center",
-                cursor: "pointer",
-                transition: "background 0.12s ease",
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
-            >
-              <RefreshCw size={13} strokeWidth={2.2} style={{ animation: loading ? "spin 700ms linear infinite" : undefined }} />
-            </button>
-          </div>
+          <Button size="sm" variant="secondary" onClick={handleExport}>
+            <Download size={13} strokeWidth={2.2} />
+            Export
+          </Button>
         }
       />
 
@@ -640,24 +582,8 @@ export default function AuditPage() {
                 <button
                   type="button"
                   onClick={handleReset}
-                  style={{
-                    height: 30,
-                    padding: "0 8px",
-                    borderRadius: "var(--r-md)",
-                    border: "1px solid rgba(220,38,38,0.25)",
-                    background: "transparent",
-                    color: "var(--danger)",
-                    fontSize: "var(--font-xs)",
-                    fontWeight: 600,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    transition: "background 0.12s ease",
-                  }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--danger-soft)")}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+                  className="export-btn"
+                  style={{ height: 30, color: "var(--danger)", border: "1px solid rgba(220,38,38,0.25)", fontWeight: 600, gap: 4 }}
                 >
                   <X size={11} strokeWidth={2.4} />
                   Reset
@@ -707,7 +633,7 @@ export default function AuditPage() {
               <AlertTriangle size={20} style={{ color: "var(--danger)" }} strokeWidth={2} />
               <p style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", margin: 0 }}>Failed to load</p>
               <p style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", margin: 0 }}>{error}</p>
-              <Button size="sm" variant="secondary" onClick={() => fetchLogs(filters, offset)} style={{ marginTop: 8 }}>
+              <Button size="sm" variant="secondary" onClick={() => refresh()} style={{ marginTop: 8 }}>
                 Retry
               </Button>
             </div>
@@ -753,22 +679,8 @@ export default function AuditPage() {
                       type="button"
                       disabled={disabled}
                       onClick={() => setOffset(label === "Prev" ? Math.max(0, offset - PAGE_SIZE) : offset + PAGE_SIZE)}
-                      style={{
-                        height: 26,
-                        padding: "0 10px",
-                        borderRadius: "var(--r-md)",
-                        border: "1px solid var(--border)",
-                        background: "transparent",
-                        color: disabled ? "var(--text-muted)" : "var(--text-secondary)",
-                        fontSize: "var(--font-xs)",
-                        fontWeight: 600,
-                        cursor: disabled ? "not-allowed" : "pointer",
-                        opacity: disabled ? 0.4 : 1,
-                        fontFamily: "inherit",
-                        transition: "background 0.1s ease",
-                      }}
-                      onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                      className="export-btn"
+                      style={{ height: 26, fontWeight: 600, opacity: disabled ? 0.4 : 1 }}
                     >
                       {label}
                     </button>

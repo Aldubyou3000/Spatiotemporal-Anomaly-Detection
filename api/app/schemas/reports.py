@@ -18,6 +18,7 @@ class ReportTicketSummary(BaseModel):
     title: str
     station_id: str
     anomaly_zone: str | None
+    status: str | None = None
 
 
 class InspectionReport(BaseModel):
@@ -27,16 +28,20 @@ class InspectionReport(BaseModel):
     technician_id: str
     technician: ReportTechnicianSummary | None
     notes: str | None
-    sensor_working: bool | None
     severity: str | None
     root_cause: str | None
+    corrective_action: str | None = None
+    issue_resolved: bool | None = None
     submitted_at: str | None
     analyst_approved: bool
     analyst_approved_at: str | None
     analyst_notes: str | None
+    round: int = 1
+    is_active: bool = True
     created_at: str
 
 
 class InspectionReportListResponse(BaseModel):
     pending: list[InspectionReport]
+    follow_up: list[InspectionReport]
     approved: list[InspectionReport]

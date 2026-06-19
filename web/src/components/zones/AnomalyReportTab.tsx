@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, MapPin, Plus, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { StationChart } from "./StationChart";
-import type { ProcessResult, StationAnomalySummary } from "@/types/zones";
+import type { ProcessResult } from "@/types/zones";
 
 interface AnomalyReportTabProps {
   result: ProcessResult;
@@ -66,7 +66,6 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
   const avgRainfall = allRainfalls.length > 0
     ? allRainfalls.reduce((a, b) => a + b, 0) / allRainfalls.length
     : 0;
-  const maxRainfall = allRainfalls.length > 0 ? Math.max(...allRainfalls) : 0;
 
   const anomalyRainfalls = selectedStation?.events.map((e) => e.rainfall) ?? [];
   const avgAnomalyRainfall = anomalyRainfalls.length > 0

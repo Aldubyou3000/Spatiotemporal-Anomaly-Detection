@@ -14,14 +14,26 @@ from slowapi.util import get_remote_address
 from ..core.config import settings
 from ..core.dependencies import _client_ip, get_supabase, require_analyst
 from ..services.audit_service import audit
-from ..schemas.tickets import TicketCreate, TicketDetail, TicketListResponse, TicketUpdate
+from ..schemas.tickets import (
+    CancelRequest,
+    FollowUpRequest,
+    TechnicianAssignRequest,
+    TicketCreate,
+    TicketDetail,
+    TicketListResponse,
+    TicketUpdate,
+)
 from .mobile import _signed_url
 
 from ..services.tickets_service import (
+    assign_technicians,
+    cancel_ticket,
     create_ticket,
     get_ticket,
     list_technicians,
     list_tickets,
+    remove_technician,
+    request_follow_up,
     update_ticket,
 )
 
@@ -37,7 +49,7 @@ def list_tickets_endpoint(
     priority: str | None = Query(None),
     station_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=100_000),
     _user: dict = Depends(require_analyst),
 ):
     sb = get_supabase()
@@ -48,10 +60,12 @@ def list_tickets_endpoint(
 @limiter.limit("60/minute")
 def list_technicians_endpoint(
     request: Request,
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=10_000),
     _user: dict = Depends(require_analyst),
 ):
     sb = get_supabase()
-    return list_technicians(sb)
+    return list_technicians(sb, limit=limit, offset=offset)
 
 
 @router.post("", response_model=TicketDetail, status_code=status.HTTP_201_CREATED)
@@ -106,6 +120,90 @@ def update_ticket_endpoint(
         ticket_id=ticket_id,
         old=old_snapshot,
         new=new_snapshot,
+        ip=_client_ip(request),
+    )
+    return ticket
+
+
+@router.post("/{ticket_id}/technicians", response_model=TicketDetail)
+@limiter.limit("30/minute")
+def assign_technicians_endpoint(
+    request: Request,
+    ticket_id: str,
+    body: TechnicianAssignRequest,
+    user: dict = Depends(require_analyst),
+):
+    sb = get_supabase()
+    ticket = assign_technicians(sb, ticket_id, body.technician_ids, str(user["id"]))
+    all_ids = [t["id"] for t in ticket.get("technicians", [])]
+    audit.technician_assigned(
+        actor_id=str(user["id"]),
+        ticket_id=ticket_id,
+        added_ids=body.technician_ids,
+        all_ids=all_ids,
+        ip=_client_ip(request),
+        reason=body.reason,
+    )
+    return ticket
+
+
+@router.delete("/{ticket_id}/technicians/{user_id}", response_model=TicketDetail)
+@limiter.limit("30/minute")
+def remove_technician_endpoint(
+    request: Request,
+    ticket_id: str,
+    user_id: str,
+    reason: str | None = Query(None, max_length=512),
+    user: dict = Depends(require_analyst),
+):
+    sb = get_supabase()
+    ticket = remove_technician(sb, ticket_id, user_id, removed_by=str(user["id"]))
+    remaining_ids = [t["id"] for t in ticket.get("technicians", [])]
+    clean_reason = reason.strip() if reason and reason.strip() else None
+    audit.technician_removed(
+        actor_id=str(user["id"]),
+        ticket_id=ticket_id,
+        removed_id=user_id,
+        remaining_ids=remaining_ids,
+        ip=_client_ip(request),
+        reason=clean_reason,
+    )
+    return ticket
+
+
+@router.post("/{ticket_id}/follow-up", response_model=TicketDetail)
+@limiter.limit("20/minute")
+def request_follow_up_endpoint(
+    request: Request,
+    ticket_id: str,
+    body: FollowUpRequest,
+    user: dict = Depends(require_analyst),
+):
+    sb = get_supabase()
+    ticket = request_follow_up(sb, ticket_id, body.follow_up_notes, str(user["id"]))
+    audit.follow_up_requested(
+        actor_id=str(user["id"]),
+        ticket_id=ticket_id,
+        notes=body.follow_up_notes,
+        ip=_client_ip(request),
+    )
+    return ticket
+
+
+@router.post("/{ticket_id}/cancel", response_model=TicketDetail)
+@limiter.limit("20/minute")
+def cancel_ticket_endpoint(
+    request: Request,
+    ticket_id: str,
+    body: CancelRequest,
+    user: dict = Depends(require_analyst),
+):
+    sb = get_supabase()
+    ticket = cancel_ticket(sb, ticket_id, body.reason)
+    audit.ticket_cancelled(
+        actor_id=str(user["id"]),
+        ticket_id=ticket_id,
+        reason=body.reason,
         ip=_client_ip(request),
     )
     return ticket
@@ -206,6 +304,40 @@ def _fmt_date(val: str | None) -> str:
         return val
 
 
+def _sign_inspection_photos(sb, rows: list[dict]) -> dict[str, list[dict]]:
+    """Batch-fetch and sign photos for many report rounds in one DB round-trip.
+
+    Returns a map of report_id -> [{id, photo_url}] with fresh signed URLs.
+    Avoids an N+1 query when a ticket has multiple inspection rounds.
+    """
+    report_ids = [r["id"] for r in rows]
+    if not report_ids:
+        return {}
+
+    photo_res = (
+        sb.table("inspection_photos")
+        .select("id, report_id, photo_url")
+        .in_("report_id", report_ids)
+        .order("uploaded_at")
+        .execute()
+    )
+
+    bucket = "inspection-photos"
+    grouped: dict[str, list[dict]] = {rid: [] for rid in report_ids}
+    for p in (photo_res.data or []):
+        stored = p["photo_url"]
+        if stored.startswith("http"):
+            marker = f"/{bucket}/"
+            storage_path = stored.split(marker)[1].split("?")[0] if marker in stored else None
+        else:
+            storage_path = stored or None
+        fresh_url = _signed_url(sb, bucket, storage_path, 3600) if storage_path else None
+        grouped.setdefault(p["report_id"], []).append(
+            {"id": p["id"], "photo_url": fresh_url or stored}
+        )
+    return grouped
+
+
 @router.get("/{ticket_id}/report")
 @limiter.limit("60/minute")
 def get_ticket_report(
@@ -213,7 +345,11 @@ def get_ticket_report(
     ticket_id: str,
     _user: dict = Depends(require_analyst),
 ):
-    """Return the inspection report (with photos) for a ticket, or null if none exists."""
+    """Return the full inspection history for a ticket: the current (active) round
+    plus every archived prior round, each with its own signed photos.
+
+    Shape: { "current": <round|null>, "history": [<round>, ...] }  (history ascending by round)
+    """
     sb = get_supabase()
     ticket_res = sb.table("tickets").select("id").eq("id", ticket_id).limit(1).execute()
     if not (ticket_res.data or []):
@@ -222,43 +358,24 @@ def get_ticket_report(
     res = (
         sb.table("inspection_reports")
         .select(
-            "id, notes, sensor_working, severity, root_cause, submitted_at, "
-            "analyst_approved, analyst_approved_at, analyst_notes"
+            "id, notes, severity, root_cause, corrective_action, issue_resolved, submitted_at, "
+            "analyst_approved, analyst_approved_at, analyst_notes, follow_up_notes, round, is_active"
         )
         .eq("ticket_id", ticket_id)
-        .limit(1)
+        .order("round")
         .execute()
     )
     rows = res.data or []
     if not rows:
-        return None
+        return {"current": None, "history": []}
 
-    report = rows[0]
-    report_id = report["id"]
+    photos_by_report = _sign_inspection_photos(sb, rows)
+    for r in rows:
+        r["photos"] = photos_by_report.get(r["id"], [])
 
-    photo_res = (
-        sb.table("inspection_photos")
-        .select("id, photo_url")
-        .eq("report_id", report_id)
-        .order("uploaded_at")
-        .execute()
-    )
-    photo_rows = photo_res.data or []
-
-    bucket = "inspection-photos"
-    photos = []
-    for p in photo_rows:
-        stored = p["photo_url"]
-        if stored.startswith("http"):
-            marker = f"/{bucket}/"
-            storage_path = stored.split(marker)[1].split("?")[0] if marker in stored else None
-        else:
-            storage_path = stored or None
-        fresh_url = _signed_url(sb, bucket, storage_path, 3600) if storage_path else None
-        photos.append({"id": p["id"], "photo_url": fresh_url or stored})
-
-    report["photos"] = photos
-    return report
+    current = next((r for r in rows if r.get("is_active")), None)
+    history = [r for r in rows if not r.get("is_active")]  # already ascending by round
+    return {"current": current, "history": history}
 
 
 @router.get("/{ticket_id}/pdf")
@@ -273,7 +390,7 @@ def download_ticket_pdf(
     Sections rendered depend on ticket status:
       - All statuses : ticket metadata, description, anomaly data
       - in-progress+ : inspection report (if submitted) — field observations, sensor, severity, root cause
-      - completed/verified : inspection report always included
+      - pending_review/verified : inspection report always included
       - verified only : analyst remarks section
     """
     sb = get_supabase()
@@ -285,11 +402,12 @@ def download_ticket_pdf(
     report_res = (
         sb.table("inspection_reports")
         .select(
-            "id, notes, sensor_working, severity, root_cause, submitted_at, "
-            "analyst_approved, analyst_approved_at, analyst_notes, technician_id, "
+            "id, notes, severity, root_cause, corrective_action, issue_resolved, submitted_at, "
+            "analyst_approved, analyst_approved_at, analyst_notes, technician_id, round, "
             "profiles!inspection_reports_technician_id_fkey(full_name)"
         )
         .eq("ticket_id", ticket_id)
+        .eq("is_active", True)
         .limit(1)
         .execute()
     )
@@ -422,8 +540,8 @@ def download_ticket_pdf(
         ("Created",      _fmt_date(ticket.get("created_at"))),
         ("Assigned",     _fmt_date(ticket.get("assigned_at"))),
     ]
-    if ticket_status in ("completed", "verified"):
-        meta_rows.append(("Completed", _fmt_date(ticket.get("completed_at"))))
+    if ticket_status in ("pending_review", "verified"):
+        meta_rows.append(("Pending Review", _fmt_date(ticket.get("completed_at"))))
     if ticket_status == "verified":
         meta_rows.append(("Verified",  _fmt_date(ticket.get("verified_at"))))
 
@@ -448,15 +566,15 @@ def download_ticket_pdf(
     if report:
         story.append(Paragraph("INSPECTION REPORT", section_style))
 
-        sensor_val = (
-            "Yes" if report.get("sensor_working") is True
-            else "No" if report.get("sensor_working") is False
+        resolved_val = (
+            "Yes" if report.get("issue_resolved") is True
+            else "No" if report.get("issue_resolved") is False
             else "Not recorded"
         )
         report_meta: list[tuple[str, str]] = [
             ("Submitted",      _fmt_date(report.get("submitted_at"))),
             ("Submitted By",   report.get("technician_name") or "—"),
-            ("Sensor Working", sensor_val),
+            ("Issue Resolved", resolved_val),
             ("Severity",       (report.get("severity") or "—").title()),
         ]
         story.append(_kv_table(report_meta))
@@ -468,6 +586,10 @@ def download_ticket_pdf(
         if report.get("root_cause"):
             story.append(Paragraph("ROOT CAUSE", section_style))
             story.append(Paragraph(report["root_cause"], body_style))
+
+        if report.get("corrective_action"):
+            story.append(Paragraph("CORRECTIVE ACTION", section_style))
+            story.append(Paragraph(report["corrective_action"], body_style))
 
     # ── Section 5: Analyst remarks (verified tickets) ─────────────────────────
     if ticket_status == "verified" and report:

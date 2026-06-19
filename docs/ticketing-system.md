@@ -1,224 +1,287 @@
-# Ticketing System Reference
+# Ticketing System — Process & Lifecycle Reference
 
-This document covers the full lifecycle of a maintenance ticket — from creation by an analyst to field resolution by a technician and final approval — including how both systems (web dashboard and mobile app) interact with the backend at each stage.
+## Overview
 
----
-
-## Roles
-
-| Role | System | What they can do |
-|------|--------|-----------------|
-| **Analyst** | Web dashboard (Next.js) | Create tickets, reassign technicians, advance status, review reports, approve, download PDFs |
-| **Technician** | Mobile app (Expo) | View assigned tickets, mark in-progress, submit inspection reports, upload photos, download PDFs |
+When the anomaly detection pipeline flags a rainfall monitoring station as abnormal, an **analyst** creates a maintenance ticket to dispatch field technicians for physical inspection and repair. This document defines the complete process, all actors, every status, and the full lifecycle of a ticket from creation to closure.
 
 ---
 
-## Ticket Lifecycle
+## Actors
+
+| Actor | Interface | Responsibilities |
+|-------|-----------|-----------------|
+| **Analyst** | Web dashboard | Create tickets, review inspection reports, approve or request follow-ups, manage technician assignments |
+| **Technician** | Mobile app | Receive assigned tickets, start work, submit inspection reports, upload photos |
+
+---
+
+## Ticket Fields
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID — unique identifier |
+| `title` | Short description of the work order |
+| `description` | Analyst's notes on what to inspect |
+| `station_id` | Which rainfall monitoring station to visit |
+| `priority` | `low / medium / high` |
+| `anomaly_zone` | Which pipeline stage flagged the anomaly (`A / B / C`) |
+| `anomaly_data` | Raw ML detection output (analyst-only) |
+| `status` | Current lifecycle stage (see below) |
+| `analyst_id` | Who created the ticket |
+| `technicians[]` | Active assigned field technicians |
+| `technicians_history[]` | Previously removed technicians (soft-deleted, kept for audit) |
+| `follow_up_count` | How many times the ticket has been sent back |
+| `follow_up_notes` | Analyst's instructions for the most recent follow-up |
+| `last_follow_up_at` | Timestamp of most recent follow-up request |
+| `cancelled_at` | When it was cancelled (if applicable) |
+| `cancellation_reason` | Why it was cancelled (required at cancellation) |
+| `created_at` | Ticket creation timestamp |
+| `assigned_at` | When first technician was dispatched |
+| `completed_at` | When technician submitted the report |
+| `verified_at` | When analyst approved the report |
+| `updated_at` | Last modification timestamp |
+
+---
+
+## Ticket Statuses
+
+| Status | Meaning | Terminal? |
+|--------|---------|-----------|
+| `assigned` | Created and dispatched — technician(s) notified, work not yet started | No |
+| `in-progress` | Technician has started work on-site | No |
+| `pending_review` | Technician submitted a report — awaiting analyst decision | No |
+| `follow_up` | Analyst sent it back for re-visit — report archived, new round required | No |
+| `verified` | Analyst approved the report — closed | **Yes** |
+| `cancelled` | Cancelled before work started — voided | **Yes** |
+
+---
+
+## Full Lifecycle
 
 ```
-[Analyst creates ticket]
-        ↓
-    assigned
-        ↓  (technician marks in-progress via mobile)
-   in-progress
-        ↓  (technician submits inspection report — auto-transitions)
-   completed
-        ↓  (analyst approves report on web)
-   verified
+                    [Analyst creates ticket]
+                             │
+                             ▼
+                         ASSIGNED ◄──────────────────────────────────────────┐
+                             │                                                │
+                             │ Technician: "Start Working"                    │
+                             ▼                                                │ Analyst can
+                        IN-PROGRESS ◄─────────────────────────────────────┐  │ add/remove
+                             │                                             │  │ technicians
+                             │ Technician: submits report                  │  │ at any
+                             ▼                                             │  │ non-terminal
+                      PENDING REVIEW                                       │  │ status
+                             │                                             │  │
+               ┌─────────────┴──────────────┐                             │  │
+               │                            │                             │  │
+   Analyst: Approve              Analyst: Request Follow-up               │  │
+               │                            │                             │  │
+               ▼                            ▼                             │  │
+           VERIFIED                     FOLLOW-UP ────────────────────────┘  │
+          (terminal)              Technician: "Start Re-visit"                │
+                                                                              │
+    Only from ASSIGNED ─── Analyst: Cancel ───► CANCELLED                    │
+                            (reason required)    (terminal)                   │
 ```
 
-Every status transition is a `PATCH` call to the API. Only valid transitions are accepted — the backend enforces them.
+### State Transition Table
 
-### Status transition rules
-
-| From | To | Who | How |
-|------|----|-----|-----|
-| *(new)* | `assigned` | Analyst | Ticket creation — always starts assigned |
-| `assigned` | `in-progress` | Technician | `PATCH /api/mobile/tickets/{id}/status` |
-| `in-progress` | `completed` | Technician | `POST /api/mobile/reports` — report submission auto-transitions |
-| `completed` | `verified` | Analyst | `PATCH /api/reports/{report_id}/approve` |
-| `completed/verified` | `assigned` | Analyst | Reassign via `PATCH /api/tickets/{id}` (sets new `assigned_at`) |
-
----
-
-## Storage Buckets
-
-Two separate Supabase Storage buckets are used. Signed URLs expire in 1 hour and are regenerated fresh on every fetch — never stored.
-
-| Bucket | Contents | Uploaded by |
-|--------|----------|-------------|
-| `ticket-attachments` | CSV exports, reference PDFs, any analyst-uploaded files | Analyst (web) |
-| `inspection-photos` | Field photos taken during inspection | Technician (mobile) |
+| From | To | Actor | Guard / Condition |
+|------|----|-------|-------------------|
+| — | `assigned` | Analyst | Ticket created; at least 1 technician assigned |
+| `assigned` | `in-progress` | Technician | Taps "Start Working" on mobile |
+| `follow_up` | `in-progress` | Technician | Taps "Start Re-visit" on mobile |
+| `in-progress` | `pending_review` | Technician | Submits inspection report (auto-transition) |
+| `pending_review` | `verified` | Analyst | Approves report |
+| `pending_review` | `follow_up` | Analyst | Requests follow-up (notes required) |
+| `follow_up` | `in-progress` | Technician | Starts new round |
+| `assigned` | `cancelled` | Analyst | Cancels before work starts (reason required) |
+| Any non-terminal | — | Analyst | Add or remove technicians (min 1 active always) |
 
 ---
 
-## Data Tables
+## Inspection Reports
+
+Each report is linked to one ticket and one **round** number. Follow-up visits produce a new round. Previous rounds are archived (`is_active = FALSE`) but preserved.
+
+| Field | Description |
+|-------|-------------|
+| `round` | Visit number (1 = first visit, 2+ = follow-up rounds) |
+| `is_active` | Only one report per ticket can be active at a time |
+| `notes` | Technician's field observations (what was found on arrival) |
+| `severity` | `low / medium / high` — how serious the issue was |
+| `root_cause` | What caused the anomaly |
+| `corrective_action` | What the technician did to fix the issue, and any recommendations for future maintenance |
+| `issue_resolved` | Boolean — was the problem fixed? |
+| `photos` | Attached inspection photos (signed URLs) |
+| `submitted_at` | When the report was submitted |
+| `analyst_approved` | Whether the analyst approved it |
+| `analyst_approved_at` | When it was approved |
+| `analyst_notes` | Analyst's remarks on approval |
+
+### Round Lifecycle
 
 ```
-tickets
-  └── ticket_attachments       (analyst uploads — references ticket)
-  └── inspection_reports       (one per ticket — submitted by technician)
-        └── inspection_photos  (multiple per report — uploaded by technician)
+Round 1:  submitted → is_active = TRUE
+              │
+    Analyst requests follow-up
+              │
+Round 1:  is_active set to FALSE  (archived — still readable)
+Round 2:  submitted → is_active = TRUE
+              │
+    Analyst approves
+              │
+Ticket → VERIFIED
 ```
 
 ---
 
-## API Endpoints
+## Technician Assignment Rules
 
-### Analyst endpoints (`/api/tickets`, `/api/reports`) — cookie auth
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/tickets` | List all tickets (filterable by status, priority, station_id) |
-| `POST` | `/api/tickets` | Create a ticket (always starts as `assigned`) |
-| `GET` | `/api/tickets/{id}` | Get single ticket with technician details |
-| `PATCH` | `/api/tickets/{id}` | Update title, description, priority, status, or reassign technician |
-| `GET` | `/api/tickets/{id}/attachments` | List analyst-uploaded attachments with fresh signed URLs |
-| `POST` | `/api/tickets/{id}/attachments` | Upload a file (CSV, PDF, etc.) — max 20 MB |
-| `GET` | `/api/tickets/{id}/report` | Get inspection report + photos for a ticket (or `null`) |
-| `GET` | `/api/tickets/{id}/pdf` | Stream a PDF of the ticket — sections vary by status |
-| `GET` | `/api/reports` | List all inspection reports |
-| `GET` | `/api/reports/{id}` | Get a single report |
-| `GET` | `/api/reports/{id}/photos` | List inspection photos with fresh signed URLs |
-| `PATCH` | `/api/reports/{id}/approve` | Approve report and set analyst remarks — transitions ticket to `verified` |
-
-### Technician endpoints (`/api/mobile/tickets`, `/api/mobile/reports`) — Bearer token auth
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/mobile/tickets` | List all tickets assigned to the authenticated technician |
-| `GET` | `/api/mobile/tickets/{id}` | Get a single ticket (only if assigned to this technician) |
-| `PATCH` | `/api/mobile/tickets/{id}/status` | Set status to `in-progress` or `completed` |
-| `GET` | `/api/mobile/tickets/{id}/attachments` | List analyst-uploaded attachments with fresh signed URLs |
-| `GET` | `/api/mobile/tickets/{id}/report-id` | Get full inspection report data for a ticket (or `null`) |
-| `GET` | `/api/mobile/tickets/{id}/pdf` | Stream a PDF of the ticket |
-| `POST` | `/api/mobile/reports` | Submit inspection report — also transitions ticket to `completed` |
-| `GET` | `/api/mobile/reports/{id}/photos` | List inspection photos with fresh signed URLs |
-| `POST` | `/api/mobile/reports/{id}/photos` | Upload a photo — max 10 MB, JPEG/PNG/WebP/HEIC only |
+- A ticket must have **at least one active technician** at all times.
+- Multiple technicians can be assigned simultaneously (many-to-many via `ticket_technicians` junction table).
+- Technicians can be added or removed at any **non-terminal** status (`assigned`, `in-progress`, `pending_review`, `follow_up`).
+- Removing a technician is a **soft-delete** — the `ticket_technicians` row is retained with `removed_at` set. It appears in `technicians_history[]` for full audit visibility.
+- Re-adding a previously removed technician restores their record (clears `removed_at`).
+- The `technician_id` column on tickets is a legacy shadow field pointing to the earliest active assignee — kept for PDF generation backward compatibility only. Always use `technicians[]` for the full authoritative list.
 
 ---
 
-## Stage-by-Stage Flow
+## What Each Actor Sees Per Status
 
-### Stage 1 — Analyst creates ticket (web)
+### Analyst — Web Dashboard
 
-The analyst identifies an anomaly from the zone pipeline results and creates a ticket on the web dashboard.
+| Status | Visible content | Available actions |
+|--------|----------------|-------------------|
+| `assigned` | Ticket info, active assignees, assignment history | Add / remove technicians, Cancel ticket |
+| `in-progress` | Ticket info, assignees, assignment history, started timestamp | Add / remove technicians |
+| `pending_review` | Ticket info, inspection report (round N), photos, assignees | Approve, Request follow-up, Add / remove technicians |
+| `follow_up` | Ticket info, follow-up instructions, all prior rounds (read-only), assignees | Add / remove technicians |
+| `verified` | Full history — all rounds, active + historical assignees, verified timestamp | None |
+| `cancelled` | Ticket info, cancellation reason, cancellation timestamp | None |
 
-**Web calls:** `POST /api/tickets`
+### Technician — Mobile App
 
-**Payload:**
-```json
-{
-  "title": "...",
-  "station_id": "...",
-  "priority": "high",
-  "anomaly_zone": "C",
-  "anomaly_data": { "lof_score": -1.82, "rainfall": 120.5 },
-  "technician_id": "...",
-  "description": "..."
-}
+Tickets are shown on the **Dashboard** tab, grouped by status. The **Activity** tab shows the technician's personal audit feed (ticket events only — no analyst-only data). The **Profile** tab shows account settings.
+
+| Status | Visible content | Available actions |
+|--------|----------------|-------------------|
+| `assigned` | Title, station, priority, description, co-assignees, analyst name | **Start Working** |
+| `in-progress` | Same as assigned + round indicator if round 2+ + prior round reports (collapsed, for context) | **Submit Report** |
+| `pending_review` | Ticket info, submitted report (read-only), "Under Review" notice | None |
+| `follow_up` | Ticket info, **analyst instructions (prominent)**, re-visit number, prior round reports | **Start Re-visit** |
+| `verified` | Ticket info, approved report | None — read-only |
+| `cancelled` | Ticket info, cancellation reason | None — read-only |
+
+> Technicians never see `anomaly_data` (raw ML output). They only see the analyst's human-written description.
+
+---
+
+## Complete Lifecycle Scenarios
+
+### Scenario 1 — Simple Single Visit
+Station flagged. One technician dispatched, issue fixed, report approved.
+```
+assigned → in-progress → pending_review → verified
 ```
 
-**Backend:** `tickets_service.create_ticket()` inserts a row with `status = "assigned"` and `assigned_at = now()`.
-
----
-
-### Stage 2 — Technician views and starts ticket (mobile)
-
-The technician logs in and sees the ticket in their active queue.
-
-**Mobile calls:**
-1. `GET /api/mobile/tickets` — fetches all assigned tickets, filtered client-side by status
-2. `GET /api/mobile/tickets/{id}` — loads full detail when a ticket is opened
-3. `PATCH /api/mobile/tickets/{id}/status` with `{ "status": "in-progress" }` — marks work started
-
-**Mobile app filters:**
-- **Active tab**: tickets with status `created` or `assigned`
-- **In Progress tab**: tickets with status `in-progress`
-- **History tab**: tickets with status `completed` or `verified`
-
----
-
-### Stage 3 — Technician submits inspection report (mobile)
-
-After completing the field visit, the technician fills out and submits an inspection report. This is the only way to transition a ticket to `completed`.
-
-**Mobile calls:** `POST /api/mobile/reports`
-
-**Payload:**
-```json
-{
-  "ticket_id": "...",
-  "notes": "Sensor housing cracked, water ingress visible.",
-  "sensor_working": false,
-  "severity": "high",
-  "root_cause": "Physical damage from recent storm."
-}
+### Scenario 2 — Multi-Technician Dispatch
+Complex repair requiring two field technicians simultaneously.
+```
+assigned (Tech A + Tech B) → in-progress → pending_review → verified
 ```
 
-**Backend behaviour:**
-- Inserts a row into `inspection_reports`
-- Immediately patches the ticket: `status = "completed"`, `completed_at = now()`
-- If a report already exists for that ticket, returns the existing one (idempotent — no duplicate reports)
-- Race conditions handled: duplicate key errors are caught and the existing row returned
-
-**Photo upload (optional, separate call):**
-`POST /api/mobile/reports/{report_id}/photos` — multipart form-data, field name `photo`.
-Photos are stored in the `inspection-photos` bucket as `{report_id}/{timestamp}.{ext}`.
-The raw storage path (not a signed URL) is stored in `inspection_photos.photo_url` so fresh signed URLs can always be generated.
-
----
-
-### Stage 4 — Analyst reviews and approves (web)
-
-The analyst sees the completed ticket appear in the Reports tab and reviews the technician's submission.
-
-**Web calls:**
-1. `GET /api/reports` — lists all reports
-2. `GET /api/tickets/{id}/report` — fetches full report + photos with signed URLs for the detail panel
-3. `PATCH /api/reports/{id}/approve` — approves with optional remarks
-
-**Approval payload:**
-```json
-{
-  "analyst_notes": "Confirmed sensor replacement required. Escalate to procurement."
-}
+### Scenario 3 — Follow-up (Insufficient Report)
+Technician's report lacks specific measurements. Analyst sends it back.
+```
+assigned → in-progress → pending_review
+  → follow_up  [analyst: "Re-check sensor depth and record exact readings"]
+  → in-progress (round 2) → pending_review → verified
 ```
 
-**Backend:** Sets `analyst_approved = true`, `analyst_approved_at = now()`, `analyst_notes`, and transitions the ticket to `verified` (sets `verified_at`).
+### Scenario 4 — Multiple Follow-ups
+Issue persists across multiple visits.
+```
+assigned → in-progress → pending_review
+  → follow_up (round 2)
+  → in-progress → pending_review
+  → follow_up (round 3)
+  → in-progress → pending_review
+  → verified
+```
+
+### Scenario 5 — Technician Replaced Before Starting
+Original technician unavailable before work begins.
+```
+assigned (Tech A)
+  → [Analyst removes Tech A, adds Tech B]
+  → assigned (Tech B) → in-progress → pending_review → verified
+```
+Tech A's assignment is soft-deleted and visible in assignment history.
+
+### Scenario 6 — Follow-up with Specialist Added
+Original tech submits insufficient report. Analyst adds a specialist for round 2.
+```
+assigned (Tech A) → in-progress → pending_review
+  → follow_up  [Analyst adds Tech B for round 2]
+  → in-progress (Tech A + Tech B) → pending_review → verified
+```
+Tech B can see Tech A's round 1 report on mobile for context before the re-visit.
+
+### Scenario 7 — No Fault Found (False Positive)
+Technician inspects — station is operating normally.
+```
+assigned → in-progress
+  → pending_review  [report: "No fault found — readings within normal range"]
+  → verified
+```
+"No fault" is a valid finding. `verified` means reviewed and closed, not necessarily that something was broken.
+
+### Scenario 8 — Cancelled (False Alarm Before Work Starts)
+Analyst realises the pipeline flag was a data artifact before any technician starts.
+```
+assigned → cancelled  [reason: "Pipeline false positive — confirmed via manual data check"]
+```
+Only possible from `assigned`. Once a technician has started (`in-progress`), cancellation is blocked.
+
+### Scenario 9 — Technician Added Mid-Progress
+Analyst realises mid-job that the repair is more complex and dispatches backup.
+```
+assigned (Tech A) → in-progress (Tech A)
+  → [Analyst adds Tech B mid-progress]
+  → in-progress (Tech A + Tech B) → pending_review → verified
+```
 
 ---
 
-## PDF Export
+## Key Constraints
 
-Both roles can download a PDF of a ticket. The content rendered depends on the ticket's current status.
-
-| Section | Condition |
-|---------|-----------|
-| Ticket Details (ID, station, status, priority, assigned to, timestamps) | Always |
-| Description | Always, if present |
-| Anomaly Data | Always, if present |
-| Inspection Report (submitted date, technician, sensor working, severity) | When a report exists |
-| Field Observations | When `notes` is present on the report |
-| Root Cause | When `root_cause` is present on the report |
-| Analyst Remarks (approved by, approved at, remarks text) | `verified` status only |
-
-The meta table also conditionally includes the `Completed` and `Verified` timestamp rows only when the ticket has reached those statuses.
-
-**Analyst PDF endpoint:** `GET /api/tickets/{id}/pdf` (cookie auth)
-**Technician PDF endpoint:** `GET /api/mobile/tickets/{id}/pdf` (Bearer auth)
+| Rule | Detail |
+|------|--------|
+| Minimum assignees | At least 1 active technician must remain on a ticket at all times. Removing the last one is blocked. |
+| Cancel guard | Only allowed from `assigned`. Once a technician has started work, the ticket cannot be cancelled. |
+| Follow-up guard | Can only be requested from `pending_review`. |
+| Verified is final | No edits, reassignments, new reports, or further status changes. |
+| Cancelled is final | Same — no further actions once cancelled. |
+| One active report | Only one report per ticket can have `is_active = TRUE` (enforced by partial unique index `uq_ir_active`). |
+| Assignment history | Removed technicians are soft-deleted, never hard-deleted. Full history is always preserved. |
+| Analyst instructions required | Follow-up notes are mandatory — the analyst must explain what the technician needs to do differently. |
+| Cancellation reason required | A reason is mandatory when cancelling a ticket. |
 
 ---
 
-## Auth Boundaries
+## Audit Trail
 
-The two systems use different auth mechanisms. Neither frontend ever calls Supabase directly.
+Every consequential action produces an immutable audit log entry with a SHA-256 chain hash (tamper-detectable).
 
-| Surface | Auth mechanism | Guard dependency |
-|---------|---------------|-----------------|
-| Web dashboard | httpOnly cookie (`access_token`) | `require_analyst` |
-| Mobile app | `Authorization: Bearer <token>` header | `require_technician_mobile` |
-
-Tokens are issued by `POST /api/mobile/auth/login` (mobile) or `POST /api/auth/login` (web). Access tokens expire in 30 minutes; refresh tokens last 7 days and rotate on every use.
-
-A technician **cannot** access analyst endpoints, and an analyst **cannot** access mobile endpoints — the guard dependencies enforce role checks on every request.
+| Event | Trigger |
+|-------|---------|
+| `ticket_created` | Ticket dispatched by analyst |
+| `ticket_updated` | Ticket fields modified |
+| `ticket_status_changed` | Any status transition |
+| `ticket_cancelled` | Ticket cancelled by analyst |
+| `technician_assigned` | Technician(s) added to ticket |
+| `technician_removed` | Technician soft-deleted from ticket |
+| `report_submitted` | Technician submits inspection report |
+| `report_approved` | Analyst approves report, ticket moves to verified |
+| `follow_up_requested` | Analyst sends ticket back for re-visit |

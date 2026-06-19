@@ -1,25 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useTechnicianProfiles } from "@/hooks/useTechnicians";
 import {
   AlertTriangle,
-  Loader2,
   Mail,
   Phone,
   Plus,
-  RefreshCw,
   Search,
   Send,
-  UserCheck,
-  UserMinus,
   Users,
-  X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/dashboard/Header";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Modal, ModalFooter } from "@/components/ui/Modal";
+import { Badge } from "@/components/ui/Badge";
 import { techniciansApi } from "@/lib/api/technicians";
 import type { TechnicianCreate, TechnicianProfile } from "@/types/technicians";
 
@@ -34,12 +31,7 @@ function fmt(dateStr: string) {
 }
 
 function initials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 }
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
@@ -57,12 +49,10 @@ function StatCard({
 }) {
   const iconBg =
     tone === "success" ? "color-mix(in oklab, var(--success) 12%, transparent)" :
-    tone === "warning" ? "color-mix(in oklab, var(--warning) 12%, transparent)" :
     tone === "brand"   ? "var(--brand-soft)" :
     "var(--surface-sunken)";
   const iconColor =
     tone === "success" ? "var(--success)" :
-    tone === "warning" ? "var(--warning)" :
     tone === "brand"   ? "var(--brand)" :
     "var(--text-muted)";
 
@@ -149,73 +139,13 @@ function CreateModal({
   }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 100,
-        display: "grid",
-        placeItems: "center",
-        padding: 16,
-        background: "rgba(10,13,18,0.45)",
-        backdropFilter: "blur(2px)",
-      }}
-      onClick={onClose}
+    <Modal
+      title="New Technician Account"
+      subtitle="The technician can log in immediately via the mobile app."
+      onClose={!saving ? onClose : undefined as unknown as () => void}
     >
-      <div
-        className="animate-fade-in-up"
-        style={{
-          width: "min(480px, 100%)",
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--r-2xl)",
-          boxShadow: "var(--shadow-xl)",
-          overflow: "hidden",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal header */}
-        <div
-          style={{
-            padding: "18px 24px 14px",
-            borderBottom: "1px solid var(--divider)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div>
-            <h3 style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>
-              New Technician Account
-            </h3>
-            <p style={{ margin: "3px 0 0", fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>
-              The technician can log in immediately via the mobile app.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: "var(--r-md)",
-              border: 0,
-              background: "transparent",
-              color: "var(--text-muted)",
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-              transition: "background 0.12s ease",
-            }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
-          >
-            <X size={15} strokeWidth={2.4} />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
+      <form onSubmit={handleSubmit}>
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
           <Input
             label="Full Name"
             value={fullName}
@@ -260,71 +190,31 @@ function CreateModal({
           />
 
           {error && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 8,
-                padding: "8px 12px",
-                borderRadius: "var(--r-md)",
-                background: "var(--danger-soft)",
-                border: "1px solid rgba(220,38,38,0.2)",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 12px", borderRadius: "var(--r-md)", background: "var(--danger-soft)", border: "1px solid rgba(220,38,38,0.2)" }}>
               <AlertTriangle size={13} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 1 }} strokeWidth={2.4} />
               <p style={{ fontSize: "var(--font-sm)", color: "var(--danger)", margin: 0 }}>{error}</p>
             </div>
           )}
-        </form>
+        </div>
 
-        {/* Footer */}
-        <div
-          style={{
-            padding: "14px 24px",
-            borderTop: "1px solid var(--divider)",
-            background: "var(--surface-alt)",
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 8,
-          }}
-        >
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <ModalFooter>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" loading={saving} onClick={handleSubmit as unknown as React.MouseEventHandler}>
+          <Button type="submit" loading={saving}>
             <Send size={13} strokeWidth={2.2} />
             {saving ? "Creating…" : "Create Account"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }
 
 // ─── Table Row ────────────────────────────────────────────────────────────────
 
-function TechRow({
-  technician,
-  onToggled,
-}: {
-  technician: TechnicianProfile;
-  onToggled: (t: TechnicianProfile) => void;
-}) {
-  const [toggling, setToggling] = useState(false);
+function TechRow({ technician }: { technician: TechnicianProfile }) {
   const [hovered, setHovered] = useState(false);
-
-  async function handleToggle() {
-    setToggling(true);
-    try {
-      const updated = await techniciansApi.toggleActive(technician.id);
-      onToggled(updated);
-    } catch {
-      // silently ignore
-    } finally {
-      setToggling(false);
-    }
-  }
-
   const inits = initials(technician.full_name);
 
   return (
@@ -332,7 +222,6 @@ function TechRow({
       style={{
         background: hovered ? "var(--surface-sunken)" : "transparent",
         transition: "background 0.1s ease",
-        opacity: technician.is_active ? 1 : 0.65,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -345,10 +234,8 @@ function TechRow({
               width: 34,
               height: 34,
               borderRadius: "50%",
-              background: technician.is_active
-                ? "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)"
-                : "var(--surface-sunken)",
-              color: technician.is_active ? "white" : "var(--text-muted)",
+              background: "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)",
+              color: "white",
               display: "grid",
               placeItems: "center",
               fontSize: "var(--font-xs)",
@@ -369,7 +256,7 @@ function TechRow({
         </div>
       </td>
 
-      {/* Email */}
+      {/* Email / Phone */}
       <td style={{ padding: "12px 20px", borderBottom: "1px solid var(--divider)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--font-sm)", color: "var(--text-secondary)" }}>
           <span style={{ color: "var(--text-muted)" }}><Mail size={12} strokeWidth={2} /></span>
@@ -379,37 +266,6 @@ function TechRow({
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--font-xs)", color: "var(--text-muted)", marginTop: 2 }}>
             <Phone size={11} strokeWidth={2} />
             {technician.phone}
-          </div>
-        )}
-      </td>
-
-      {/* Stations */}
-      <td style={{ padding: "12px 20px", borderBottom: "1px solid var(--divider)" }}>
-        {technician.station_ids.length === 0 ? (
-          <span style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)", fontStyle: "italic" }}>None assigned</span>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {technician.station_ids.slice(0, 3).map((sid) => (
-              <span
-                key={sid}
-                style={{
-                  fontSize: "var(--font-xs)",
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--text-secondary)",
-                  background: "var(--surface-sunken)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--r-sm)",
-                  padding: "1px 6px",
-                }}
-              >
-                {sid}
-              </span>
-            ))}
-            {technician.station_ids.length > 3 && (
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-                +{technician.station_ids.length - 3}
-              </span>
-            )}
           </div>
         )}
       </td>
@@ -425,49 +281,6 @@ function TechRow({
       <td style={{ padding: "12px 20px", borderBottom: "1px solid var(--divider)", fontSize: "var(--font-sm)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
         {fmt(technician.created_at)}
       </td>
-
-      {/* Actions */}
-      <td style={{ padding: "12px 20px", borderBottom: "1px solid var(--divider)" }}>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
-            type="button"
-            onClick={handleToggle}
-            disabled={toggling}
-            title={technician.is_active ? "Deactivate account" : "Activate account"}
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: "var(--r-md)",
-              border: 0,
-              background: "transparent",
-              color: "var(--text-muted)",
-              display: "grid",
-              placeItems: "center",
-              cursor: toggling ? "default" : "pointer",
-              opacity: toggling ? 0.5 : 1,
-              transition: "background 0.12s ease, color 0.12s ease",
-            }}
-            onMouseEnter={(e) => {
-              if (!toggling) {
-                (e.currentTarget as HTMLElement).style.background = technician.is_active ? "var(--danger-soft)" : "color-mix(in oklab, var(--success) 12%, transparent)";
-                (e.currentTarget as HTMLElement).style.color = technician.is_active ? "var(--danger)" : "var(--success)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-              (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
-            }}
-          >
-            {toggling ? (
-              <Loader2 size={13} style={{ animation: "spin 700ms linear infinite" }} />
-            ) : technician.is_active ? (
-              <UserMinus size={14} strokeWidth={2.2} />
-            ) : (
-              <UserCheck size={14} strokeWidth={2.2} />
-            )}
-          </button>
-        </div>
-      </td>
     </tr>
   );
 }
@@ -476,36 +289,14 @@ function TechRow({
 
 export default function TechniciansPage() {
   const { loading: authLoading } = useAuth();
-  const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { technicians, isLoading: loading, error: fetchError, mutate } = useTechnicianProfiles();
+  const error = fetchError?.message ?? null;
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
 
-  const fetchTechnicians = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await techniciansApi.list();
-      setTechnicians(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load technicians.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTechnicians();
-  }, [fetchTechnicians]);
-
   function handleCreated(t: TechnicianProfile) {
     setShowCreate(false);
-    setTechnicians((prev) => [t, ...prev]);
-  }
-
-  function handleToggled(updated: TechnicianProfile) {
-    setTechnicians((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    mutate((cur) => (cur ? [t, ...cur] : [t]), { revalidate: true });
   }
 
   const filtered = useMemo(() => {
@@ -528,8 +319,6 @@ export default function TechniciansPage() {
   }
 
   const activeCount = technicians.filter((t) => t.is_active).length;
-  const inactiveCount = technicians.length - activeCount;
-  const totalStations = [...new Set(technicians.flatMap((t) => t.station_ids))].length;
 
   return (
     <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
@@ -538,46 +327,18 @@ export default function TechniciansPage() {
         description={`${activeCount} active · ${technicians.length} total`}
         live
         actions={
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={fetchTechnicians}
-              style={{
-                height: 32,
-                padding: "0 10px",
-                borderRadius: "var(--r-md)",
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "var(--text-secondary)",
-                fontSize: "var(--font-sm)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                transition: "background 0.12s ease",
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
-            >
-              <RefreshCw size={13} strokeWidth={2.2} style={{ animation: loading ? "spin 700ms linear infinite" : undefined }} />
-              Refresh
-            </button>
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={14} strokeWidth={2.4} />
-              New Technician
-            </Button>
-          </div>
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Plus size={14} strokeWidth={2.4} />
+            New Technician
+          </Button>
         }
       />
 
       <div style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 24 }}>
         {/* Stat cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, maxWidth: 560 }}>
           <StatCard label="Active" value={activeCount} icon={<Users size={15} />} tone="success" />
-          <StatCard label="Inactive" value={inactiveCount} icon={<UserMinus size={15} />} tone="neutral" />
-          <StatCard label="Total accounts" value={technicians.length} icon={<Users size={15} />} tone="brand" />
-          <StatCard label="Stations covered" value={totalStations} icon={<UserCheck size={15} />} tone="neutral" />
+          <StatCard label="Total Accounts" value={technicians.length} icon={<Users size={15} />} tone="brand" />
         </div>
 
         {/* Table card */}
@@ -672,7 +433,7 @@ export default function TechniciansPage() {
               <AlertTriangle size={20} style={{ color: "var(--danger)" }} strokeWidth={2} />
               <p style={{ fontSize: "var(--font-base)", fontWeight: 500, color: "var(--text)", margin: 0 }}>Failed to load</p>
               <p style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", margin: 0 }}>{error}</p>
-              <Button size="sm" variant="secondary" onClick={fetchTechnicians} style={{ marginTop: 8 }}>
+              <Button size="sm" variant="secondary" onClick={() => mutate()} style={{ marginTop: 8 }}>
                 Retry
               </Button>
             </div>
@@ -705,7 +466,7 @@ export default function TechniciansPage() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "var(--surface-alt)" }}>
-                    {["Account", "Email / Phone", "Stations", "Status", "Joined", ""].map((col) => (
+                    {["Account", "Email / Phone", "Status", "Joined"].map((col) => (
                       <th
                         key={col}
                         style={{
@@ -715,7 +476,7 @@ export default function TechniciansPage() {
                           letterSpacing: "0.06em",
                           textTransform: "uppercase",
                           color: "var(--text-muted)",
-                          textAlign: col === "" ? "right" : "left",
+                          textAlign: "left",
                           borderBottom: "1px solid var(--border)",
                           whiteSpace: "nowrap",
                         }}
@@ -729,7 +490,7 @@ export default function TechniciansPage() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={4}
                         style={{ padding: "32px 20px", textAlign: "center", fontSize: "var(--font-sm)", color: "var(--text-muted)" }}
                       >
                         No technicians match &ldquo;{query}&rdquo;
@@ -737,7 +498,7 @@ export default function TechniciansPage() {
                     </tr>
                   ) : (
                     filtered.map((t) => (
-                      <TechRow key={t.id} technician={t} onToggled={handleToggled} />
+                      <TechRow key={t.id} technician={t} />
                     ))
                   )}
                 </tbody>
@@ -746,7 +507,7 @@ export default function TechniciansPage() {
           )}
 
           {/* Table footer */}
-          {!loading && !error && technicians.length > 0 && (
+          {!loading && !fetchError && technicians.length > 0 && (
             <div
               style={{
                 padding: "10px 20px",

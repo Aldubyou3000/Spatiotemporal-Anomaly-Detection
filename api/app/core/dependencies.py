@@ -1,5 +1,5 @@
 import logging
-from functools import lru_cache
+import threading
 
 import jwt
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
@@ -10,10 +10,22 @@ from .security import verify_session_fingerprint, verify_supabase_token
 
 logger = logging.getLogger("auth")
 
+# Module-level Supabase singleton with a lock so concurrent startup requests
+# don't create multiple clients. The client is intentionally never replaced
+# during normal operation — Supabase's client handles reconnection internally.
+_supabase_client: Client | None = None
+_supabase_lock = threading.Lock()
 
-@lru_cache(maxsize=1)
+
 def get_supabase() -> Client:
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+    global _supabase_client
+    if _supabase_client is None:
+        with _supabase_lock:
+            if _supabase_client is None:
+                _supabase_client = create_client(
+                    settings.supabase_url, settings.supabase_service_role_key
+                )
+    return _supabase_client
 
 
 def _client_ip(request: Request) -> str:

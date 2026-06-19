@@ -34,7 +34,8 @@ function ShimmerBox({
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  const baseColor = theme.isDark ? '#1E2D47' : '#E2E8F0';
+  // A solid placeholder grey that reads on the white card in both themes.
+  const baseColor = theme.isDark ? theme.surfaceAlt : theme.borderStrong;
 
   return (
     <Animated.View

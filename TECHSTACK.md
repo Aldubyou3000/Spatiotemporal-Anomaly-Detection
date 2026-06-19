@@ -1,6 +1,6 @@
 # Tech Stack — Spatiotemporal Anomaly Detection System
 
-**Last updated**: 2026-05-27
+**Last updated**: 2026-06-03
 **Status**: Migration complete — Streamlit replaced by Next.js + FastAPI
 
 ---
@@ -37,12 +37,13 @@ Web Browser (Analyst)          Mobile App (Technician)
 ## Tech Stack
 
 ### Web Frontend
-| Technology | Purpose |
-|-----------|---------|
-| **Next.js 15** | Framework — routing, pages, layouts |
-| **React 19** | UI — components, state, interactivity |
-| **TypeScript** | Type safety — same language as Expo app |
-| **Tailwind CSS** | Styling |
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| **Next.js** | 15.5.18 | Framework — App Router, layouts, route groups |
+| **React** | 19.1.0 | UI — components, state, interactivity |
+| **TypeScript** | — | Type safety across all layers |
+| **SWR** | 2.4+ | Data fetching — stale-while-revalidate, cache survives navigation |
+| **CSS custom properties** | — | Design system via `globals.css` — no Tailwind |
 
 ### Backend API
 | Technology | Purpose |
@@ -51,6 +52,7 @@ Web Browser (Analyst)          Mobile App (Technician)
 | **Python** | Language — reuses existing zone processing code as-is |
 | **Pydantic v2** | Request and response validation (built into FastAPI) |
 | **Supabase Python SDK** | Database, auth, and storage — server-side only |
+| **Server-Sent Events** | Real-time push to the web dashboard (`GET /api/events`); in-process broker, stdlib only — see single-worker note below |
 
 ### Zone Processing (Existing — Untouched)
 | File | Purpose |
@@ -66,13 +68,13 @@ Web Browser (Analyst)          Mobile App (Technician)
 | **Supabase Auth** | User authentication |
 | **Supabase Storage** | File storage — CSV uploads and inspection photos |
 
-### Mobile App (Existing — Untouched)
-| Technology | Purpose |
-|-----------|---------|
-| **Expo v55** | Mobile framework |
-| **React Native** | Mobile UI |
-| **TypeScript** | Type safety |
-| **Expo Router** | File-based navigation |
+### Mobile App
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| **Expo** | 55.0.26 (pinned) | Mobile framework — do not upgrade to v56+ |
+| **React Native** | — | Mobile UI |
+| **TypeScript** | — | Type safety |
+| **Expo Router** | — | File-based navigation |
 
 ---
 
@@ -101,37 +103,48 @@ web/src/
 ├── app/
 │   ├── (auth)/login/page.tsx         ← Login page
 │   ├── (dashboard)/
-│   │   ├── layout.tsx                ← Auth guard + sidebar shell
+│   │   ├── layout.tsx                ← AuthProvider → ZonesProvider → SWRConfig → RealtimeProvider → sidebar shell
 │   │   ├── zones/page.tsx            ← Upload + pipeline results (tabs)
-│   │   ├── tickets/page.tsx          ← Ticket board
+│   │   ├── tickets/page.tsx          ← Split-view ticket board
 │   │   ├── reports/page.tsx          ← Inspection reports + approval
-│   │   └── technicians/page.tsx      ← Manage technician accounts
-│   ├── layout.tsx                    ← Root layout
-│   ├── globals.css
+│   │   ├── technicians/page.tsx      ← Manage technician accounts
+│   │   └── audit/page.tsx            ← Audit log with filters + integrity check
+│   ├── layout.tsx                    ← Root layout (ThemeProvider)
+│   ├── globals.css                   ← CSS design system — all tokens live here
 │   └── page.tsx                      ← Redirects to /zones or /login
 │
 ├── components/
-│   ├── ui/                           ← Generic components (Badge, Button, Card, etc.)
-│   ├── dashboard/                    ← Shell components (Sidebar, Header)
-│   └── zones/                        ← Pipeline result tabs (OverviewTab, StationMap, etc.)
+│   ├── ui/                           ← Generic primitives (Badge, Button, Card, Modal, ConfirmDialog, Tabs…)
+│   ├── dashboard/                    ← Shell components (Sidebar, Header, PageTransition)
+│   ├── providers/                    ← RealtimeProvider (mounts the SSE EventSource once)
+│   ├── zones/                        ← Pipeline result tabs (OverviewTab, StationMap, etc.)
+│   └── tickets/                      ← TicketDetailBody (shared between tickets + reports); TicketActionDock (assignment + review slot); ReviewPanel (approve/follow-up decision)
 │
 ├── context/
-│   ├── AuthContext.tsx
-│   └── ThemeContext.tsx
+│   ├── AuthContext.tsx               ← user, loading, logout()
+│   ├── ThemeContext.tsx              ← theme, setTheme() — persisted to localStorage
+│   └── ZonesContext.tsx              ← Pipeline session state (file, result, progress…)
+│
+├── hooks/                            ← SWR data-fetching hooks — pages use these, not lib/api directly
+│   ├── useTickets.ts                 ← useTicketList, useTicketDetail, useTicketReport, useTicketAttachments, invalidateTicketLists
+│   ├── useTechnicians.ts             ← useTicketTechnicians, useTechnicianProfiles
+│   ├── useReports.ts                 ← useReports (with optimisticApprove)
+│   ├── useAuditLogs.ts              ← useAuditLogs (paginated), useAuditStats
+│   └── useRealtimeSync.ts            ← Single EventSource → SWR cache invalidation (real-time)
 │
 ├── lib/
-│   ├── api/                          ← One file per domain; all go through client.ts
-│   │   ├── client.ts                 ← Base fetch: auto-refresh on 401, credentials: include
+│   ├── api/                          ← Raw fetch wrappers — one file per domain, all through client.ts
+│   │   ├── client.ts                 ← Base fetch: auto-refresh on 401, CSRF, credentials: include
 │   │   ├── auth.ts
 │   │   ├── zones.ts
 │   │   ├── tickets.ts
 │   │   ├── reports.ts
-│   │   └── technicians.ts
-│   ├── cn.ts                         ← Tailwind class merging
-│   └── csv.ts
+│   │   ├── technicians.ts
+│   │   └── audit.ts
+│   └── cn.ts
 │
 ├── middleware.ts                     ← Cookie-based route guard
-└── types/                            ← TypeScript interfaces mirroring backend schemas
+└── types/                            ← TypeScript interfaces mirroring backend Pydantic schemas
 ```
 
 ---
@@ -152,24 +165,30 @@ api/app/
 ├── routers/                          ← HTTP only — no business logic
 │   ├── auth.py                       ← POST /api/auth/login|logout|refresh, GET /api/auth/me
 │   ├── zones.py                      ← POST /api/zones/process, GET /api/zones/{id}
-│   ├── tickets.py                    ← CRUD /api/tickets
-│   ├── reports.py                    ← /api/reports — submit, approve
-│   ├── technicians.py                ← /api/technicians
-│   └── mobile.py                     ← /api/mobile/* — technician Bearer-auth endpoints
+│   ├── tickets.py                    ← CRUD /api/tickets + assign/follow-up/cancel/report/pdf
+│   ├── reports.py                    ← /api/reports — list, approve, photos
+│   ├── technicians.py                ← /api/technicians — list, create, toggle-active
+│   ├── mobile.py                     ← /api/mobile/* — technician Bearer-auth endpoints
+│   ├── audit.py                      ← /api/audit — log, stats, integrity, CSV export
+│   ├── events.py                     ← GET /api/events — SSE real-time stream (cookie auth)
+│   └── mobile_events.py              ← GET /api/mobile/events — SSE for mobile (Bearer auth); same broker, strips entity IDs, forwards tickets/reports only
 │
 ├── services/                         ← Business logic — Supabase calls, zone orchestration
 │   ├── auth_service.py
 │   ├── zones_service.py              ← run_pipeline() — call via run_in_threadpool
 │   ├── tickets_service.py
 │   ├── reports_service.py
-│   └── technicians_service.py
+│   ├── technicians_service.py
+│   ├── audit_service.py              ← Append-only audit log — background writer, SHA-256 chain
+│   └── events_service.py             ← In-process pub/sub broker feeding the SSE stream
 │
 ├── schemas/                          ← Pydantic v2 request/response models
 │   ├── auth.py
 │   ├── zones.py
 │   ├── tickets.py
 │   ├── reports.py
-│   └── technicians.py
+│   ├── technicians.py
+│   └── audit.py
 │
 └── zones/                            ← Zone algorithms — do not modify
     ├── zone_a.py
@@ -194,23 +213,23 @@ zones/       → Pure data processing functions — no HTTP, no database, no sid
 
 ### Frontend layers
 ```
-page.tsx     → Composes components, handles page-level state
+page.tsx     → Composes components, owns page-level UI state, calls hooks
 components/  → UI building blocks — receive props, emit events, no direct API calls
-hooks/       → Data fetching and mutation — calls lib/api/, returns state to components
-lib/api/     → Raw API calls — one function per endpoint, returns typed data
-types/       → TypeScript interfaces — shared across components, hooks, and api calls
+hooks/       → SWR data fetching — call lib/api/, cache results, expose mutate()
+lib/api/     → Raw fetch calls — one function per endpoint, returns typed data
+types/       → TypeScript interfaces — shared across components, hooks, and api
 ```
 
 ---
 
 ## API Endpoints
 
-### Auth
+### Auth (web — httpOnly cookies; tokens never in the response body)
 ```
-POST   /api/auth/login                { username, password } → { access_token, user }
+POST   /api/auth/login                { credential, password } → { user }  (sets access/refresh/csrf cookies)
 GET    /api/auth/me                   → Current user profile
-POST   /api/auth/logout
-POST   /api/auth/refresh              { refresh_token } → { access_token }
+POST   /api/auth/logout               → Clears auth cookies
+POST   /api/auth/refresh              → Rotates tokens from the refresh cookie (no body)
 ```
 
 ### Zones Processing
@@ -218,28 +237,53 @@ POST   /api/auth/refresh              { refresh_token } → { access_token }
 POST   /api/zones/process             { file: CSV, contamination? } → ProcessResult (synchronous)
 ```
 
-### Tickets
+### Tickets (analyst — all require analyst role)
 ```
-GET    /api/tickets                   → Paginated list (status/priority/station_id filters)
-GET    /api/tickets/{id}              → Single ticket with attachments
-POST   /api/tickets                   → Create (analyst only)
-PATCH  /api/tickets/{id}              → Update status, technician, or fields
-GET    /api/tickets/{id}/pdf          → Stream PDF report
-GET    /api/tickets/{id}/attachments  → List CSV attachments
-POST   /api/tickets/{id}/attachments  → Upload CSV attachment
+GET    /api/tickets                          → Paginated list (status/priority/station_id filters)
+GET    /api/tickets/technicians              → Technician summary for assignment dropdowns
+POST   /api/tickets                          → Create (multi-technician assignment)
+GET    /api/tickets/{id}                      → Single ticket detail
+PATCH  /api/tickets/{id}                      → Update status, technician, or fields
+POST   /api/tickets/{id}/technicians          → Add technician(s) to a ticket
+DELETE /api/tickets/{id}/technicians/{userId} → Remove (soft-delete) a technician
+POST   /api/tickets/{id}/follow-up            → Send back for re-visit (notes required)
+POST   /api/tickets/{id}/cancel               → Cancel (only from assigned; reason required)
+GET    /api/tickets/{id}/report               → Active inspection report (with photos)
+GET    /api/tickets/{id}/attachments          → List file attachments
+POST   /api/tickets/{id}/attachments          → Upload file attachment (≤20 MB)
+GET    /api/tickets/{id}/pdf                   → Stream PDF report
 ```
 
 ### Reports
 ```
-GET    /api/reports                   → All reports (analyst only)
+GET    /api/reports                   → All reports grouped by status (analyst only)
 GET    /api/reports/{id}              → Single report
+GET    /api/reports/{id}/photos       → Inspection photos (fresh signed URLs)
 PATCH  /api/reports/{id}/approve      → Approve report, mark ticket verified (analyst only)
 ```
 
 ### Technicians
 ```
-GET    /api/technicians               → List technician accounts
-POST   /api/technicians               → Create technician account (analyst only)
+GET    /api/technicians                        → List technician accounts
+POST   /api/technicians                        → Create technician account (analyst only)
+PATCH  /api/technicians/{id}/toggle-active      → Enable / disable an account (API exists; not exposed in analyst UI — admin-only operation)
+```
+
+### Audit Log
+```
+GET    /api/audit                     → Paginated log (event/user/entity/ip/success filters)
+GET    /api/audit/stats               → Event counts + failure rates (top 6)
+GET    /api/audit/integrity           → Chain-hash integrity verification
+GET    /api/audit/export              → CSV export with same filters
+```
+
+### Real-time (SSE)
+```
+GET    /api/events                    → Server-Sent Events stream (cookie auth); pushes
+                                         {resource, action, id} invalidation signals so the
+                                         dashboard auto-updates. In-process broker fed from
+                                         audit.log() → run ONE worker (no --workers); Redis
+                                         pub/sub is the multi-worker upgrade path.
 ```
 
 ### Mobile (technician Bearer auth — all under `/api/mobile/`)
@@ -253,10 +297,14 @@ GET    /api/mobile/tickets/{id}
 PATCH  /api/mobile/tickets/{id}/status → Set in-progress or completed
 GET    /api/mobile/tickets/{id}/attachments
 GET    /api/mobile/tickets/{id}/report-id
+GET    /api/mobile/tickets/{id}/follow-up-context → Prior rounds + analyst instructions for re-visit
+GET    /api/mobile/tickets/{id}/attachments
 GET    /api/mobile/tickets/{id}/pdf
 POST   /api/mobile/reports            → Submit inspection report
 GET    /api/mobile/reports/{id}/photos
 POST   /api/mobile/reports/{id}/photos → Upload inspection photo
+GET    /api/mobile/activity           → Technician's own audit feed (ticket events only)
+GET    /api/mobile/events             → SSE stream (Bearer auth); content-free nudge triggering refetch
 ```
 
 ---
@@ -337,5 +385,6 @@ These architectural decisions are enforced throughout the codebase:
 - **No frontend → Supabase**: All frontends (Next.js, Expo) communicate exclusively through FastAPI. The backend owns all Supabase interaction.
 - **Zone processing untouched**: `zone_a.py`, `zone_b.py`, `zone_c.py` in `api/app/zones/` are exact copies from prototypes. Algorithms must not change.
 - **Strict layer separation** (backend): Routers (HTTP only) → Services (business logic) → Schemas (Pydantic) → Zones (pure data processing)
-- **Ticket state machine**: `assigned → in-progress → completed → verified` — enforced in both API and mobile app
+- **Ticket state machine**: `assigned → in-progress → pending_review → verified`; analyst can also branch to `follow_up` (from `pending_review`) or `cancelled` (from `assigned`) — enforced in both API and mobile app
 - **Token auth**: Analyst uses httpOnly cookies (30-min access, 7-day refresh). Technician uses Bearer tokens in SecureStore (native) or localStorage (web).
+- **Real-time over SSE**: the dashboard auto-updates via a single `EventSource` to `/api/events`, fed by an in-process broker hooked into `audit.log()`. The mobile app has a parallel SSE endpoint at `/api/mobile/events` (Bearer auth, content-free nudges only). The browser still never touches Supabase. Because the broker is in-process, the API must run **one uvicorn worker / one replica** (Redis pub/sub is the documented multi-worker upgrade path).

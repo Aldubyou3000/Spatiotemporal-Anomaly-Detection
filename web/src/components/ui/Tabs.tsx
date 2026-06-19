@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, ReactNode, useContext, useId, useState } from "react";
+import React, { createContext, ReactNode, useContext, useId, useState } from "react";
 import { cn } from "@/lib/cn";
 
 interface TabsContextValue {
@@ -42,14 +42,15 @@ export function Tabs({ defaultValue, value: controlled, onValueChange, children,
   );
 }
 
-export function TabsList({ children, className }: { children: ReactNode; className?: string }) {
+export function TabsList({ children, className, style }: { children: ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
     <div
       role="tablist"
       className={cn(
-        "flex items-center gap-1 border-b border-border overflow-x-auto",
+        "flex items-center gap-1 border-b border-border min-w-0",
         className
       )}
+      style={style}
     >
       {children}
     </div>
@@ -77,7 +78,7 @@ export function Tab({ value, children, icon, className }: TabProps) {
       className={cn(
         "relative inline-flex items-center gap-2 px-4 py-3 text-[13px] font-medium",
         "transition-colors duration-150",
-        "whitespace-nowrap",
+        "whitespace-nowrap shrink-0",
         selected
           ? "text-text"
           : "text-text-secondary hover:text-text",

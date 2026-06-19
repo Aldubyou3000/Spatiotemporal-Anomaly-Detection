@@ -74,7 +74,7 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
     }).addTo(mapRef.current);
   }, [theme]);
 
-  // Render markers
+  // Render markers and lock viewport to station bounds
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -116,8 +116,21 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
                <div style="font-family: var(--font-jetbrains, ui-monospace); font-size: 14px; color: ${isAnomalous ? "var(--danger)" : "var(--text)"};">${station.anomaly_count}</div>
              </div>
            </div>
-         </div>`
+         </div>`,
+        {
+          autoPan: true,
+          autoPanPaddingTopLeft: L.point(20, 20),
+          autoPanPaddingBottomRight: L.point(20, 20),
+          keepInView: true,
+        }
       );
+
+      marker.bindTooltip(station.station_id, {
+        permanent: true,
+        direction: "top",
+        offset: L.point(0, isAnomalous ? -11 : -8),
+        className: "station-label",
+      });
 
       markersRef.current.push(marker);
       bounds.extend([station.latitude, station.longitude]);
@@ -125,15 +138,22 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
 
     if (bounds.isValid()) {
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 11 });
+
+      // Lock zoom-out to the level that shows all stations, and pan to those bounds
+      const fitZoom = map.getBoundsZoom(bounds, false, [40, 40] as unknown as L.Point);
+      map.setMinZoom(fitZoom);
+      map.setMaxBounds(bounds.pad(0.3));
     }
   }, [stations]);
 
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      style={{ height, borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)" }}
-    />
+    <div style={{ isolation: "isolate" }}>
+      <div
+        ref={containerRef}
+        className={className}
+        style={{ height, borderRadius: 12, overflow: "hidden" }}
+      />
+    </div>
   );
 }
 
