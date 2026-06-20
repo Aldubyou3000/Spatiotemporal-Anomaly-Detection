@@ -4,9 +4,11 @@ All routes here require a valid technician JWT in the Authorization header.
 The mobile app stores this token in Expo SecureStore, never in localStorage.
 """
 
+import ipaddress
 import logging
 from datetime import datetime, timezone
 from io import BytesIO
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -19,7 +21,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from ..core.dependencies import get_supabase, require_technician_mobile
+from ..core.dependencies import _client_ip, get_supabase, require_technician_mobile
 from ..core.config import settings
 from ..services.audit_service import audit
 from ..services.auth_service import (
@@ -30,8 +32,6 @@ from ..services.auth_service import (
     refresh_session,
     revoke_session,
 )
-from supabase_auth.errors import AuthApiError
-
 logger = logging.getLogger("mobile.router")
 
 router = APIRouter(prefix="/api/mobile", tags=["mobile"])
@@ -91,10 +91,7 @@ class MobileRefreshRequest(BaseModel):
 @limiter.limit("10/minute")
 def mobile_login_endpoint(request: Request, body: MobileLoginRequest):
     """Technician login — returns tokens directly (stored in SecureStore, never cookies)."""
-    client_ip = request.client.host if request.client else "unknown"
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        client_ip = fwd.split(",")[0].strip()
+    client_ip = _client_ip(request)
     try:
         result = _mobile_login(body.credential, body.password, client_ip=client_ip,
                                user_agent=request.headers.get("User-Agent", ""))
@@ -118,12 +115,8 @@ def mobile_refresh(request: Request, body: MobileRefreshRequest):
 @limiter.limit("30/minute")
 def mobile_logout(request: Request, body: MobileRefreshRequest, user: dict = Depends(require_technician_mobile)):
     """Invalidate the current session on the Supabase side using the refresh token."""
-    client_ip = request.client.host if request.client else "unknown"
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        client_ip = fwd.split(",")[0].strip()
     revoke_session(body.refresh_token)
-    audit.logout(user_id=str(user["id"]), ip=client_ip, platform="mobile")
+    audit.logout(user_id=str(user["id"]), ip=_client_ip(request), platform="mobile")
     return {"ok": True}
 
 
@@ -153,9 +146,6 @@ _APP_SCHEME_PREFIX = "spatiotemporal://"
 #   * exp:// , exps://       Expo Go / dev client
 #   * http://<loopback-or-LAN>[:port]/...   Expo web + LAN dev only
 # A public http(s) host (e.g. https://evil.com) is never allowed.
-import ipaddress
-from urllib.parse import urlparse
-
 _ALLOWED_NATIVE_SCHEMES = ("spatiotemporal://", "exp://", "exps://")
 
 
@@ -226,10 +216,7 @@ def mobile_oauth_callback(
 ):
     # `state` arrives as a PATH segment (Supabase matched `…/callback/**`); `code`
     # is the query param Supabase appended after the exchange.
-    client_ip = request.client.host if request.client else "unknown"
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        client_ip = fwd.split(",")[0].strip()
+    client_ip = _client_ip(request)
     user_agent = request.headers.get("User-Agent", "")
 
     # On Google error / cancel we don't yet know the return_url (it's keyed by a
@@ -461,16 +448,12 @@ def mobile_update_ticket_status(
     now = datetime.now(timezone.utc).isoformat()
     sb.table("tickets").update({"status": "in-progress", "updated_at": now}).eq("id", ticket_id).execute()
 
-    client_ip = request.client.host if request.client else "unknown"
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        client_ip = fwd.split(",")[0].strip()
     audit.ticket_status_changed(
         actor_id=str(user["id"]),
         ticket_id=ticket_id,
         old_status=existing["status"],
         new_status="in-progress",
-        ip=client_ip,
+        ip=_client_ip(request),
     )
     return {"id": ticket_id, "status": "in-progress", "updated_at": now}
 
@@ -575,7 +558,8 @@ def mobile_submit_report(
             )
             if fallback:
                 return fallback
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to submit report: {err}")
+        logger.error("[mobile] report insert failed: %s", err)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit report. Please try again.")
 
     if not report_res.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Report insert returned no data")
@@ -587,15 +571,11 @@ def mobile_submit_report(
     }).eq("id", body.ticket_id).execute()
 
     report_row = report_res.data[0]
-    mob_ip = request.client.host if request.client else "unknown"
-    fwd2 = request.headers.get("X-Forwarded-For")
-    if fwd2:
-        mob_ip = fwd2.split(",")[0].strip()
     audit.report_submitted(
         actor_id=str(user["id"]),
         report_id=str(report_row["id"]),
         ticket_id=body.ticket_id,
-        ip=mob_ip,
+        ip=_client_ip(request),
     )
     return report_row
 
@@ -803,17 +783,13 @@ async def mobile_upload_photo(
 
     signed_url = _signed_url(sb, "inspection-photos", path, 3600)
 
-    ph_ip = request.client.host if request.client else "unknown"
-    fwd3 = request.headers.get("X-Forwarded-For")
-    if fwd3:
-        ph_ip = fwd3.split(",")[0].strip()
     audit.file_uploaded(
         actor_id=str(user["id"]),
         entity_type="inspection_report",
         entity_id=report_id,
         file_name=photo.filename or path,
         file_size=len(data),
-        ip=ph_ip,
+        ip=_client_ip(request),
     )
     return {"photo_url": signed_url, "path": path}
 

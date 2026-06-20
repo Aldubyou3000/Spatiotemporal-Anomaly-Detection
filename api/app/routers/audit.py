@@ -9,6 +9,7 @@ Endpoints:
 
 import csv
 import io
+import json
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -18,7 +19,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from ..core.dependencies import get_supabase, require_analyst
-from ..schemas.audit import AuditChainReport, AuditChainResult, AuditLogEntry, AuditLogListResponse
+from ..schemas.audit import AuditChainReport, AuditChainResult, AuditLogListResponse
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 limiter = Limiter(key_func=get_remote_address)
@@ -166,7 +167,6 @@ def export_audit_csv(
         # Flatten jsonb fields to strings for CSV
         for field in ("changes", "meta"):
             if row.get(field) is not None:
-                import json
                 row[field] = json.dumps(row[field])
         writer.writerow(row)
 

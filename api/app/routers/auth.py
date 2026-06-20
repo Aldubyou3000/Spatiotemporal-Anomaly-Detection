@@ -15,6 +15,7 @@ Security layers applied here:
     token is invalidated at the provider level, not just client-side.
 """
 
+import hmac
 import logging
 import secrets
 
@@ -114,7 +115,6 @@ def _require_csrf(x_csrf_token: str | None = Header(default=None, alias="X-CSRF-
     """
     if not x_csrf_token or not csrf_cookie:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token missing")
-    import hmac
     if not hmac.compare_digest(x_csrf_token, csrf_cookie):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token invalid")
 
