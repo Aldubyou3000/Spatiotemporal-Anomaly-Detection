@@ -4,6 +4,8 @@ Zones pipeline router.
 Accepts a CSV upload, runs Zone A → B → C in a worker thread (CPU-bound),
 and returns the structured result. Analyst-only.
 """
+import logging
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
@@ -11,6 +13,8 @@ from ..core.dependencies import require_analyst
 from ..schemas.auth import UserProfile
 from ..schemas.zones import ProcessResult
 from ..services.zones_service import ZoneProcessingError, run_pipeline
+
+logger = logging.getLogger("zones.router")
 
 router = APIRouter(prefix="/api/zones", tags=["zones"])
 
@@ -54,7 +58,8 @@ async def process_zones(
             detail=str(exc),
         ) from exc
     except Exception as exc:
+        logger.exception("[zones] pipeline failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Pipeline failed: {exc}",
+            detail="The pipeline could not process this file. Please check the file and try again.",
         ) from exc

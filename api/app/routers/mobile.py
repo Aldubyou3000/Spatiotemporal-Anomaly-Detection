@@ -4,11 +4,12 @@ All routes here require a valid technician JWT in the Authorization header.
 The mobile app stores this token in Expo SecureStore, never in localStorage.
 """
 
+import logging
 from datetime import datetime, timezone
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -21,8 +22,17 @@ from slowapi.util import get_remote_address
 from ..core.dependencies import get_supabase, require_technician_mobile
 from ..core.config import settings
 from ..services.audit_service import audit
-from ..services.auth_service import mobile_login as _mobile_login, refresh_session, revoke_session
+from ..services.auth_service import (
+    OAuthGateError,
+    mobile_login as _mobile_login,
+    oauth_complete_mobile,
+    oauth_start,
+    refresh_session,
+    revoke_session,
+)
 from supabase_auth.errors import AuthApiError
+
+logger = logging.getLogger("mobile.router")
 
 router = APIRouter(prefix="/api/mobile", tags=["mobile"])
 limiter = Limiter(key_func=get_remote_address)
@@ -121,6 +131,155 @@ def mobile_logout(request: Request, body: MobileRefreshRequest, user: dict = Dep
 @limiter.limit("60/minute")
 def mobile_me(request: Request, user: dict = Depends(require_technician_mobile)):
     return user
+
+
+# ─── Google OAuth (technician sign-in) ────────────────────────────────────────
+# Server-side PKCE, mirroring the web flow but: (1) gates on technician role,
+# (2) returns tokens to the app's deep-link scheme in the URL fragment instead of
+# setting cookies. The app opens /start in the system browser; Supabase/Google
+# redirect back to /callback; /callback bounces the browser to
+# spatiotemporal://oauth-callback#access_token=…&refresh_token=… which the app
+# catches via expo-web-browser. The `return_url` is held server-side keyed by
+# state, so it never travels to Google.
+
+# The deep-link scheme the app registers (App/app.json "scheme"), used as the
+# fallback when we have no recoverable return_url to bounce an error to.
+_APP_SCHEME_PREFIX = "spatiotemporal://"
+
+# Allowed return_url schemes/hosts. `Linking.createURL()` resolves differently per
+# runtime, so we must accept all of the app's legitimate forms while still
+# rejecting arbitrary external redirects (open-redirect protection):
+#   * spatiotemporal://      built APK / dev client (production scheme)
+#   * exp:// , exps://       Expo Go / dev client
+#   * http://<loopback-or-LAN>[:port]/...   Expo web + LAN dev only
+# A public http(s) host (e.g. https://evil.com) is never allowed.
+import ipaddress
+from urllib.parse import urlparse
+
+_ALLOWED_NATIVE_SCHEMES = ("spatiotemporal://", "exp://", "exps://")
+
+
+def _is_allowed_return_url(url: str) -> bool:
+    if any(url.startswith(p) for p in _ALLOWED_NATIVE_SCHEMES):
+        return True
+    # Only http to a loopback / private (LAN) host is allowed — for Expo web/dev.
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme != "http":
+        return False
+    host = parsed.hostname or ""
+    if host == "localhost":
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # a real domain name over http — reject
+    return ip.is_loopback or ip.is_private
+
+
+def _mobile_oauth_callback_url(request: Request) -> str:
+    """Build the backend callback URL from the host the phone actually used to
+    reach the API, so it matches what's registered in Supabase. Honour the
+    tunnel/proxy's X-Forwarded-Proto so a cloudflared HTTPS front-end produces an
+    https callback (the phone's BROWSER must never get an http LAN hop — Chrome
+    blocks cleartext private-network redirects mid-OAuth)."""
+    host = request.headers.get("host")
+    if host:
+        # Behind cloudflared/ngrok, X-Forwarded-Proto is https even though the
+        # internal hop to uvicorn is http. Trust it; default to request scheme.
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+        return f"{scheme}://{host}/api/mobile/auth/oauth/google/callback"
+    return settings.mobile_oauth_callback_url
+
+
+@router.get("/auth/oauth/google/start")
+@limiter.limit("10/minute")
+def mobile_oauth_start(request: Request, return_url: str):
+    # Open-redirect guard: only allow the app's own deep-link schemes / LAN dev
+    # hosts as the return target. Checked BEFORE the enabled flag so we never
+    # bounce an attacker-supplied URL even with an error fragment.
+    if not _is_allowed_return_url(return_url):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid return_url")
+    if not settings.google_oauth_enabled:
+        return _mobile_oauth_error(return_url, "oauth_disabled")
+    try:
+        data = oauth_start(
+            "google",
+            callback_url=_mobile_oauth_callback_url(request),
+            return_url=return_url,
+        )
+    except Exception:
+        logger.exception("[oauth] mobile oauth_start failed")
+        return _mobile_oauth_error(return_url, "oauth_unavailable")
+    return _no_store_redirect(data["url"])
+
+
+@router.get("/auth/oauth/google/callback/{state}")
+@limiter.limit("10/minute")
+def mobile_oauth_callback(
+    request: Request,
+    state: str,
+    code: str | None = None,
+    error: str | None = None,
+):
+    # `state` arrives as a PATH segment (Supabase matched `…/callback/**`); `code`
+    # is the query param Supabase appended after the exchange.
+    client_ip = request.client.host if request.client else "unknown"
+    fwd = request.headers.get("X-Forwarded-For")
+    if fwd:
+        client_ip = fwd.split(",")[0].strip()
+    user_agent = request.headers.get("User-Agent", "")
+
+    # On Google error / cancel we don't yet know the return_url (it's keyed by a
+    # valid state). Best effort: if state is bad we can't bounce to the app, so
+    # show a minimal page. In practice the app also has its own cancel handling.
+    if error or not code or not state:
+        return _mobile_oauth_terminal_error("oauth_cancelled")
+
+    try:
+        result, return_url = oauth_complete_mobile(
+            code, state, client_ip=client_ip, user_agent=user_agent,
+        )
+    except OAuthGateError as exc:
+        # Deep-link the error back to the app using the return_url the gate
+        # carried (correct scheme for whatever runtime the app is on). Only when
+        # the state lookup itself failed is return_url None — then fall back to
+        # the production scheme as a best effort.
+        if exc.return_url:
+            return _mobile_oauth_error(exc.return_url, "oauth_denied")
+        return _mobile_oauth_terminal_error("oauth_denied")
+
+    # Success — hand tokens to the app via its deep link, in the URL fragment so
+    # they never appear in any server log along the redirect.
+    target = (
+        f"{return_url}#access_token={result['access_token']}"
+        f"&refresh_token={result['refresh_token']}"
+    )
+    return _no_store_redirect(target)
+
+
+def _no_store_redirect(url: str) -> RedirectResponse:
+    """302 that must never be cached. The in-app browser (Chrome Custom Tabs)
+    caches redirects aggressively; a stale cached OAuth redirect short-circuits
+    the whole flow (jumps straight to an old target without re-hitting the
+    backend/Supabase). `no-store` prevents that."""
+    resp = RedirectResponse(url, status_code=status.HTTP_302_FOUND)
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+def _mobile_oauth_error(return_url: str, code: str) -> RedirectResponse:
+    """Bounce a known-good app return_url with an error fragment."""
+    return _no_store_redirect(f"{return_url}#error={code}")
+
+
+def _mobile_oauth_terminal_error(code: str) -> RedirectResponse:
+    """When we can't recover the app return_url, deep-link to the app's fixed
+    callback path with the error so the app can still react."""
+    return _no_store_redirect(f"{_APP_SCHEME_PREFIX}oauth-callback#error={code}")
 
 
 # ─── Tickets ──────────────────────────────────────────────────────────────────

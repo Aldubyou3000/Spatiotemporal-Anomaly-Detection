@@ -44,10 +44,15 @@ def verify_supabase_token(token: str, jwt_secret: str, supabase_url: str | None 
 
     alg = header.get("alg", "HS256")
 
+    # Supabase user tokens are minted with aud="authenticated". Verifying the
+    # audience (rather than skipping it) rejects tokens issued for a different
+    # audience, e.g. service tokens or tokens from another Supabase product.
+    _SUPABASE_AUD = "authenticated"
+
     try:
         if alg == "HS256":
             return jwt.decode(
-                token, jwt_secret, algorithms=["HS256"], options={"verify_aud": False}
+                token, jwt_secret, algorithms=["HS256"], audience=_SUPABASE_AUD
             )
 
         if alg in ("ES256", "RS256"):
@@ -55,7 +60,7 @@ def verify_supabase_token(token: str, jwt_secret: str, supabase_url: str | None 
                 return {}
             signing_key = _jwks_client(supabase_url).get_signing_key_from_jwt(token).key
             return jwt.decode(
-                token, signing_key, algorithms=[alg], options={"verify_aud": False}
+                token, signing_key, algorithms=[alg], audience=_SUPABASE_AUD
             )
 
         return {}

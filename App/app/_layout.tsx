@@ -84,6 +84,12 @@ function AppRoot() {
     <ThemeProvider value={isDarkMode ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        {/* OAuth deep-link landing — invisible: no header, no animation. Token
+            capture happens in services/api.ts; this just redirects to root. */}
+        <Stack.Screen
+          name="oauth-callback"
+          options={{ headerShown: false, animation: 'none' }}
+        />
         <Stack.Screen
           name="ticket/[id]"
           options={{
@@ -114,7 +120,7 @@ function AppRoot() {
 
 // ─── Login ───────────────────────────────────────────────────────────────────
 function LoginScreen() {
-  const { login } = useAppContext();
+  const { login, loginWithGoogle } = useAppContext();
   const theme = useTheme();
   const passwordRef = useRef<TextInput>(null);
 
@@ -124,18 +130,18 @@ function LoginScreen() {
   const usernameRef = useRef('');
   const passwordVal = useRef('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe]     = useState(false);
   const [errors, setErrors]             = useState<{ username?: string; password?: string; general?: string }>({});
   const [loading, setLoading]           = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Staggered entrance — brand → username → password → remember → button.
+  // Staggered entrance — brand → input card → sign-in button → google button.
   // Each row's opacity + translateY are their own shared values (declared at the
   // top level, never inside a loop/conditional) so the Rules of Hooks hold.
   const o0 = useSharedValue(0); const y0 = useSharedValue(18); // brand
-  const o1 = useSharedValue(0); const y1 = useSharedValue(12); // username
-  const o2 = useSharedValue(0); const y2 = useSharedValue(12); // password
-  const o3 = useSharedValue(0); const y3 = useSharedValue(12); // remember
-  const o4 = useSharedValue(0); const y4 = useSharedValue(10); // button
+  const o1 = useSharedValue(0); const y1 = useSharedValue(12); // input card
+  const o2 = useSharedValue(0); const y2 = useSharedValue(12); // (advances clock)
+  const o3 = useSharedValue(0); const y3 = useSharedValue(10); // sign-in button
+  const o4 = useSharedValue(0); const y4 = useSharedValue(10); // google button
 
   useEffect(() => {
     const rows: [typeof o0, typeof y0][] = [
@@ -154,8 +160,8 @@ function LoginScreen() {
   // intentionally no separate passwordAnim view.
   const brandAnim    = useAnimatedStyle(() => ({ opacity: o0.value, transform: [{ translateY: y0.value }] }));
   const usernameAnim = useAnimatedStyle(() => ({ opacity: o1.value, transform: [{ translateY: y1.value }] }));
-  const rememberAnim = useAnimatedStyle(() => ({ opacity: o3.value, transform: [{ translateY: y3.value }] }));
-  const buttonAnim   = useAnimatedStyle(() => ({ opacity: o4.value, transform: [{ translateY: y4.value }] }));
+  const buttonAnim   = useAnimatedStyle(() => ({ opacity: o3.value, transform: [{ translateY: y3.value }] }));
+  const googleAnim   = useAnimatedStyle(() => ({ opacity: o4.value, transform: [{ translateY: y4.value }] }));
 
   const validate = () => {
     const u = usernameRef.current.trim();
@@ -178,6 +184,21 @@ function LoginScreen() {
       setErrors({ general: e?.message ?? 'Incorrect username or password.' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setErrors({});
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (e: any) {
+      // User backing out of the browser is not an error — stay silent.
+      if (e?.name !== 'OAuthCancelled') {
+        setErrors({ general: e?.message ?? 'Google sign-in failed. Please try again.' });
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -277,39 +298,47 @@ function LoginScreen() {
           ) : null}
         </Animated.View>
 
-        {/* ── Remember me ─────────────────────────────────────────────── */}
-        <Animated.View style={rememberAnim}>
-          <Pressable
-            onPress={() => setRememberMe((r) => !r)}
-            android_ripple={{ color: palette.brand + '22', borderless: false }}
-            style={({ pressed }) => [styles.rememberRow, Platform.OS === 'ios' && { opacity: pressed ? 0.7 : 1 }]}
-            hitSlop={8}
-          >
-            <View
-              style={[
-                styles.checkbox,
-                {
-                  borderColor: rememberMe ? palette.brand : '#E5E7EB',
-                  backgroundColor: rememberMe ? palette.brand : 'transparent',
-                },
-              ]}
-            >
-              {rememberMe ? <Icon name={icons.check} size={12} color={palette.white} /> : null}
-            </View>
-            <Text style={styles.rememberLabel}>Remember me</Text>
-          </Pressable>
-        </Animated.View>
-
         {/* ── Sign In button ───────────────────────────────────────────── */}
-        <Animated.View style={buttonAnim}>
+        <Animated.View style={[buttonAnim, { marginTop: spacing.md }]}>
           <Button
             label="Sign In"
             onPress={handleLogin}
             loading={loading}
+            disabled={googleLoading}
             size="lg"
             style={{ borderRadius: 16 }}
             textStyle={{ fontWeight: '700' }}
           />
+        </Animated.View>
+
+        {/* ── Divider ──────────────────────────────────────────────────── */}
+        <Animated.View style={[googleAnim, styles.dividerRow]}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </Animated.View>
+
+        {/* ── Continue with Google ─────────────────────────────────────── */}
+        <Animated.View style={googleAnim}>
+          <Pressable
+            onPress={handleGoogleLogin}
+            disabled={loading || googleLoading}
+            android_ripple={{ color: '#00000010', borderless: false }}
+            style={({ pressed }) => [
+              styles.googleButton,
+              (loading || googleLoading) && { opacity: 0.6 },
+              Platform.OS === 'ios' && pressed && { opacity: 0.7 },
+            ]}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color="#4285F4" />
+            ) : (
+              <>
+                <Text style={styles.googleG}>G</Text>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
         </Animated.View>
       </View>
     </KeyboardAvoidingView>
@@ -414,26 +443,44 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Remember ──────────────────────────────────────────────────────────────
-  rememberRow: {
+  // Divider ───────────────────────────────────────────────────────────────
+  dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs + 2,
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
+    gap: spacing.sm,
+    marginVertical: spacing.md,
   },
-  checkbox: {
-    width: 20, height: 20,
-    borderRadius: radius.xs,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    fontSize: typography.caption.size,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+
+  // Google button ───────────────────────────────────────────────────────────
+  googleButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.xs + 2,
+    minHeight: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
-  rememberLabel: {
-    fontSize: typography.callout.size,
-    lineHeight: typography.callout.lineHeight,
-    fontWeight: '500',
-    color: '#6B7280',
+  googleG: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4285F4',
+  },
+  googleButtonText: {
+    fontSize: typography.body.size,
+    fontWeight: '600',
+    color: '#111827',
   },
 });

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -11,6 +13,8 @@ from ..services.technicians_service import (
     list_technicians,
     toggle_technician_active,
 )
+
+logger = logging.getLogger("technicians.router")
 
 router = APIRouter(prefix="/api/technicians", tags=["technicians"])
 limiter = Limiter(key_func=get_remote_address)
@@ -35,10 +39,15 @@ def create_technician_endpoint(
 ):
     try:
         technician = create_technician(body)
-    except Exception as e:
+    except ValueError as e:
+        # Clean, already-translated, user-safe message from the service layer.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        # Anything else is unexpected — log via the global handler, return generic.
+        logger.exception("[technicians] unexpected error creating technician")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create the technician account. Please try again.",
         )
     audit.account_created(
         actor_id=str(user["id"]),

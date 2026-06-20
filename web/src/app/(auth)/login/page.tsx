@@ -8,10 +8,22 @@ import { useTheme } from "@/context/ThemeContext";
 
 const LOGIN_TIMEOUT_MS = 12_000;
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const GOOGLE_OAUTH_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_OAUTH === "true";
+
 function parseLockoutSeconds(msg: string): number | null {
   const m = msg.match(/try again in (\d+) seconds?/i);
   return m ? parseInt(m[1], 10) : null;
 }
+
+// Friendly messages for the ?error= codes the OAuth callback redirects with.
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  oauth_denied: "This Google account isn't an authorised analyst. Contact your administrator.",
+  oauth_state: "Google sign-in could not be verified. Please try again.",
+  oauth_cancelled: "Google sign-in was cancelled.",
+  oauth_unavailable: "Google sign-in is temporarily unavailable. Use your password instead.",
+  oauth_disabled: "Google sign-in is not enabled. Use your password instead.",
+};
 
 export default function LoginPage() {
   const [credential, setCredential] = useState("");
@@ -38,7 +50,23 @@ export default function LoginPage() {
     return () => clearInterval(timerRef.current!);
   }, [lockedFor]);
 
+  // Surface OAuth callback errors (passed as ?error=... on redirect back here).
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("error");
+    if (code && OAUTH_ERROR_MESSAGES[code]) {
+      setError(OAUTH_ERROR_MESSAGES[code]);
+      // Clean the URL so a refresh doesn't re-show the banner.
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const isLocked = lockedFor > 0;
+
+  function handleGoogleSignIn() {
+    if (loading || isLocked) return;
+    // Top-level navigation (not fetch) so the OAuth redirect chain + cookies work.
+    window.location.href = `${API_URL}/api/auth/oauth/google/start`;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -446,6 +474,68 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            {/* Google OAuth — additive; password above still works */}
+            {GOOGLE_OAUTH_ENABLED && (
+              <>
+                {/* Divider */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    margin: "2px 0",
+                    color: "var(--text-muted)",
+                    fontSize: "var(--font-xs)",
+                  }}
+                >
+                  <span style={{ flex: 1, height: 1, background: "var(--divider)" }} />
+                  or
+                  <span style={{ flex: 1, height: 1, background: "var(--divider)" }} />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={loading || isLocked}
+                  style={{
+                    width: "100%",
+                    height: 40,
+                    borderRadius: "var(--r-md)",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface)",
+                    color: "var(--text)",
+                    fontSize: "var(--font-base)",
+                    fontWeight: 500,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                    cursor: loading || isLocked ? "not-allowed" : "pointer",
+                    boxShadow: "var(--shadow-xs)",
+                    transition: "background 0.12s ease, border-color 0.12s ease",
+                    fontFamily: "inherit",
+                    opacity: loading || isLocked ? 0.6 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!loading && !isLocked)
+                      (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "var(--surface)";
+                  }}
+                >
+                  {/* Google "G" mark */}
+                  <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden style={{ flexShrink: 0 }}>
+                    <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
+                    <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+                    <path fill="#FBBC05" d="M3.97 10.72A5.41 5.41 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.05l3.01-2.33z" />
+                    <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+                  </svg>
+                  Continue with Google
+                </button>
+              </>
+            )}
           </form>
 
           {/* Card footer */}

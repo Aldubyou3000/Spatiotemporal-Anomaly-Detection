@@ -1,13 +1,28 @@
 from __future__ import annotations
 
+import logging
+
 from supabase import Client, create_client
 
 from ..core.config import settings
+from ..core.errors import friendly_db_error
 from ..schemas.technicians import TechnicianCreate
+
+logger = logging.getLogger("technicians.service")
 
 
 def _admin_client():
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
+
+
+def _rollback_auth_user(admin: Client, user_id: str) -> None:
+    """Best-effort delete of an auth user created moments ago, when the matching
+    profile insert failed. Prevents an orphaned auth account from blocking a
+    retry (its email would otherwise collide)."""
+    try:
+        admin.auth.admin.delete_user(user_id)
+    except Exception:  # noqa: BLE001 — cleanup is best-effort
+        logger.warning("[technicians] failed to roll back orphaned auth user %s", user_id)
 
 
 def list_technicians(sb: Client) -> list[dict]:
@@ -24,15 +39,21 @@ def list_technicians(sb: Client) -> list[dict]:
 def create_technician(data: TechnicianCreate) -> dict:
     admin = _admin_client()
 
-    # Create the Supabase auth user with confirmed email
-    auth_res = admin.auth.admin.create_user(
-        {
-            "email": data.email,
-            "password": data.password,
-            "email_confirm": True,
-            "user_metadata": {"full_name": data.full_name, "username": data.username},
-        }
-    )
+    # Create the Supabase auth user with confirmed email. A duplicate email
+    # surfaces here as an AuthApiError; translate it to a friendly message
+    # instead of leaking the raw provider error.
+    try:
+        auth_res = admin.auth.admin.create_user(
+            {
+                "email": data.email,
+                "password": data.password,
+                "email_confirm": True,
+                "user_metadata": {"full_name": data.full_name, "username": data.username},
+            }
+        )
+    except Exception as e:  # noqa: BLE001 — translate, never leak the raw error
+        raise ValueError(friendly_db_error(
+            e, default="Could not create the account. Please check the email and try again.")) from e
     user_id = auth_res.user.id
 
     profile_data: dict = {
@@ -47,9 +68,18 @@ def create_technician(data: TechnicianCreate) -> dict:
     if data.phone:
         profile_data["phone"] = data.phone.strip()
 
-    upsert_res = admin.table("profiles").upsert(profile_data).execute()
+    # A duplicate username trips the profiles_username_key unique constraint here.
+    # If the profile insert fails after the auth user was created, roll the auth
+    # user back so a retry with a different username isn't blocked by a duplicate
+    # email from the orphaned auth account.
+    try:
+        upsert_res = admin.table("profiles").upsert(profile_data).execute()
+    except Exception as e:  # noqa: BLE001 — translate, never leak the raw error
+        _rollback_auth_user(admin, user_id)
+        raise ValueError(friendly_db_error(e)) from e
     if not (upsert_res.data or []):
-        raise RuntimeError("Failed to upsert technician profile")
+        _rollback_auth_user(admin, user_id)
+        raise ValueError("Could not create the technician account. Please try again.")
 
     detail_res = (
         admin.table("profiles")

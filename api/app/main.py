@@ -15,6 +15,10 @@ logger = logging.getLogger("uvicorn.error")
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
 
+# Fail closed before the app is even constructed: in production (dev_mode=False)
+# this raises if the config still carries insecure dev defaults.
+settings.assert_production_safe()
+
 app = FastAPI(title="Spatiotemporal Anomaly Detection API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

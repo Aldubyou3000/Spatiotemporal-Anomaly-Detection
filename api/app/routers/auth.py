@@ -19,6 +19,7 @@ import logging
 import secrets
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -27,7 +28,13 @@ from ..core.dependencies import _client_ip, _client_ua, get_current_user
 from ..core.security import make_session_fingerprint
 from ..schemas.auth import LoginRequest, LoginResponse
 from ..services.audit_service import audit
-from ..services.auth_service import login, refresh_session, revoke_session
+from ..services.auth_service import (
+    login,
+    oauth_complete,
+    oauth_start,
+    refresh_session,
+    revoke_session,
+)
 
 logger = logging.getLogger("auth.router")
 
@@ -112,6 +119,67 @@ def _require_csrf(x_csrf_token: str | None = Header(default=None, alias="X-CSRF-
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token invalid")
 
 
+# ── Google OAuth (analyst web sign-in) ──────────────────────────────────────
+# Two-leg server-side PKCE flow. /start redirects the browser to Google with a
+# PKCE challenge and a state nonce; the PKCE verifier is kept server-side keyed by
+# that state (see auth_service._oauth_state_*). /callback receives the code + the
+# echoed state, looks up the verifier, exchanges the code for a Supabase session,
+# enforces analyst-role gating, and on success issues the SAME session cookies as
+# password login. We key off `state` (in the URL) rather than a cookie because a
+# SameSite cookie does not reliably survive the Google→Supabase→API redirect
+# chain. Failures redirect back to the web login page with a friendly ?error=
+# code — never JSON, because these are top-level browser navigations, not fetches.
+
+def _login_redirect(error: str | None = None) -> RedirectResponse:
+    base = settings.web_app_url.rstrip("/")
+    url = f"{base}/login?error={error}" if error else f"{base}/login"
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/oauth/google/start")
+@limiter.limit("10/minute")
+def oauth_google_start(request: Request):
+    if not settings.google_oauth_enabled:
+        return _login_redirect("oauth_disabled")
+    try:
+        data = oauth_start("google")
+    except Exception:
+        logger.exception("[auth] oauth start failed")
+        return _login_redirect("oauth_unavailable")
+
+    return RedirectResponse(data["url"], status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/oauth/google/callback/{state}")
+@limiter.limit("10/minute")
+def oauth_google_callback(
+    request: Request,
+    state: str,
+    code: str | None = None,
+    error: str | None = None,
+):
+    # `state` is a PATH segment (Supabase matched `…/callback/**`); `code` is the
+    # query param Supabase appended. User cancelled / Google error → no code.
+    if error or not code:
+        return _login_redirect("oauth_cancelled")
+
+    try:
+        result = oauth_complete(
+            code, state,
+            client_ip=_client_ip(request), user_agent=_client_ua(request),
+        )
+    except ValueError:
+        return _login_redirect("oauth_denied")
+
+    # Success — issue the same session cookies as password login and land the
+    # analyst on the dashboard.
+    resp = RedirectResponse(f"{settings.web_app_url.rstrip('/')}/zones",
+                            status_code=status.HTTP_302_FOUND)
+    _set_auth_cookies(resp, result["access_token"], result["refresh_token"], request)
+    logger.info("[auth] web oauth login: user_id=%s ip=%s", result["user"].get("id"), _client_ip(request))
+    return resp
+
+
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("10/minute")
 def login_endpoint(request: Request, body: LoginRequest, response: Response):
@@ -144,7 +212,9 @@ def refresh_endpoint(
 
     # Rotate fingerprint and CSRF token on every refresh (anti-fixation)
     _set_auth_cookies(response, result["access_token"], result["refresh_token"], request)
-    audit.session_refresh(user_id="unknown", ip=_client_ip(request))
+    # Audit the real refresher (from the verified new session) so anomalous
+    # refresh patterns are attributable, not logged as "unknown".
+    audit.session_refresh(user_id=result.get("user_id") or "unknown", ip=_client_ip(request))
     return {"ok": True}
 
 
@@ -163,10 +233,13 @@ def logout_endpoint(
     # CSRF is intentionally not checked here: get_current_user validates the JWT,
     # which is the meaningful auth guard. Requiring CSRF on logout can prevent users
     # from signing out when the short-lived csrf_token cookie has already expired.
-    if refresh_token:
-        revoke_session(refresh_token)
+    revoked = revoke_session(refresh_token) if refresh_token else False
 
     _delete_all_cookies(response)
-    logger.info("[auth] web logout: user_id=%s", user.get("id"))
+    logger.info("[auth] web logout: user_id=%s server_revoked=%s", user.get("id"), revoked)
     audit.logout(user_id=str(user["id"]), ip=_client_ip(request), platform="web")
+    if refresh_token and not revoked:
+        # Cookies are gone client-side, but the provider didn't confirm the
+        # refresh token is dead — surface it for monitoring.
+        logger.warning("[auth] logout did not confirm server-side revocation: user_id=%s", user.get("id"))
     return {"ok": True}

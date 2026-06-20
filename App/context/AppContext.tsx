@@ -1,7 +1,7 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { apiGetMe, apiLogin, apiLogout, getAccessToken, UserProfile } from '@/services/api';
+import { apiGetMe, apiLogin, apiLoginWithGoogle, apiLogout, getAccessToken, UserProfile } from '@/services/api';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { queryClient } from '@/lib/queryClient';
 import { ACTIVITY_KEY, TICKET_LIST_KEY } from '@/hooks/useTickets';
@@ -13,6 +13,7 @@ type AppContextType = {
   technicianName: string;
   profile: UserProfile | null;
   login: (credential: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   toggleTheme: () => void;
 };
@@ -24,6 +25,7 @@ const fallbackAppContext: AppContextType = {
   technicianName: 'Technician',
   profile: null,
   login: async () => {},
+  loginWithGoogle: async () => {},
   logout: async () => {},
   toggleTheme: () => {},
 };
@@ -98,6 +100,11 @@ export function AppProvider({ children }: PropsWithChildren<{}>) {
     setProfile(user);
   };
 
+  const loginWithGoogle = async () => {
+    const user = await apiLoginWithGoogle();
+    setProfile(user);
+  };
+
   const logout = async () => {
     try {
       await apiLogout();
@@ -125,6 +132,7 @@ export function AppProvider({ children }: PropsWithChildren<{}>) {
       technicianName: profile?.full_name ?? 'Technician',
       profile,
       login,
+      loginWithGoogle,
       logout,
       toggleTheme,
     }),

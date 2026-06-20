@@ -8,14 +8,36 @@
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Linking from 'expo-linking';
 import * as SecureStore from 'expo-secure-store';
 import * as Sharing from 'expo-sharing';
+import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
+
+// Lets the in-app browser auto-close if the OS routes the redirect back through
+// it (no-op on the openAuthSessionAsync path, but recommended by Expo).
+WebBrowser.maybeCompleteAuthSession();
 
 if (!process.env.EXPO_PUBLIC_API_URL) {
   console.warn('[api] EXPO_PUBLIC_API_URL is not set — defaulting to http://localhost:8000');
 }
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+
+// Always surface the resolved base URL once at startup — the single most useful
+// line for diagnosing "site can't be reached" issues from a phone.
+console.log(`[api] API_URL = ${API_URL} (platform=${Platform.OS})`);
+
+// A physical device can NEVER reach localhost/127.0.0.1 — that's the device
+// itself. If the env var didn't load (Metro started before App/.env existed, or
+// a cached bundle), the app silently falls back to localhost and every request
+// fails with "connection refused". Make that failure mode loud instead of silent.
+if (Platform.OS !== 'web' && /\/\/(localhost|127\.0\.0\.1)[:/]/.test(API_URL)) {
+  console.error(
+    '[api] FATAL CONFIG: running on a device but API_URL points at localhost — ' +
+    'the phone cannot reach this. Set EXPO_PUBLIC_API_URL to your PC LAN IP in App/.env ' +
+    'and restart Metro with a cleared cache: `npx expo start -c`.',
+  );
+}
 
 /** URL of the technician real-time SSE stream (content-free nudges, Bearer auth). */
 export const EVENTS_URL = `${API_URL}/api/mobile/events`;
@@ -161,6 +183,104 @@ export async function apiLogin(credential: string, password: string): Promise<Us
   const json = await data.json();
   await saveTokens(json.access_token, json.refresh_token);
   return json.user as UserProfile;
+}
+
+/** Thrown when the user dismisses/cancels the Google browser — callers should
+ *  treat this as a no-op, not an error to surface. */
+export class OAuthCancelled extends Error {
+  constructor() {
+    super('Google sign-in was cancelled.');
+    this.name = 'OAuthCancelled';
+  }
+}
+
+/**
+ * Technician Google sign-in via server-side PKCE.
+ *
+ * Opens the backend /start URL in the system browser; the backend drives the
+ * Google + Supabase exchange and redirects back to our app scheme
+ * (spatiotemporal://oauth-callback) with tokens in the URL fragment. We parse
+ * them, store them in SecureStore (same as password login), and load the
+ * profile. Throws OAuthCancelled if the user backs out, or Error with a friendly
+ * message if the backend rejected the account (e.g. not an authorised technician).
+ */
+/** Parse the `spatiotemporal://oauth-callback#...` URL the backend redirects to,
+ *  storing tokens + loading the profile. Shared by both the browser-result path
+ *  and the deep-link-listener path. Returns the profile or throws a friendly error. */
+async function _consumeOAuthCallbackUrl(url: string): Promise<UserProfile> {
+  const hash = url.split('#')[1] ?? '';
+  const params = new URLSearchParams(hash);
+
+  const err = params.get('error');
+  if (err) {
+    const messages: Record<string, string> = {
+      oauth_denied: 'This Google account is not an authorised technician. Contact your analyst.',
+      oauth_cancelled: 'Google sign-in was cancelled.',
+      oauth_disabled: 'Google sign-in is not enabled. Use your username and password.',
+      oauth_unavailable: 'Google sign-in is temporarily unavailable. Use your username and password.',
+    };
+    throw new Error(messages[err] ?? 'Google sign-in failed. Please try again.');
+  }
+
+  const access = params.get('access_token');
+  const refresh = params.get('refresh_token');
+  if (!access || !refresh) {
+    throw new Error('Google sign-in failed. Please try again.');
+  }
+
+  await saveTokens(access, refresh);
+  const profile = await apiGetMe();
+  if (!profile) {
+    await clearTokens();
+    throw new Error('Could not load your profile after sign-in. Please try again.');
+  }
+  return profile;
+}
+
+export async function apiLoginWithGoogle(): Promise<UserProfile> {
+  const returnUrl = Linking.createURL('oauth-callback');
+  const startUrl = `${API_URL}/api/mobile/auth/oauth/google/start?return_url=${encodeURIComponent(returnUrl)}`;
+
+  // RACE two ways of capturing the spatiotemporal:// return, because Android's
+  // openAuthSessionAsync has a documented bug where it sometimes never resolves
+  // on a server 302→custom-scheme redirect (the in-app browser doesn't fire the
+  // deep link). A standalone Linking 'url' listener catches the deep link even
+  // when the browser session hangs. Whichever fires first wins.
+  let resolved = false;
+  const callbackPromise = new Promise<string>((resolve) => {
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      if (url.startsWith(returnUrl) || url.startsWith('spatiotemporal://oauth-callback')) {
+        resolved = true;
+        sub.remove();
+        // Make sure the in-app browser tab is dismissed once we have the deep link.
+        WebBrowser.dismissBrowser?.();
+        resolve(url);
+      }
+    });
+  });
+
+  const browserPromise = WebBrowser.openAuthSessionAsync(startUrl, returnUrl).then((result) => {
+    if (result.type === 'success' && result.url) return result.url;
+    if ((result.type === 'cancel' || result.type === 'dismiss') && !resolved) {
+      // Browser closed without a result AND the listener hasn't fired — treat as
+      // cancel, but give the listener a brief grace window first (the dismiss can
+      // arrive a tick before the deep link on Android).
+      return new Promise<string>((_, reject) =>
+        setTimeout(() => (resolved ? undefined : reject(new OAuthCancelled())), 1500),
+      );
+    }
+    // type was success-without-url or other: let the listener win, else fail later.
+    return new Promise<string>(() => {});
+  });
+
+  let callbackUrl: string;
+  try {
+    callbackUrl = await Promise.race([callbackPromise, browserPromise]);
+  } finally {
+    resolved = true;
+  }
+
+  return _consumeOAuthCallbackUrl(callbackUrl);
 }
 
 export async function apiLogout(): Promise<void> {
