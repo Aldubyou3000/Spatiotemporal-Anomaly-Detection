@@ -23,6 +23,10 @@ import { Modal, ModalFooter } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
+import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkloadBadge";
+import { byWorkload } from "@/lib/technicianWorkload";
 import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { Header } from "@/components/dashboard/Header";
 import { FileUpload } from "@/components/zones/FileUpload";
@@ -91,6 +95,7 @@ function CreateTicketModal({
   onClose: () => void;
   file: File | null;
 }) {
+  const toast = useToast();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -102,6 +107,7 @@ function CreateTicketModal({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const step1Valid = !!title.trim() && !!stationInput.trim();
   const step2Valid = selectedTechIds.length > 0;
@@ -116,6 +122,7 @@ function CreateTicketModal({
 
   async function handleCreate() {
     if (!step1Valid || !step2Valid) return;
+    setConfirmOpen(false);
     setSaving(true); setError("");
     try {
       const ticket = await ticketsApi.create({
@@ -127,10 +134,15 @@ function CreateTicketModal({
         technician_ids: selectedTechIds,
       });
       if (file && attachFile) { try { await ticketsApi.uploadAttachment(ticket.id, file); } catch { /* non-fatal */ } }
+      toast.success(`Ticket TKT-${ticket.ticket_number} dispatched`, {
+        description: `${selectedTechs.length} technician${selectedTechs.length !== 1 ? "s" : ""} notified for ${stationInput.trim()}.`,
+      });
       setDone(true);
       setTimeout(onClose, 1800);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create ticket.");
+      const msg = err instanceof Error ? err.message : "Failed to create ticket.";
+      setError(msg);
+      toast.error("Couldn't dispatch ticket", { description: msg });
     } finally { setSaving(false); }
   }
 
@@ -230,13 +242,13 @@ function CreateTicketModal({
         {step === 2 && (
           <>
             <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--text-secondary)" }}>
-              Select one or more technicians to dispatch to this site. All selected technicians will see the ticket on their mobile devices immediately.
+              Select one or more technicians to dispatch to this site. All selected technicians will see the ticket on their mobile devices immediately. Lightest current workload is listed first.
             </p>
             {technicians.length === 0 ? (
               <div style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No active technicians found.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
-                {technicians.map((t) => {
+                {[...technicians].sort(byWorkload).map((t) => {
                   const checked = selectedTechIds.includes(t.id);
                   return (
                     <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", border: `1px solid ${checked ? "var(--brand)" : "var(--border)"}`, background: checked ? "color-mix(in oklab, var(--brand) 6%, var(--surface))" : "var(--surface-sunken)", cursor: "pointer", transition: "border-color 0.12s, background 0.12s" }}>
@@ -247,6 +259,7 @@ function CreateTicketModal({
                           <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>Stations: {t.station_ids.slice(0, 3).join(", ")}{t.station_ids.length > 3 ? ` +${t.station_ids.length - 3}` : ""}</p>
                         )}
                       </div>
+                      <TechnicianWorkloadBadge tech={t} showBreakdown />
                     </label>
                   );
                 })}
@@ -325,12 +338,31 @@ function CreateTicketModal({
         {step === 3 && (
           <>
             <Button type="button" variant="secondary" onClick={() => setStep(2)} disabled={saving}>← Back</Button>
-            <Button type="button" loading={saving} onClick={handleCreate}>
+            <Button type="button" loading={saving} onClick={() => setConfirmOpen(true)}>
               {saving ? "Dispatching…" : `Dispatch to ${selectedTechs.length} technician${selectedTechs.length !== 1 ? "s" : ""}`}
             </Button>
           </>
         )}
       </ModalFooter>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="Dispatch this work order?"
+          message={
+            <>
+              A ticket for <strong style={{ color: "var(--text)" }}>{title.trim()}</strong> at station{" "}
+              <span style={{ fontFamily: "var(--font-mono)" }}>{stationInput.trim()}</span> will be sent to{" "}
+              <strong style={{ color: "var(--text)" }}>
+                {selectedTechs.length} technician{selectedTechs.length !== 1 ? "s" : ""}
+              </strong>{" "}
+              ({selectedTechs.map((t) => t.full_name).join(", ")}). It appears on their mobile devices immediately.
+            </>
+          }
+          confirmLabel="Dispatch"
+          onConfirm={handleCreate}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </Modal>
   );
 }
@@ -486,6 +518,7 @@ function PipelineDiagram({
 
 export default function ZonesPage() {
   const { loading: authLoading } = useAuth();
+  const toast = useToast();
   const {
     file, setFile,
     contamination, setContamination,
@@ -524,9 +557,15 @@ export default function ZonesPage() {
       setActiveStage(2);
       setResult(data);
       setConfigOpen(false);
+      const anomalies = data.flagged_data.filter((r) => r.is_anomaly).length;
+      toast.success("Pipeline complete", {
+        description: `${data.cleaned_data.length.toLocaleString()} readings cleaned · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
+      });
     } catch (err) {
       clearInterval(ticker);
-      setError(err instanceof Error ? err.message : "Failed to process file.");
+      const msg = err instanceof Error ? err.message : "Failed to process file.";
+      setError(msg);
+      toast.error("Pipeline failed", { description: msg });
     } finally {
       setRunning(false);
     }

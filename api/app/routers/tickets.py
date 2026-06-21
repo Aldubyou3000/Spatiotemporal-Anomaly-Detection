@@ -18,6 +18,7 @@ from ..schemas.tickets import (
     CancelRequest,
     FollowUpRequest,
     TechnicianAssignRequest,
+    TechnicianListItem,
     TicketCreate,
     TicketDetail,
     TicketListResponse,
@@ -56,7 +57,7 @@ def list_tickets_endpoint(
     return list_tickets(sb, status=status, priority=priority, station_id=station_id, limit=limit, offset=offset)
 
 
-@router.get("/technicians")
+@router.get("/technicians", response_model=list[TechnicianListItem])
 @limiter.limit("60/minute")
 def list_technicians_endpoint(
     request: Request,

@@ -12,8 +12,10 @@ import {
   UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { useTechnicianProfiles } from "@/hooks/useTechnicians";
-import type { TicketDetail } from "@/types/tickets";
+import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkloadBadge";
+import { useTechnicianProfiles, useTicketTechnicians } from "@/hooks/useTechnicians";
+import { byWorkload } from "@/lib/technicianWorkload";
+import type { Technician, TicketDetail } from "@/types/tickets";
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,9 +45,10 @@ function MiniAvatar({ name, size = 22 }: { name: string; size?: number }) {
 type TechOption = { id: string; full_name: string };
 
 function AddTechPicker({
-  available, open, onToggle, onAdd,
+  available, workloadById, open, onToggle, onAdd,
 }: {
   available: TechOption[];
+  workloadById: Map<string, Technician>;
   open: boolean;
   onToggle: () => void;
   onAdd: (id: string) => void;
@@ -66,7 +69,7 @@ function AddTechPicker({
         position: "fixed",
         bottom: window.innerHeight - rect.top + 6,
         left: rect.left,
-        minWidth: 220,
+        minWidth: 250,
         maxHeight: 200,
         overflowY: "auto",
         borderRadius: "var(--r-md)",
@@ -77,7 +80,9 @@ function AddTechPicker({
         transformOrigin: "bottom left",
       }}
     >
-      {available.map((t) => (
+      {available.map((t) => {
+        const w = workloadById.get(t.id);
+        return (
         <button
           key={t.id}
           type="button"
@@ -87,9 +92,11 @@ function AddTechPicker({
         >
           <MiniAvatar name={t.full_name} size={22} />
           <span style={{ fontSize: "var(--font-sm)", color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.full_name}</span>
+          {w && <TechnicianWorkloadBadge tech={w} />}
           <Plus size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
         </button>
-      ))}
+        );
+      })}
     </div>,
     document.body,
   ) : null;
@@ -193,6 +200,9 @@ export function ReviewPanel({
   onFollowUp: (notes: string, reassign: ReviewReassign) => void;
 }) {
   const { technicians: allTechnicians } = useTechnicianProfiles();
+  // Workload comes from the ticket-technicians endpoint; merge by id for the picker.
+  const { technicians: workloadList } = useTicketTechnicians();
+  const workloadById = new Map<string, Technician>(workloadList.map((t) => [t.id, t]));
   const [decision, setDecision]   = useState<Decision>("approve");
   const [approveNotes, setApproveNotes] = useState("");
   const [followNotes, setFollowNotes]   = useState("");
@@ -207,9 +217,9 @@ export function ReviewPanel({
   const currentKept = current.filter((t) => !removeIds.has(t.id));
   const addedTechs  = allTechnicians.filter((t) => addIds.has(t.id));
   const finalRoster = [...currentKept, ...addedTechs];
-  const available   = allTechnicians.filter(
-    (t) => !current.some((c) => c.id === t.id) && !addIds.has(t.id),
-  );
+  const available   = allTechnicians
+    .filter((t) => !current.some((c) => c.id === t.id) && !addIds.has(t.id))
+    .sort((a, b) => byWorkload(workloadById.get(a.id) ?? a, workloadById.get(b.id) ?? b));
   const reassignTouched = removeIds.size > 0 || addIds.size > 0;
 
   const isApprove   = decision === "approve";
@@ -346,6 +356,7 @@ export function ReviewPanel({
                 {/* Add control */}
                 <AddTechPicker
                   available={available}
+                  workloadById={workloadById}
                   open={addPickerOpen}
                   onToggle={() => setAddPickerOpen((x) => !x)}
                   onAdd={addTech}

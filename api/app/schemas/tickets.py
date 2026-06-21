@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 TicketStatus = str  # 'assigned' | 'in-progress' | 'pending_review' | 'follow_up' | 'verified'
@@ -38,6 +38,36 @@ class TechnicianSummary(BaseModel):
     id: str
     username: str
     full_name: str
+
+
+class TechnicianWorkload(BaseModel):
+    """Per-status tally of a technician's *active* (non-terminal) ticket
+    assignments — drives the "3 active · 1 in review" breakdown in the analyst
+    assignment UI. Counts only; never carries ticket rows/ids.
+
+    The ``in-progress`` status string contains a hyphen (not a valid Python
+    identifier), so it's exposed via a serialization alias; the JSON keys match
+    the literal ticket status values the frontend already uses."""
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
+
+    assigned: int = 0
+    in_progress: int = Field(0, alias="in-progress")
+    pending_review: int = 0
+    follow_up: int = 0
+
+
+class TechnicianListItem(BaseModel):
+    """Analyst-facing technician row for the assignment pickers. Mirrors the
+    profiles columns plus the computed workload — returned by
+    GET /api/tickets/technicians (require_analyst)."""
+    id: str
+    username: str
+    full_name: str
+    email: str
+    station_ids: list[str] = []
+    is_active: bool
+    active_ticket_count: int = 0
+    workload_by_status: TechnicianWorkload = TechnicianWorkload()
 
 
 class TechnicianAssignment(BaseModel):

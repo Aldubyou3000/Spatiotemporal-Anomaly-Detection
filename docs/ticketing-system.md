@@ -145,6 +145,15 @@ Ticket → VERIFIED
 - Re-adding a previously removed technician restores their record (clears `removed_at`).
 - The `technician_id` column on tickets is a legacy shadow field pointing to the earliest active assignee — kept for PDF generation backward compatibility only. Always use `technicians[]` for the full authoritative list.
 
+### Workload visibility (informed manual dispatch)
+
+Assignment is **manual** — the analyst decides who to dispatch. To support that decision (and avoid blindly overloading one technician), every analyst-facing assignment surface shows each technician's **current active workload**: the number of non-terminal tickets they're assigned to, color-toned by load (idle / light / busy / heavy) with a per-status breakdown ("2 assigned · 1 in review"). The lightest-loaded technicians are listed first.
+
+- **Where:** ticket-creation step 2 (Assign), the add-technician pickers on existing tickets (action dock + follow-up reassignment), and the Technicians page ("Active Load" column).
+- **How it's computed:** server-side aggregate over the `ticket_technicians` junction (active rows only) joined to non-terminal tickets, returned on `GET /api/tickets/technicians` (analyst-only). Only counts cross the wire — never ticket rows or ids.
+- **Live:** the counts update in real time via the existing SSE `tickets` signal whenever any ticket is assigned, removed, verified, or cancelled — no manual refresh.
+- There is **no manual availability toggle**: workload *is* the availability signal. (Station-coverage matching is intentionally not part of this yet.)
+
 ---
 
 ## What Each Actor Sees Per Status

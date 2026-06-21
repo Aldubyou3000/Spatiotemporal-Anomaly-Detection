@@ -49,7 +49,7 @@ Analyst creates ticket (3-step confirmation)
 The anomaly detection pipeline flags a rainfall station. The analyst opens the **Zones** page and dispatches a ticket using a 3-step form:
 
 - **Step 1 — Details:** station, title, description, priority, anomaly zone
-- **Step 2 — Assign Technicians:** select one or more field technicians (multi-select)
+- **Step 2 — Assign Technicians:** select one or more field technicians (multi-select). Each technician shows their **current active workload** (how many open tickets they're handling, color-toned by load), and the lightest-loaded are listed first — so the analyst can balance the team instead of assigning blindly
 - **Step 3 — Confirm Dispatch:** review a summary card before sending — all selected technicians receive the ticket on their mobile devices immediately
 
 The analyst can assign multiple technicians to the same ticket if the job requires it.
@@ -81,7 +81,7 @@ Submitting the report automatically moves the ticket to **Pending Review** and n
 
 ### 4. Analyst reviews the report
 
-The analyst sees the ticket in the **Reports** tab under **Pending Review**. They read the full inspection report — field observations, severity, root cause, corrective action & recommendations, issue resolution status, and photos.
+The analyst opens the ticket on the **Tickets** page; tickets awaiting a decision surface at the top under a **Needs Review** group. Review happens **inline** in the ticket detail panel — the analyst reads the full inspection report (field observations, severity, root cause, corrective action & recommendations, issue resolution status, photos) and acts from the review panel in the action dock at the bottom of the same view.
 
 From here the analyst has two options:
 
@@ -120,6 +120,7 @@ The analyst can **add or remove technicians at any point** before the ticket is 
 - Adding a technician gives them immediate access.
 - At least one technician must remain assigned at all times.
 - Previously removed technicians are preserved in the assignment history for accountability.
+- The add-technician picker shows each candidate's **current active workload** (least-busy first), so reassignments stay balanced.
 
 ---
 
@@ -137,10 +138,11 @@ Cancelled tickets remain visible to both parties for record-keeping but no furth
 
 | Page | What it shows |
 |------|--------------|
-| **Tickets** | All tickets across all statuses; full detail with report, photos, attachments, assignment manager, and cancel option |
-| **Reports — Pending Review** | Reports awaiting a decision; Approve and Request Follow-up actions |
-| **Reports — Follow-up** | Tickets currently waiting for a technician re-visit |
-| **Reports — Approved** | All verified tickets with their full report history |
+| **Tickets** | All tickets across all statuses; tickets awaiting a decision surface under a **Needs Review** group. Full detail with report, photos, attachments, the assignment manager, inline review (Approve / Request Follow-up), and the cancel option — all in one panel. |
+| **Zones** | Run the detection pipeline and create tickets from flagged anomalies (3-step dispatch form) |
+| **Technicians** | Field-team management; each technician's current **active workload** is shown so dispatch decisions aren't blind |
+
+> There is no separate "Reports" page — report review is handled inline on the Tickets page. (`/reports` simply redirects to `/tickets`.)
 
 ### Technician — Mobile App
 

@@ -16,6 +16,15 @@ export interface TechnicianAssignment {
   removed_at?: string | null;
 }
 
+/** Active (non-terminal) ticket workload per technician, keyed by ticket status.
+ *  Computed server-side; counts only. See lib/technicianWorkload.ts. */
+export interface TechnicianWorkloadByStatus {
+  assigned: number;
+  "in-progress": number;
+  pending_review: number;
+  follow_up: number;
+}
+
 export interface Technician {
   id: string;
   username: string;
@@ -23,6 +32,10 @@ export interface Technician {
   email: string;
   station_ids: string[];
   is_active: boolean;
+  /** Total active (non-terminal) tickets this technician is assigned to. */
+  active_ticket_count?: number;
+  /** Per-status breakdown of the active workload. */
+  workload_by_status?: TechnicianWorkloadByStatus;
 }
 
 export interface TicketListItem {

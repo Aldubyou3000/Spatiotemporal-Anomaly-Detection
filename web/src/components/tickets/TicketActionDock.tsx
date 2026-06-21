@@ -14,10 +14,13 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { useTechnicianProfiles } from "@/hooks/useTechnicians";
+import { useToast } from "@/components/ui/Toast";
+import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkloadBadge";
+import { useTechnicianProfiles, useTicketTechnicians } from "@/hooks/useTechnicians";
+import { byWorkload } from "@/lib/technicianWorkload";
 import { ticketsApi } from "@/lib/api/tickets";
 import { invalidateTicketLists } from "@/hooks/useTickets";
-import type { TicketDetail } from "@/types/tickets";
+import type { Technician, TicketDetail } from "@/types/tickets";
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,7 +78,12 @@ export function TicketActionDock({
   reviewSlot?: React.ReactNode;
   cancelSlot?: React.ReactNode;
 }) {
+  const toast = useToast();
   const { technicians: allTechnicians } = useTechnicianProfiles();
+  // Workload lives on the ticket-technicians endpoint (not the profiles list the
+  // roster comes from); merge it in by id so the add-picker can show load + sort.
+  const { technicians: workloadList } = useTicketTechnicians();
+  const workloadById = new Map<string, Technician>(workloadList.map((t) => [t.id, t]));
   // A ticket awaiting the analyst's decision opens expanded so the approve/verify
   // action is never hidden; assignment-only states start collapsed to free the scroll area.
   const needsReview = ticket.status === "pending_review" && !!reviewSlot;
@@ -104,7 +112,10 @@ export function TicketActionDock({
 
   const assigned    = ticket.technicians ?? [];
   const assignedIds = new Set(assigned.map((a) => a.id));
-  const available   = allTechnicians.filter((t) => !assignedIds.has(t.id));
+  // Lightest-loaded technicians surface first in the add-picker.
+  const available   = allTechnicians
+    .filter((t) => !assignedIds.has(t.id))
+    .sort((a, b) => byWorkload(workloadById.get(a.id) ?? a, workloadById.get(b.id) ?? b));
   const isVerified  = ticket.status === "verified";
 
   function openPrompt(next: { kind: "add" | "remove"; id: string; name: string }) {
@@ -125,9 +136,15 @@ export function TicketActionDock({
         : await ticketsApi.removeTechnician(ticket.id, pending.id, r);
       onUpdated(updated);
       await invalidateTicketLists();
+      toast.success(
+        pending.kind === "add" ? `${pending.name} assigned` : `${pending.name} removed`,
+        { description: `TKT-${ticket.ticket_number} · ${pending.kind === "add" ? "added to the ticket" : "taken off the ticket"}.` },
+      );
       closePrompt();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${pending.kind === "add" ? "assign" : "remove"} technician.`);
+      const msg = err instanceof Error ? err.message : `Failed to ${pending.kind === "add" ? "assign" : "remove"} technician.`;
+      setError(msg);
+      toast.error(`Couldn't ${pending.kind === "add" ? "assign" : "remove"} technician`, { description: msg });
     } finally { setSaving(false); }
   }
 
@@ -307,7 +324,7 @@ export function TicketActionDock({
                         position: "fixed",
                         bottom: window.innerHeight - addBtnRect.top + 6,
                         right: window.innerWidth - addBtnRect.right,
-                        minWidth: 230,
+                        minWidth: 250,
                         maxHeight: 210,
                         overflowY: "auto",
                         borderRadius: "var(--r-md)",
@@ -318,7 +335,9 @@ export function TicketActionDock({
                         transformOrigin: "bottom right",
                       }}
                     >
-                      {available.map((t) => (
+                      {available.map((t) => {
+                        const w = workloadById.get(t.id);
+                        return (
                         <button
                           key={t.id}
                           type="button"
@@ -328,14 +347,11 @@ export function TicketActionDock({
                         >
                           <StackAvatar name={t.full_name} size={22} ring="transparent" />
                           <span style={{ fontSize: "var(--font-sm)", color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.full_name}</span>
-                          {t.station_ids?.length > 0 && (
-                            <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0 }}>
-                              {t.station_ids.slice(0, 2).join(", ")}
-                            </span>
-                          )}
+                          {w && <TechnicianWorkloadBadge tech={w} />}
                           <Plus size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>,
                     document.body,
                   )}

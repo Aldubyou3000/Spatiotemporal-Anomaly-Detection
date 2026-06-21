@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTechnicianProfiles } from "@/hooks/useTechnicians";
+import { useTechnicianProfiles, useTicketTechnicians } from "@/hooks/useTechnicians";
 import {
   AlertTriangle,
   Mail,
@@ -17,8 +17,12 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
+import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkloadBadge";
 import { techniciansApi } from "@/lib/api/technicians";
 import type { TechnicianCreate, TechnicianProfile } from "@/types/technicians";
+import type { Technician } from "@/types/tickets";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -104,21 +108,39 @@ function CreateModal({
   onClose: () => void;
   onCreated: (t: TechnicianProfile) => void;
 }) {
+  const toast = useToast();
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Live mismatch hint — only after the user has started typing the confirmation.
+  const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+
+  /** Validate the form; on success open the confirmation dialog (no API call yet). */
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!fullName.trim() || !username.trim() || !email.trim() || !password.trim()) return;
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
     }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setError("");
+    setConfirmOpen(true);
+  }
+
+  /** Confirmed — actually create the account. */
+  async function commitCreate() {
+    setConfirmOpen(false);
     setSaving(true);
     setError("");
     const body: TechnicianCreate = {
@@ -130,9 +152,14 @@ function CreateModal({
     };
     try {
       const technician = await techniciansApi.create(body);
+      toast.success("Technician account created", {
+        description: `${technician.full_name} (@${technician.username}) can now sign in via the mobile app.`,
+      });
       onCreated(technician);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create account.");
+      const msg = err instanceof Error ? err.message : "Failed to create account.";
+      setError(msg);
+      toast.error("Couldn't create account", { description: msg });
     } finally {
       setSaving(false);
     }
@@ -161,6 +188,7 @@ function CreateModal({
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="jsantos"
+              autoComplete="off"
               required
             />
             <Input
@@ -180,14 +208,31 @@ function CreateModal({
             required
           />
 
-          <Input
-            label="Temporary Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Min. 8 characters"
-            required
-          />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Input
+              label="Temporary Password"
+              type="password"
+              passwordToggle
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min. 8 characters"
+              hint="At least 8 characters."
+              error={password.length > 0 && password.length < 8 ? "Too short" : undefined}
+              required
+            />
+            <Input
+              label="Confirm Password"
+              type="password"
+              passwordToggle
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password"
+              error={passwordMismatch ? "Doesn't match" : undefined}
+              required
+            />
+          </div>
 
           {error && (
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 12px", borderRadius: "var(--r-md)", background: "var(--danger-soft)", border: "1px solid rgba(220,38,38,0.2)" }}>
@@ -201,19 +246,36 @@ function CreateModal({
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" loading={saving}>
+          <Button type="submit" loading={saving} disabled={saving || passwordMismatch}>
             <Send size={13} strokeWidth={2.2} />
             {saving ? "Creating…" : "Create Account"}
           </Button>
         </ModalFooter>
       </form>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="Create this technician account?"
+          message={
+            <>
+              An account for <strong style={{ color: "var(--text)" }}>{fullName.trim()}</strong> (
+              <span style={{ fontFamily: "var(--font-mono)" }}>@{username.trim().toLowerCase()}</span>) will be created and
+              can sign in immediately with the temporary password you set. Make sure the email{" "}
+              <span style={{ fontFamily: "var(--font-mono)" }}>{email.trim().toLowerCase()}</span> is correct.
+            </>
+          }
+          confirmLabel="Create account"
+          onConfirm={commitCreate}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </Modal>
   );
 }
 
 // ─── Table Row ────────────────────────────────────────────────────────────────
 
-function TechRow({ technician }: { technician: TechnicianProfile }) {
+function TechRow({ technician, workload }: { technician: TechnicianProfile; workload?: Technician }) {
   const [hovered, setHovered] = useState(false);
   const inits = initials(technician.full_name);
 
@@ -270,6 +332,15 @@ function TechRow({ technician }: { technician: TechnicianProfile }) {
         )}
       </td>
 
+      {/* Active Load */}
+      <td style={{ padding: "12px 20px", borderBottom: "1px solid var(--divider)" }}>
+        {workload ? (
+          <TechnicianWorkloadBadge tech={workload} showBreakdown align="start" />
+        ) : (
+          <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>—</span>
+        )}
+      </td>
+
       {/* Status */}
       <td style={{ padding: "12px 20px", borderBottom: "1px solid var(--divider)" }}>
         <Badge tone={technician.is_active ? "success" : "neutral"} dot>
@@ -290,6 +361,13 @@ function TechRow({ technician }: { technician: TechnicianProfile }) {
 export default function TechniciansPage() {
   const { loading: authLoading } = useAuth();
   const { technicians, isLoading: loading, error: fetchError, mutate } = useTechnicianProfiles();
+  // Active workload is computed on the ticket-technicians endpoint; merge by id.
+  // (Ticket mutations already revalidate this key via the SSE `tickets` matcher.)
+  const { technicians: workloadList } = useTicketTechnicians();
+  const workloadById = useMemo(
+    () => new Map<string, Technician>(workloadList.map((t) => [t.id, t])),
+    [workloadList],
+  );
   const error = fetchError?.message ?? null;
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
@@ -466,7 +544,7 @@ export default function TechniciansPage() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "var(--surface-alt)" }}>
-                    {["Account", "Email / Phone", "Status", "Joined"].map((col) => (
+                    {["Account", "Email / Phone", "Active Load", "Status", "Joined"].map((col) => (
                       <th
                         key={col}
                         style={{
@@ -490,7 +568,7 @@ export default function TechniciansPage() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         style={{ padding: "32px 20px", textAlign: "center", fontSize: "var(--font-sm)", color: "var(--text-muted)" }}
                       >
                         No technicians match &ldquo;{query}&rdquo;
@@ -498,7 +576,7 @@ export default function TechniciansPage() {
                     </tr>
                   ) : (
                     filtered.map((t) => (
-                      <TechRow key={t.id} technician={t} />
+                      <TechRow key={t.id} technician={t} workload={workloadById.get(t.id)} />
                     ))
                   )}
                 </tbody>

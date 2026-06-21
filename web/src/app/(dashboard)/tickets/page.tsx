@@ -24,6 +24,7 @@ import { TicketDetailBody, type DetailModel, type DetailAssignee } from "@/compo
 import { TicketActionDock } from "@/components/tickets/TicketActionDock";
 import { ReviewPanel } from "@/components/tickets/ReviewPanel";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import { ticketsApi } from "@/lib/api/tickets";
 import { reportsApi } from "@/lib/api/reports";
 import type {
@@ -59,15 +60,19 @@ function fmtRelative(iso: string) {
 const TERMINAL = new Set<TicketStatus>(["verified", "cancelled"]);
 
 function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail; onUpdated: (t: TicketDetail) => void; updateCache: (t: TicketDetail) => void }) {
+  const toast = useToast();
   const [downloading, setDownloading]   = useState(false);
   const [cancelOpen, setCancelOpen]     = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling]     = useState(false);
   const [cancelError, setCancelError]   = useState("");
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [approvalNotes, setApprovalNotes]   = useState("");
   const [approving, setApproving]           = useState(false);
   const [approvalError, setApprovalError]   = useState("");
+  // Follow-up is confirmed via dialog; its args are staged here until confirmed.
+  const [pendingFollowUp, setPendingFollowUp] = useState<{ notes: string; reassign: { addIds: string[]; removeIds: string[] } } | null>(null);
   const { report, priorRounds } = useTicketReport(ticket.id);
   const { attachments } = useTicketAttachments(ticket.id);
 
@@ -76,11 +81,14 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
     try {
       const slug = ticket.title.replace(/[^a-z0-9]+/gi, "_").slice(0, 40);
       await ticketsApi.downloadPdf(ticket.id, `ticket_${slug}.pdf`);
-    } catch { /* ignore */ } finally { setDownloading(false); }
+    } catch (err) {
+      toast.error("PDF download failed", { description: err instanceof Error ? err.message : undefined });
+    } finally { setDownloading(false); }
   }
 
   async function handleCancel() {
     if (!cancelReason.trim()) return;
+    setConfirmCancel(false);
     setCancelling(true); setCancelError("");
     try {
       const updated = await ticketsApi.cancelTicket(ticket.id, cancelReason.trim());
@@ -88,8 +96,11 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       onUpdated(updated);
       await invalidateTicketLists();
       setCancelOpen(false); setCancelReason("");
+      toast.success(`TKT-${ticket.ticket_number} cancelled`, { description: "The ticket has been closed as cancelled." });
     } catch (err) {
-      setCancelError(err instanceof Error ? err.message : "Failed to cancel ticket.");
+      const msg = err instanceof Error ? err.message : "Failed to cancel ticket.";
+      setCancelError(msg);
+      toast.error("Couldn't cancel ticket", { description: msg });
     } finally { setCancelling(false); }
   }
 
@@ -103,12 +114,18 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       updateCache(updated);
       onUpdated(updated);
       await invalidateTicketLists();
+      toast.success(`TKT-${ticket.ticket_number} verified`, { description: "Report approved and the ticket is now closed as verified." });
     } catch (err) {
-      setApprovalError(err instanceof Error ? err.message : "Approval failed.");
+      const msg = err instanceof Error ? err.message : "Approval failed.";
+      setApprovalError(msg);
+      toast.error("Approval failed", { description: msg });
     } finally { setApproving(false); }
   }
 
-  async function commitFollowUp(followUpNotes: string, reassign: { addIds: string[]; removeIds: string[] }) {
+  async function commitFollowUp() {
+    if (!pendingFollowUp) return;
+    const { notes: followUpNotes, reassign } = pendingFollowUp;
+    setPendingFollowUp(null);
     setApproving(true); setApprovalError("");
     try {
       // Apply any staged re-visit reassignment first, then send the ticket back.
@@ -123,8 +140,11 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       updateCache(updated);
       onUpdated(updated);
       await invalidateTicketLists();
+      toast.success(`Follow-up requested for TKT-${ticket.ticket_number}`, { description: "The ticket was sent back to the field team for a re-visit." });
     } catch (err) {
-      setApprovalError(err instanceof Error ? err.message : "Follow-up request failed.");
+      const msg = err instanceof Error ? err.message : "Follow-up request failed.";
+      setApprovalError(msg);
+      toast.error("Follow-up request failed", { description: msg });
     } finally { setApproving(false); }
   }
 
@@ -197,7 +217,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       approving={approving}
       error={approvalError}
       onApprove={(notes) => { setApprovalNotes(notes); setConfirmApprove(true); }}
-      onFollowUp={commitFollowUp}
+      onFollowUp={(notes, reassign) => setPendingFollowUp({ notes, reassign })}
     />
   ) : undefined;
 
@@ -226,7 +246,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
             <button type="button" onClick={() => { setCancelOpen(false); setCancelReason(""); setCancelError(""); }} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "transparent", fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-muted)", cursor: "pointer", fontFamily: "inherit" }}>
               Back
             </button>
-            <button type="button" onClick={handleCancel} disabled={!cancelReason.trim() || cancelling} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--danger)", fontSize: "var(--font-xs)", fontWeight: 600, color: "#fff", cursor: cancelReason.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", opacity: cancelReason.trim() ? 1 : 0.5 }}>
+            <button type="button" onClick={() => { if (cancelReason.trim()) setConfirmCancel(true); }} disabled={!cancelReason.trim() || cancelling} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--danger)", fontSize: "var(--font-xs)", fontWeight: 600, color: "#fff", cursor: cancelReason.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", opacity: cancelReason.trim() ? 1 : 0.5 }}>
               {cancelling ? "Cancelling…" : "Confirm Cancel"}
             </button>
           </div>
@@ -252,6 +272,27 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
           confirmLabel="Approve & verify"
           onConfirm={commitApprove}
           onCancel={() => setConfirmApprove(false)}
+        />
+      )}
+      {pendingFollowUp && (
+        <ConfirmDialog
+          title="Send ticket back for follow-up?"
+          message={`TKT-${ticket.ticket_number} will be returned to the field team for a re-visit with your instructions${
+            pendingFollowUp.reassign.addIds.length || pendingFollowUp.reassign.removeIds.length ? " and the staged re-assignment" : ""
+          }. The technician will be notified.`}
+          confirmLabel="Send follow-up"
+          onConfirm={commitFollowUp}
+          onCancel={() => setPendingFollowUp(null)}
+        />
+      )}
+      {confirmCancel && (
+        <ConfirmDialog
+          title="Cancel this ticket?"
+          message={`TKT-${ticket.ticket_number} will be closed as Cancelled and removed from active work. This cannot be undone.`}
+          confirmLabel="Cancel ticket"
+          isDangerous
+          onConfirm={handleCancel}
+          onCancel={() => setConfirmCancel(false)}
         />
       )}
     </div>

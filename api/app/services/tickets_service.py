@@ -12,6 +12,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Closed ticket states — assignments on these do not count toward a technician's
+# active workload. (The reassign/remove guards below encode their own, slightly
+# different rules; this constant is specifically the "non-terminal" definition
+# used for workload.)
+TERMINAL_STATUSES = ("verified", "cancelled")
+
+
 # ── Selects ────────────────────────────────────────────────────────────────
 
 _SELECT_LIST = (
@@ -383,6 +390,43 @@ def cancel_ticket(sb: Client, ticket_id: str, reason: str) -> dict:
 
 # ── Technicians list ───────────────────────────────────────────────────────
 
+# The four non-terminal ticket statuses a technician's active workload spans.
+# Mirrors the keys of schemas.tickets.TechnicianWorkload (in-progress is hyphenated).
+_WORKLOAD_STATUSES = ("assigned", "in-progress", "pending_review", "follow_up")
+
+
+def _technician_workload(sb: Client) -> dict[str, dict[str, int]]:
+    """Tally each technician's *active* (non-terminal) ticket assignments.
+
+    One read of the ``ticket_technicians`` junction with the joined ticket
+    status embedded; only active rows (``removed_at IS NULL``) on non-terminal
+    tickets are counted. Returns ``{user_id: {status: count, ...}}`` — counts
+    only, never ticket rows/ids, so nothing sensitive leaves the server.
+
+    The embedded ``tickets!inner(...)`` makes the join an INNER join so rows whose
+    ticket was hard-deleted are naturally excluded; terminal statuses are filtered
+    out in Python (small result set, avoids brittle embedded NOT-IN syntax).
+    """
+    res = (
+        sb.table("ticket_technicians")
+        .select("user_id, tickets!inner(status)")
+        .is_("removed_at", "null")
+        .execute()
+    )
+    workload: dict[str, dict[str, int]] = {}
+    for row in res.data or []:
+        ticket = row.get("tickets") or {}
+        status_val = ticket.get("status")
+        if status_val in TERMINAL_STATUSES or status_val not in _WORKLOAD_STATUSES:
+            continue
+        uid = row.get("user_id")
+        if not uid:
+            continue
+        bucket = workload.setdefault(uid, {})
+        bucket[status_val] = bucket.get(status_val, 0) + 1
+    return workload
+
+
 def list_technicians(sb: Client, *, limit: int = 200, offset: int = 0) -> list[dict]:
     res = (
         sb.table("profiles")
@@ -393,4 +437,13 @@ def list_technicians(sb: Client, *, limit: int = 200, offset: int = 0) -> list[d
         .range(offset, offset + limit - 1)
         .execute()
     )
-    return res.data or []
+    technicians = res.data or []
+
+    # Attach per-technician active workload (anti-overload signal for the analyst's
+    # manual dispatch decision). Computed server-side; only aggregate counts ship.
+    workload = _technician_workload(sb)
+    for tech in technicians:
+        by_status = workload.get(tech["id"], {})
+        tech["workload_by_status"] = {s: by_status.get(s, 0) for s in _WORKLOAD_STATUSES}
+        tech["active_ticket_count"] = sum(by_status.values())
+    return technicians
