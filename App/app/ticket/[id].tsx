@@ -315,7 +315,6 @@ export default function TicketPage() {
         }
         confirmLabel="Confirm"
         cancelLabel="Cancel"
-        icon={icons.startWork}
         onConfirm={doStartWorking}
         onCancel={() => setShowConfirm(false)}
       />

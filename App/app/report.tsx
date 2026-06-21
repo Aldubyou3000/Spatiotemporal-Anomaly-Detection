@@ -481,7 +481,6 @@ export default function ReportScreen() {
         }
         confirmLabel="Submit"
         cancelLabel="Go back"
-        icon={icons.send}
         onConfirm={() => { setShowConfirmSubmit(false); doSubmit(); }}
         onCancel={() => setShowConfirmSubmit(false)}
       />

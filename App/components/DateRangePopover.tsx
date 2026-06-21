@@ -1,15 +1,5 @@
-/**
- * DateRangePopover — an inline dropdown panel anchored UNDER the date pill (not a
- * bottom sheet). Hosts <RangeCalendar> plus presets + Clear/Apply.
- *
- * RN views get clipped by ancestor overflow, so the panel renders inside a
- * transparent Modal and is positioned with absolute `top` derived from the
- * anchor's on-screen rect (measureInWindow) — the established pattern for
- * dropdowns that must escape a clipping parent. Tapping the backdrop dismisses.
- */
-
-import { useEffect, useRef, useState } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -19,12 +9,13 @@ import Animated, {
 import RangeCalendar, { type DateRange } from '@/components/RangeCalendar';
 import { Text } from '@/components/Themed';
 import { duration, ease } from '@/constants/Motion';
+import { icons } from '@/constants/icons';
+import Icon from '@/components/Icon';
 import { elevation, palette, radius, spacing, typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
 export type AnchorRect = { x: number; y: number; width: number; height: number };
 
-const SCREEN_H = Dimensions.get('window').height;
 const PANEL_W_INSET = spacing.md; // left/right margin from screen edge
 
 // Quick presets — start/end at local day boundaries.
@@ -60,12 +51,9 @@ export default function DateRangePopover({ visible, anchor, value, onClose, onAp
 
   const panelStyle = useAnimatedStyle(() => ({
     opacity: o.value,
-    transform: [{ translateY: (1 - o.value) * -8 }, { scale: 0.98 + o.value * 0.02 }],
+    transform: [{ scale: 0.96 + o.value * 0.04 }],
   }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: o.value }));
-
-  // Position just below the anchor; clamp so the panel never runs off-screen.
-  const top = anchor ? anchor.y + anchor.height + 6 : 120;
 
   const summary = draft.start
     ? draft.end
@@ -79,53 +67,70 @@ export default function DateRangePopover({ visible, anchor, value, onClose, onAp
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
-      <Animated.View
-        style={[
-          styles.panel,
-          { top, backgroundColor: theme.surface, borderColor: theme.border, maxHeight: SCREEN_H - top - spacing.lg },
-          elevation.lg,
-          panelStyle,
-        ]}
-      >
-        {/* Presets */}
-        <View style={styles.presetRow}>
-          {([['Today', 'today'], ['7 days', 'week'], ['30 days', 'month']] as const).map(([label, kind]) => (
+      <View style={styles.centeredWrap} pointerEvents="box-none">
+        <Animated.View
+          style={[
+            styles.panel,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+            elevation.lg,
+            panelStyle,
+          ]}
+        >
+          {/* Header */}
+          <View style={[styles.panelHeader, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.panelTitle, { color: theme.text }]}>Filter by date</Text>
             <Pressable
-              key={kind}
-              onPress={() => setDraft(preset(kind))}
-              style={({ pressed }) => [
-                styles.preset,
-                { backgroundColor: theme.surfaceAlt, opacity: pressed ? 0.6 : 1 },
-              ]}
+              onPress={onClose}
+              hitSlop={8}
+              style={({ pressed }) => [styles.closeBtn, { backgroundColor: theme.surfaceAlt, opacity: pressed ? 0.6 : 1 }]}
+              accessibilityLabel="Close"
             >
-              <Text style={[styles.presetText, { color: theme.textSecondary }]}>{label}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <RangeCalendar value={draft} onChange={setDraft} />
-
-        {/* Footer */}
-        <View style={[styles.footer, { borderTopColor: theme.border }]}>
-          <Text style={[styles.summary, { color: draft.start ? palette.brand : theme.textTertiary }]} numberOfLines={1}>
-            {summary}
-          </Text>
-          <View style={styles.footerBtns}>
-            <Pressable
-              onPress={() => setDraft({ start: null, end: null })}
-              style={({ pressed }) => [styles.btn, styles.btnGhost, { borderColor: theme.border, opacity: pressed ? 0.6 : 1 }]}
-            >
-              <Text style={[styles.btnText, { color: theme.textSecondary }]}>Clear</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => { onApply(draft); onClose(); }}
-              style={({ pressed }) => [styles.btn, { backgroundColor: palette.brand, opacity: pressed ? 0.85 : 1 }]}
-            >
-              <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Apply</Text>
+              <Icon name={icons.close} size={16} color={theme.textSecondary} />
             </Pressable>
           </View>
-        </View>
-      </Animated.View>
+
+          <View style={styles.body}>
+            {/* Presets */}
+            <View style={styles.presetRow}>
+              {([['Today', 'today'], ['7 days', 'week'], ['30 days', 'month']] as const).map(([label, kind]) => (
+                <Pressable
+                  key={kind}
+                  onPress={() => setDraft(preset(kind))}
+                  style={({ pressed }) => [
+                    styles.preset,
+                    { backgroundColor: theme.surfaceAlt, opacity: pressed ? 0.6 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.presetText, { color: theme.textSecondary }]}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <RangeCalendar value={draft} onChange={setDraft} />
+          </View>
+
+          {/* Footer */}
+          <View style={[styles.footer, { borderTopColor: theme.border }]}>
+            <Text style={[styles.summary, { color: draft.start ? palette.brand : theme.textTertiary }]} numberOfLines={1}>
+              {summary}
+            </Text>
+            <View style={styles.footerBtns}>
+              <Pressable
+                onPress={() => setDraft({ start: null, end: null })}
+                style={({ pressed }) => [styles.btn, styles.btnGhost, { borderColor: theme.border, opacity: pressed ? 0.6 : 1 }]}
+              >
+                <Text style={[styles.btnText, { color: theme.textSecondary }]}>Clear</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { onApply(draft); onClose(); }}
+                style={({ pressed }) => [styles.btn, { backgroundColor: palette.brand, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Apply</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
@@ -134,22 +139,49 @@ const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'n
 
 const styles = StyleSheet.create({
   backdrop: { backgroundColor: 'rgba(0,0,0,0.35)' },
+  centeredWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: PANEL_W_INSET,
+  },
   panel: {
-    position: 'absolute',
-    left: PANEL_W_INSET,
-    right: PANEL_W_INSET,
+    width: '100%',
     borderRadius: radius.lg,
     borderWidth: 1,
-    padding: spacing.md,
+    overflow: 'hidden',
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  panelTitle: {
+    fontSize: typography.bodyBold.size,
+    fontWeight: '700',
+  },
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  body: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
   },
   presetRow: {
     flexDirection: 'row',
     gap: spacing.xs,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   preset: {
     flex: 1,
-    height: 32,
+    height: 34,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -159,8 +191,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   footer: {
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
+    marginTop: spacing.xs,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
   },

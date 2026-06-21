@@ -114,6 +114,16 @@ Zone pipeline is CPU-bound; call `zones_service.run_pipeline()` via `fastapi.con
 4. Refresh rotates on every use; expiry → redirect to login
 5. Role enforcement: `analyst` (pipeline, tickets, reports, manage technicians) vs `technician` (view/update assigned tickets, submit reports, upload photos)
 
+Use the `_client_ip(request)` helper in `core/dependencies.py` for client IP (reads `X-Forwarded-For`, falls back to `request.client.host`) — never re-inline IP extraction in routers.
+
+### Google OAuth (server-side PKCE)
+
+Both web and mobile sign-in run a **two-leg server-side PKCE flow** (Google client ID/secret live in the Supabase dashboard, not in code). `auth_service.oauth_start()` builds the Google URL with a `state` nonce and stashes the PKCE verifier server-side keyed by that state; the `/callback/{state}` route exchanges the code for a Supabase session, enforces role gating, then issues cookies (web) or deep-links tokens back to the app (mobile).
+
+- **`state` lives in the URL PATH, never the query.** Supabase glob-matches `redirect_to` against its allowlist (`…/callback/**`); a trailing `**` does not reliably span a literal `?`. Routes are `…/callback/{state}`; Supabase Redirect URLs use `…/callback/**`.
+- **Mobile OAuth requires an HTTPS-reachable API.** Chrome blocks a redirect from Google back to a plain `http://` LAN address mid-flow. In dev the API must be fronted by an **ngrok** https tunnel; `_mobile_oauth_callback_url()` derives the callback from the request `Host` + `X-Forwarded-Proto`, so any https front-end works without code changes. See `docs/NGROK_GOOGLE_SIGNIN_GUIDE.md`.
+- **Mobile OAuth needs a real dev/prod build, not Expo Go** — Expo Go can't register the `spatiotemporal://` deep link the flow returns through. Password login works in Expo Go.
+
 ---
 
 ## Architecture: Web Frontend (`web/src/`)
@@ -262,9 +272,20 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ALLOWED_ORIGINS=http://localhost:3000
 DEV_MODE=true
+# Security (hardened in production)
+CSRF_SECRET=                 # 32+ char random; generate with secrets.token_hex(32)
+COOKIE_SECURE=false          # true in production (HTTPS-only cookies)
+COOKIE_SAMESITE=lax          # "strict" in production
+# Google OAuth
+GOOGLE_OAUTH_ENABLED=false
+OAUTH_REDIRECT_BASE=http://localhost:8000        # web callback base (analyst on PC)
+MOBILE_OAUTH_REDIRECT_BASE=                       # https tunnel/host base for phone; empty → falls back to OAUTH_REDIRECT_BASE
+WEB_APP_URL=http://localhost:3000                 # where the browser lands after callback
 ```
 
 `DEV_MODE=true` (default) widens CORS to all `localhost` and `192.168.x.x` origins — set `false` in production.
+
+**Production guard:** `settings.assert_production_safe()` runs at startup and **refuses to boot** when `DEV_MODE=false` if any of these are still dev-grade: default/short `CSRF_SECRET`, `COOKIE_SECURE=false`, localhost/LAN entries in `ALLOWED_ORIGINS`, or `WEB_APP_URL` on `http://` while OAuth is enabled. Configure all of the above before flipping `DEV_MODE`.
 
 **`web/.env.local`** — Next.js only gets the API URL:
 ```
@@ -287,3 +308,12 @@ SQL migrations live in `docs/migrations/`, numbered sequentially (`0001_…`, `0
 ## Reference
 
 `prototypes/` is kept for reference only — the `zones/` algorithms there are the source of truth for `api/app/zones/`. When editing `api/` or `web/`, do not touch `prototypes/` or the Expo app (unless the task explicitly targets `App/`).
+
+In-repo docs (read these before touching the matching area):
+
+| Doc | Covers |
+|-----|--------|
+| `docs/KNOWN_BUGS_AND_FIXES.md` | Plain-language log of every real bug hit in development (OAuth, firewall, Expo Go limits, error leaks) + how each was fixed/prevented — **check here first when a symptom feels familiar** |
+| `docs/NGROK_GOOGLE_SIGNIN_GUIDE.md` | Full ngrok setup for mobile Google sign-in: why https is mandatory, the 3 config spots, daily run order, dev-build requirement |
+| `docs/zones.md` | Zone A/B/C algorithm details |
+| `docs/ticketing-system.md`, `docs/ticketing-flow.md` | Ticket lifecycle and multi-technician workflow |

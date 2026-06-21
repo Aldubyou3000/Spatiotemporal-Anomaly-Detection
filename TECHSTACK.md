@@ -1,7 +1,7 @@
 # Tech Stack — Spatiotemporal Anomaly Detection System
 
-**Last updated**: 2026-06-03
-**Status**: Migration complete — Streamlit replaced by Next.js + FastAPI
+**Last updated**: 2026-06-21
+**Status**: Migration complete — Streamlit replaced by Next.js + FastAPI. Google OAuth, audit log, and real-time SSE added post-migration.
 
 ---
 
@@ -53,6 +53,17 @@ Web Browser (Analyst)          Mobile App (Technician)
 | **Pydantic v2** | Request and response validation (built into FastAPI) |
 | **Supabase Python SDK** | Database, auth, and storage — server-side only |
 | **Server-Sent Events** | Real-time push to the web dashboard (`GET /api/events`); in-process broker, stdlib only — see single-worker note below |
+| **slowapi** | Per-route rate limiting (120/min global, 10/min login, 30/min refresh) |
+| **Server-side PKCE OAuth** | Google sign-in for web + mobile — verifier kept server-side, `state` in URL path; Google client ID/secret live in the Supabase dashboard |
+
+### Security Layers (backend)
+| Mechanism | Purpose |
+|-----------|---------|
+| **httpOnly cookies + CSRF double-submit** | Web session tokens unreadable by JS; `X-CSRF-Token` header echoes a readable `csrf_token` cookie on mutations |
+| **Session fingerprinting** | HMAC of (IP, User-Agent) bound to the session, rotated on every login/refresh (anti-fixation) |
+| **Account lockout** | 5 failed attempts in 5 min → 15 min lockout |
+| **Append-only audit log** | Every mutation logged with a SHA-256 hash chain; tamper-evident, integrity-verifiable |
+| **`assert_production_safe()`** | Startup guard that refuses to boot with dev-grade config when `DEV_MODE=false` |
 
 ### Zone Processing (Existing — Untouched)
 | File | Purpose |
@@ -158,9 +169,10 @@ api/app/
 ├── main.py                           ← FastAPI app: routers, CORS, rate limiting, security headers
 │
 ├── core/
-│   ├── config.py                     ← Env vars via Pydantic BaseSettings
-│   ├── security.py                   ← JWT verification (Supabase tokens)
-│   └── dependencies.py               ← Depends(): get_current_user (cookie), get_mobile_user (Bearer)
+│   ├── config.py                     ← Env vars via Pydantic BaseSettings + assert_production_safe()
+│   ├── security.py                   ← JWT verification, session fingerprint HMAC
+│   ├── errors.py                     ← friendly_db_error() — translates Postgres codes, never leaks raw DB text
+│   └── dependencies.py               ← Depends(): get_current_user (cookie), get_mobile_user (Bearer), _client_ip()
 │
 ├── routers/                          ← HTTP only — no business logic
 │   ├── auth.py                       ← POST /api/auth/login|logout|refresh, GET /api/auth/me
@@ -230,7 +242,16 @@ POST   /api/auth/login                { credential, password } → { user }  (se
 GET    /api/auth/me                   → Current user profile
 POST   /api/auth/logout               → Clears auth cookies
 POST   /api/auth/refresh              → Rotates tokens from the refresh cookie (no body)
+GET    /api/auth/oauth/google/start         → 302 to Google (server-side PKCE)
+GET    /api/auth/oauth/google/callback/{state} → Exchanges code, gates analyst role, sets cookies, lands on /zones
 ```
+
+### Mobile OAuth (Google sign-in for technicians)
+```
+GET    /api/mobile/auth/oauth/google/start?return_url=…      → 302 to Google
+GET    /api/mobile/auth/oauth/google/callback/{state}        → Deep-links tokens back to the app (spatiotemporal://)
+```
+`state` is carried in the URL **path** (`…/callback/{state}`), never a query param — Supabase's `…/callback/**` allowlist glob does not reliably span a literal `?`. Mobile OAuth requires the API to be reachable over **HTTPS** (an ngrok tunnel in dev; Chrome blocks `http://` LAN redirects mid-flow) and a real dev/prod build (Expo Go can't register the `spatiotemporal://` deep link).
 
 ### Zones Processing
 ```
@@ -323,6 +344,8 @@ GET    /api/mobile/events             → SSE stream (Bearer auth); content-free
 9. Refresh token expires → user is redirected to login
 ```
 
+A session fingerprint (HMAC of IP + User-Agent) and CSRF token are issued alongside the cookies and regenerated on every login and refresh (anti-fixation). **Google sign-in** is an alternative entry point: `…/oauth/google/start` runs a server-side PKCE round-trip and, on success, issues the exact same session (cookies for web, deep-linked tokens for mobile).
+
 ---
 
 ## Security Rules
@@ -346,11 +369,28 @@ NEXT_PUBLIC_API_URL=https://your-fastapi-domain.railway.app
 ```
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=
+SUPABASE_JWT_SECRET=
 JWT_SECRET=
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ALLOWED_ORIGINS=https://your-nextjs-domain.vercel.app
+DEV_MODE=true
+# Security — hardened for production (assert_production_safe() enforces these when DEV_MODE=false)
+CSRF_SECRET=                 # 32+ char random; secrets.token_hex(32)
+COOKIE_SECURE=false          # true in production
+COOKIE_SAMESITE=lax          # strict in production
+# Google OAuth (client ID/secret live in the Supabase dashboard)
+GOOGLE_OAUTH_ENABLED=false
+OAUTH_REDIRECT_BASE=http://localhost:8000        # web callback base
+MOBILE_OAUTH_REDIRECT_BASE=                       # https tunnel/host base for phone
+WEB_APP_URL=http://localhost:3000                 # where the browser lands after callback
+```
+
+**`App/.env`** — Expo gets the API URL only (the LAN IP, or an https tunnel for OAuth).
+```
+EXPO_PUBLIC_API_URL=http://192.168.100.10:8000    # or https://<your>.ngrok-free.dev for mobile Google sign-in
 ```
 
 ### File Uploads

@@ -1,7 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Bell, LayoutGrid, UserRound } from 'lucide-react-native';
 import { BottomTabBarProps, BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LayoutChangeEvent, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   interpolateColor,
@@ -14,13 +14,15 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { duration, ease, spring } from '@/constants/Motion';
-import { radius, spacing } from '@/constants/theme';
+import { palette, radius, spacing } from '@/constants/theme';
 import {
   TAB_BAR_BOTTOM_MARGIN,
   TAB_BAR_CARD_HEIGHT,
   TAB_BAR_TOP_MARGIN,
 } from '@/constants/tabBar';
 import { useTheme } from '@/hooks/useTheme';
+import { useUnseenActivity } from '@/hooks/useUnseenActivity';
+import { navTargetRef } from '@/lib/tourTargets';
 
 // Sliding indicator spring — retargets from live position on fast switches.
 // No overshootClamping so mid-flight reversals spring back smoothly.
@@ -35,30 +37,37 @@ function TabButton({
   route,
   options,
   focused,
+  showBadge,
   onPress,
   onLongPress,
 }: {
   route: BottomTabBarProps['state']['routes'][number];
   options: BottomTabNavigationOptions;
   focused: boolean;
+  showBadge: boolean;
   onPress: () => void;
   onLongPress: () => void;
 }) {
   const theme = useTheme();
 
   const activeColor   = theme.status.brand;
-  const inactiveColor = theme.textTertiary;
+  // Inactive tabs use the PRIMARY text colour (black in light / white in dark) —
+  // the old textTertiary grey looked washed out. The selected tab still stands
+  // out via the brand colour + the sliding indicator bar.
+  const inactiveColor = theme.text;
 
   const progress = useSharedValue(focused ? 1 : 0);
   const scale    = useSharedValue(focused ? 1.05 : 1);
 
-  if (focused) {
-    progress.value = withTiming(1, { duration: duration.fast, easing: ease });
-    scale.value    = withSpring(1.05, spring.snappy);
-  } else {
-    progress.value = withTiming(0, { duration: duration.fast, easing: ease });
-    scale.value    = withSpring(1, spring.snappy);
-  }
+  // Drive the focus animation from an effect, not the render body. Mutating a
+  // shared value during render re-fires the spring/timing on EVERY re-render
+  // (theme reads, parent re-renders), restarting it mid-flight — that was the
+  // tab-switch stutter. An effect keyed on `focused` runs the transition once,
+  // exactly when focus actually changes.
+  useEffect(() => {
+    progress.value = withTiming(focused ? 1 : 0, { duration: duration.fast, easing: ease });
+    scale.value    = withSpring(focused ? 1.05 : 1, spring.snappy);
+  }, [focused]);
 
   const iconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -82,9 +91,15 @@ function TabButton({
     >
       <View style={styles.stack}>
         {/* Fixed icon box so every glyph sits on the same horizontal rhythm */}
-        <Animated.View style={[styles.iconBox, iconStyle]}>
-          {iconEl}
-        </Animated.View>
+        <View style={styles.iconWrap}>
+          <Animated.View style={[styles.iconBox, iconStyle]}>
+            {iconEl}
+          </Animated.View>
+          {/* "New activity" dot — Facebook-style notice on the tab's icon */}
+          {showBadge && (
+            <View style={[styles.badge, { borderColor: theme.surface }]} pointerEvents="none" />
+          )}
+        </View>
         <Animated.Text
           numberOfLines={1}
           style={[styles.label, focused && styles.labelActive, labelStyle]}
@@ -100,6 +115,7 @@ function TabButton({
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme  = useTheme();
   const insets = useSafeAreaInsets();
+  const hasUnseenActivity = useUnseenActivity();
 
   const bottomMargin = Math.max(insets.bottom, TAB_BAR_BOTTOM_MARGIN);
 
@@ -109,8 +125,13 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   // Shared target drives the sliding indicator; useDerivedValue animates from
   // current position so fast switches reverse smoothly without teleporting.
+  // Update `target` in an effect (not the render body) so it only changes when
+  // the active index or measured cell width actually changes — writing it on
+  // every render kept nudging the derived spring.
   const target = useSharedValue(0);
-  target.value = cellWidth > 0 ? state.index * cellWidth : 0;
+  useEffect(() => {
+    target.value = cellWidth > 0 ? state.index * cellWidth : 0;
+  }, [state.index, cellWidth]);
 
   const slideX = useDerivedValue(() => withSpring(target.value, SLIDE_SPRING));
 
@@ -128,6 +149,8 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       style={[styles.barOuter, { paddingBottom: bottomMargin }]}
     >
       <View
+        ref={(n) => { navTargetRef.current = n; }}
+        collapsable={false}
         pointerEvents="auto"
         style={[
           styles.barCard,
@@ -168,6 +191,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 route={route}
                 options={options}
                 focused={focused}
+                showBadge={route.name === 'activity' && hasUnseenActivity}
                 onPress={onPress}
                 onLongPress={onLongPress}
               />
@@ -193,8 +217,12 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Dashboard',
+          // lucide SVG icons: a tunable bold outline (strokeWidth 2.25 vs lucide's
+          // default 2). Inactive = outline only (fill:none); active = filled with
+          // the brand colour. fill doesn't affect the icon's size, so this never
+          // shifts the layout.
           tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons name={focused ? 'grid' : 'grid-outline'} size={size} color={color} />
+            <LayoutGrid color={color} size={size} strokeWidth={2.25} fill={focused ? color : 'none'} />
           ),
         }}
       />
@@ -203,7 +231,7 @@ export default function TabLayout() {
         options={{
           title: 'Activity',
           tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons name={focused ? 'notifications' : 'notifications-outline'} size={size} color={color} />
+            <Bell color={color} size={size} strokeWidth={2.25} fill={focused ? color : 'none'} />
           ),
         }}
       />
@@ -211,8 +239,11 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          // UserRound (not User): its round head meets the semicircle shoulders
+          // cleanly, so the FILLED active state is one cohesive silhouette with no
+          // stray edge pixel the squared `User` glyph produced when filled.
           tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={size} color={color} />
+            <UserRound color={color} size={size} strokeWidth={2.25} fill={focused ? color : 'none'} />
           ),
         }}
       />
@@ -280,7 +311,24 @@ const styles = StyleSheet.create({
     alignSelf:      'stretch',
     alignItems:     'center',
     justifyContent: 'center',
-    gap:            3,
+    gap:            1,
+  },
+
+  // Wraps the icon so the "new activity" badge can pin to its top-right corner.
+  iconWrap: {
+    position: 'relative',
+  },
+  // Facebook-style red dot — sits on the icon's top-right with a ring in the bar
+  // colour so it reads clearly against the glyph.
+  badge: {
+    position:     'absolute',
+    top:          -2,
+    right:        -2,
+    width:        10,
+    height:       10,
+    borderRadius: 5,
+    backgroundColor: palette.danger,
+    borderWidth:  1.5,
   },
 
   // Fixed box normalises glyph widths — all icons sit on the same rhythm
@@ -294,10 +342,10 @@ const styles = StyleSheet.create({
   // Label — spans cell width so bold↔normal switch never shifts layout
   label: {
     alignSelf:     'stretch',
-    fontSize:      11,
+    fontSize:      12,
     fontWeight:    '500',
     letterSpacing: 0.1,
-    lineHeight:    14,
+    lineHeight:    16,
     textAlign:     'center',
   },
   labelActive: {

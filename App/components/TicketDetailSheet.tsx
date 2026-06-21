@@ -353,7 +353,6 @@ export default function TicketDetailSheet({ ticket, onClose, onAction }: Props) 
         }
         confirmLabel="Confirm"
         cancelLabel="Cancel"
-        icon={icons.startWork}
         onConfirm={doStartWorking}
         onCancel={() => setShowConfirm(false)}
       />

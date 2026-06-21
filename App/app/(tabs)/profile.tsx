@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
+import { setStatusBarStyle } from 'expo-status-bar';
 
 import AppScrollView from '@/components/AppScrollView';
 import CloudBackground from '@/components/CloudBackground';
@@ -11,6 +13,7 @@ import { Text } from '@/components/Themed';
 import { icons } from '@/constants/icons';
 import { palette, radius, spacing, typography } from '@/constants/theme';
 import { useAppContext } from '@/context/AppContext';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useTheme } from '@/hooks/useTheme';
 
 // ─── Section label — elegant, low-key tracking ────────────────────────────────
@@ -74,8 +77,13 @@ export default function ProfileScreen() {
   const { technicianName, logout, profile, isDarkMode, toggleTheme } = useAppContext();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
   const { width: screenW } = useWindowDimensions();
   const [showLogoutSheet, setShowLogoutSheet] = useState(false);
+
+  // Brand-blue cloud sits behind the status bar → always light (white) icons.
+  // Set imperatively on focus (see index.tsx note on expo/router#754).
+  useFocusEffect(useCallback(() => { setStatusBarStyle('light'); }, []));
 
   const stationDisplay = profile?.station_ids?.length
     ? profile.station_ids.join(', ')
@@ -91,7 +99,7 @@ export default function ProfileScreen() {
     <View style={[styles.wrapper, { backgroundColor: theme.isDark ? '#191C23' : '#F2F4F7' }]}>
       {/* Lifted so the scallop bottoms out around the middle of the avatar — the
           name and role sit on plain grey below it. */}
-      <CloudBackground width={screenW} isDark={theme.isDark} offsetY={-screenW * 0.4} />
+      <CloudBackground width={screenW} isDark={theme.isDark} offsetY={-screenW * 0.35} lite={reducedMotion} />
       <AppScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
@@ -174,15 +182,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   avatar: {
-    width: 88, height: 88,
-    borderRadius: 44,
+    width: 124, height: 124,
+    borderRadius: 62,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 46,
     fontWeight: '800',
   },
   name: {

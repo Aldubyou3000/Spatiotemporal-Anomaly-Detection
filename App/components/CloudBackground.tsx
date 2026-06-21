@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -21,7 +22,7 @@ const CLOUD_BASE = [
   { d: 0.60, x:  0.94, y: -0.02 },
 ];
 
-function Cloud({ width, color }: { width: number; color: string }) {
+function Cloud({ width, color, lite }: { width: number; color: string; lite: boolean }) {
   const W = width;
   const H = W * 1.10;
   return (
@@ -33,6 +34,12 @@ function Cloud({ width, color }: { width: number; color: string }) {
           // a gradient that fades to dark toward its bottom edge. Clipped to the
           // circle, this reads as an inner shadow on every lobe — so the bumps look
           // puffy/3D and overlapping discs cast soft shadows into one another.
+          //
+          // LITE mode (reduce-motion / battery-saver / low-end) drops the gradient
+          // overlay: the cloud keeps its exact silhouette + position, but each disc
+          // becomes a single flat clipped circle. That halves the cloud's layer
+          // count (no per-disc gradient shader to composite) and cuts overdraw on
+          // weak GPUs — the "simplify heavy effects on constrained hardware" path.
           <View
             key={i}
             style={{
@@ -42,16 +49,18 @@ function Cloud({ width, color }: { width: number; color: string }) {
               width: d,
               height: d,
               borderRadius: d / 2,
-              overflow: 'hidden',
+              overflow: lite ? 'visible' : 'hidden',
               backgroundColor: color,
             }}
           >
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.10)']}
-              locations={[0.78, 1]}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
+            {!lite && (
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.10)']}
+                locations={[0.78, 1]}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+            )}
           </View>
         );
       })}
@@ -86,14 +95,21 @@ const CLOUD_SHADES = {
 //             just hides more of the scallop. Home leaves it at 0 (scallop behind
 //             the search bar); Profile and Activity pass a negative offset so the
 //             scallop sits where each screen wants it.
-export default function CloudBackground({
+// memo'd: props (width/isDark/offsetY) are stable, but the parent screens
+// re-render on every keystroke, scroll and refetch. Without memo the 36 gradient
+// views rebuilt every time; now the cloud only re-renders when a prop changes.
+function CloudBackground({
   width,
   isDark,
   offsetY = 0,
+  lite = false,
 }: {
   width: number;
   isDark: boolean;
   offsetY?: number;
+  /** Drop the per-disc gradient overlays — same shape/position, fewer composited
+   *  layers. Pass the reduce-motion / low-power flag here. */
+  lite?: boolean;
 }) {
   const shades = isDark ? CLOUD_SHADES.dark : CLOUD_SHADES.light;
   return (
@@ -108,7 +124,7 @@ export default function CloudBackground({
             transform: [{ translateX: width * l.x }, { translateY: width * l.y }],
           }}
         >
-          <Cloud width={width} color={shades[i]} />
+          <Cloud width={width} color={shades[i]} lite={lite} />
         </View>
       ))}
     </View>
@@ -123,3 +139,5 @@ const styles = StyleSheet.create({
     right: 0,
   },
 });
+
+export default memo(CloudBackground);

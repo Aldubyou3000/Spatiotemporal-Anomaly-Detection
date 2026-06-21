@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { asyncStoragePersister } from '@/lib/persistedQueryClient';
 import { queryClient } from '@/lib/queryClient';
@@ -29,6 +30,7 @@ import { icons } from '@/constants/icons';
 import { duration, ease, spring, stagger } from '@/constants/Motion';
 import { getTheme, palette, radius, spacing, typography } from '@/constants/theme';
 import { AppProvider, useAppContext } from '@/context/AppContext';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useTheme } from '@/hooks/useTheme';
 
 // ─── Root ────────────────────────────────────────────────────────────────────
@@ -70,15 +72,33 @@ function AppRoot() {
   const { isLoggedIn, authLoading, isDarkMode } = useAppContext();
   const t = getTheme(isDarkMode);
 
+  // OS status bar tint (clock / battery / notification icons) for the pre-tab
+  // screens. Inside the tabs, each screen sets its own style because what sits
+  // behind the bar differs per tab: Dashboard & Profile have the blue cloud
+  // (always light icons), while Activity has the plain grey/dark bg (follows the
+  // theme). expo's "auto" is NOT used — it reads the device OS color scheme, not
+  // this app's in-app theme toggle, so it never matched.
+  const loadingBarStyle = isDarkMode ? 'light' : 'dark';
+
   if (authLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: t.bg }]}>
+        <StatusBar style={loadingBarStyle} />
         <ActivityIndicator size="large" color={palette.brand} />
       </View>
     );
   }
 
-  if (!isLoggedIn) return <LoginScreen />;
+  if (!isLoggedIn) {
+    // Login is a fixed white screen (see LoginScreen styles) regardless of
+    // theme, so its status-bar icons are always dark.
+    return (
+      <>
+        <StatusBar style="dark" />
+        <LoginScreen />
+      </>
+    );
+  }
 
   return (
     <ThemeProvider value={isDarkMode ? DarkTheme : DefaultTheme}>
@@ -122,6 +142,7 @@ function AppRoot() {
 function LoginScreen() {
   const { login, loginWithGoogle } = useAppContext();
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const passwordRef = useRef<TextInput>(null);
 
   // Refs hold live input values — no state update on each keystroke,
@@ -147,12 +168,18 @@ function LoginScreen() {
     const rows: [typeof o0, typeof y0][] = [
       [o0, y0], [o1, y1], [o2, y2], [o3, y3], [o4, y4],
     ];
+    // Reduce-motion / battery-saver: snap every row to its final state, no
+    // animation. The login form just appears.
+    if (reducedMotion) {
+      rows.forEach(([o, y]) => { o.value = 1; y.value = 0; });
+      return;
+    }
     rows.forEach(([o, y], i) => {
       const delay = i * stagger.field;
       o.value = withDelay(delay, withTiming(1, { duration: duration.entrance, easing: ease }));
       y.value = withDelay(delay, withSpring(0, spring.gentle));
     });
-  }, []);
+  }, [reducedMotion]);
 
   // One useAnimatedStyle per row — called unconditionally, in stable order.
   // The username + password fields share one input card (usernameAnim), so the

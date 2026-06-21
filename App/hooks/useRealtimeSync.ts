@@ -57,7 +57,12 @@ export function useRealtimeSync({ enabled, onNudge }: Options): void {
       es = new RNEventSource(EVENTS_URL, {
         headers: { Authorization: `Bearer ${token}` },
         // react-native-sse auto-reconnects on transient drops at this interval.
-        pollingInterval: 5000,
+        // Live nudges still arrive instantly over the open connection; this only
+        // governs how often a DROPPED connection retries. Kept calm (30s) so an
+        // idle session doesn't churn through reconnect → invalidate → refetch
+        // cycles every few seconds. Foreground resync (AppState) catches up
+        // immediately when the user returns, so a longer retry costs nothing.
+        pollingInterval: 30000,
       });
 
       es.addEventListener('message', (event) => {

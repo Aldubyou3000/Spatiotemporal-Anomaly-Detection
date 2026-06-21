@@ -1,6 +1,8 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  FlatList,
+  type ListRenderItem,
   Platform,
   Pressable,
   RefreshControl,
@@ -18,19 +20,27 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import AppScrollView from '@/components/AppScrollView';
+import { Ionicons } from '@expo/vector-icons';
+import { CircleQuestionMark } from 'lucide-react-native';
+import { setStatusBarStyle } from 'expo-status-bar';
+
+import { useTabBarFootprint } from '@/constants/tabBar';
 import CloudBackground from '@/components/CloudBackground';
-import BottomSheet from '@/components/BottomSheet';
 import Icon from '@/components/Icon';
+import SpotlightTour from '@/components/SpotlightTour';
 import StatusIcon from '@/components/StatusIcon';
 import { Text } from '@/components/Themed';
 import TicketDetailSheet from '@/components/TicketDetailSheet';
 import TicketSkeleton from '@/components/TicketSkeleton';
-import { duration, ease, spring, stagger } from '@/constants/Motion';
+import { easeOut, spring } from '@/constants/Motion';
 import { icons, type IconName } from '@/constants/icons';
 import { elevation, palette, radius, spacing, typography } from '@/constants/theme';
+import { type TourTargetKey } from '@/constants/tourSteps';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useTheme } from '@/hooks/useTheme';
 import { useTicketList } from '@/hooks/useTickets';
+import { navTargetRef } from '@/lib/tourTargets';
+import { readTutorialSeen, writeTutorialSeen } from '@/lib/tutorialSeen';
 import { MaintenanceTicket } from '@/services/api';
 import { STATUS_LABEL, PRIORITY_LABEL, statusColor, priorityColor, byImportance } from '@/constants/ticketStatus';
 
@@ -96,6 +106,12 @@ function fmtRelative(iso: string): string {
 // and the rest stayed at opacity:0 (invisible).
 let hasAnimatedIn = false;
 
+// Per-card entrance duration. Short + ease-out so the cascade feels snappy, not
+// a slow drift. Paired with a tight CARD_STAGGER below so even the last visible
+// card has fully arrived quickly.
+const ENTRANCE_MS = 190;
+const CARD_STAGGER = 22; // ms between successive cards (snappy, not a slow drift)
+
 function FadeSlideIn({
   delay, children, style: outerStyle,
 }: {
@@ -103,16 +119,44 @@ function FadeSlideIn({
   children: React.ReactNode;
   style?: object;
 }) {
+  const reducedMotion = useReducedMotion();
   // Locked in on first render; identical for every card mounting together.
-  const shouldAnimate = useRef(!hasAnimatedIn).current;
+  const firstPaint = useRef(!hasAnimatedIn).current;
+  // Animate only on the session's first paint AND when motion is allowed. Under
+  // reduce-motion / battery-saver the card renders in its final state instantly.
+  const shouldAnimate = firstPaint && !reducedMotion;
 
-  const opacity    = useSharedValue(shouldAnimate ? 0 : 1);
-  const translateY = useSharedValue(shouldAnimate ? 10 : 0);
+  // Cards that don't animate (every tab return after the first paint, every card
+  // recycled in during scroll, and all cards under reduce-motion) render as a
+  // PLAIN View — never an Animated.View. Keeping a recycled card on Reanimated's
+  // worklet path for its whole life churns the animation pool as the virtualized
+  // list scrolls. Only the first screenful, on the very first paint, animates.
+  if (!shouldAnimate) {
+    return <View style={outerStyle}>{children}</View>;
+  }
+  return <FadeSlideInAnimated delay={delay} style={outerStyle}>{children}</FadeSlideInAnimated>;
+}
+
+// The animated variant — only ever mounted for the first screenful on first
+// paint. Hooks live here so the static path above calls no Reanimated hooks.
+function FadeSlideInAnimated({
+  delay, children, style: outerStyle,
+}: {
+  delay: number;
+  children: React.ReactNode;
+  style?: object;
+}) {
+  const opacity    = useSharedValue(0);
+  const translateY = useSharedValue(8);
 
   useEffect(() => {
-    if (!shouldAnimate) return; // already shown this session → stay instant
-    opacity.value    = withDelay(delay, withTiming(1, { duration: duration.normal, easing: ease }));
-    translateY.value = withDelay(delay, withSpring(0, spring.gentle));
+    // Timing curve on both axes (no spring) so cost is identical at any refresh
+    // rate. An ease-OUT curve (fast start, gentle settle) reads as snappier and
+    // smoother than the symmetric `ease` — the card arrives quickly instead of
+    // appearing to drift in. Short distance (8px) + short duration keeps motion
+    // minimal so there's no perceived blur/lag on the trailing cards.
+    opacity.value    = withDelay(delay, withTiming(1, { duration: ENTRANCE_MS, easing: easeOut }));
+    translateY.value = withDelay(delay, withTiming(0, { duration: ENTRANCE_MS, easing: easeOut }));
     hasAnimatedIn = true; // safe to set after our own decision is captured
   }, []); // mount-only; never re-fires on tab focus
 
@@ -203,16 +247,133 @@ function Segmented({
   );
 }
 
+// ─── Ticket card ─────────────────────────────────────────────────────────────
+// Soft Card (Apple Wallet / Airbnb feel): white surface, 16px radius, soft
+// shadow. The whole card opens the detail sheet.
+//
+// memo'd so a virtualized scroll recycle / a parent re-render (search typing,
+// segment switch) doesn't re-render every card — only ones whose own props
+// change. Reads `theme` via useTheme (stable ref, see hooks/useTheme.ts) and
+// takes ONE stable onPress(ticket) handler instead of a per-card closure, so the
+// memo isn't defeated by a fresh arrow each render.
+const TicketCard = memo(function TicketCard({
+  ticket, index, inSearch, onPress,
+}: {
+  ticket: MaintenanceTicket;
+  index: number;
+  inSearch: boolean;
+  onPress: (ticket: MaintenanceTicket) => void;
+}) {
+  const theme = useTheme();
+
+  const status    = ticket.dbStatus ?? 'assigned';
+  const sc        = statusColor(status, theme.status);
+  const priority  = ticket.priority ?? 'low';
+  const pri       = priorityColor(priority, theme.status);
+  const fuCount   = ticket.followUpCount ?? 0;
+
+  const isClosed = status === 'verified' || status === 'cancelled';
+  const titleColor = isClosed ? theme.textMuted : theme.text;
+
+  // Muted metadata line: station · zone · TKT-N · time · revisits.
+  const meta = [
+    ticket.stationId,
+    ticket.anomalyZone ? `Z-${ticket.anomalyZone}` : null,
+    `TKT-${ticket.ticketNumber}`,
+    fmtRelative(ticket.updatedAt),
+    fuCount > 0 ? `Revisit ×${fuCount}` : null,
+  ].filter(Boolean).join('  ·  ');
+
+  const handlePress = useCallback(() => onPress(ticket), [onPress, ticket]);
+
+  return (
+    <FadeSlideIn
+      // Cap the stagger at the first 8 cards — beyond that the delay would only
+      // grow without being seen (later cards are off-screen until scrolled to).
+      delay={Math.min(index, 8) * CARD_STAGGER}
+      style={[styles.card, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}
+    >
+      <Pressable
+        onPress={handlePress}
+        android_ripple={{ color: theme.surfaceMuted }}
+        style={({ pressed }) => [
+          styles.cardInner,
+          Platform.OS === 'ios' && pressed && { backgroundColor: theme.surfaceMuted },
+        ]}
+      >
+        {/* Header: status avatar + title + ghost status / priority indicators */}
+        <View style={styles.cardHead}>
+          <View style={styles.avatar}>
+            <StatusIcon status={status} size={46} color={sc.color} />
+          </View>
+
+          <View style={styles.cardHeadText}>
+            <Text
+              style={[styles.cardTitle, { color: titleColor }]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {ticket.title}
+            </Text>
+
+            {/* Status indicator. In the normal tabbed list it's a flat ghost
+                (dot + tinted text). In a GLOBAL search result the status is
+                the key context (rows span every tab), so it's promoted to a
+                filled soft-token pill for legibility. Priority stays ghost. */}
+            <View style={styles.ghostRow}>
+              {inSearch ? (
+                <View style={[styles.statusPill, { backgroundColor: sc.bg }]}>
+                  <Text style={[styles.statusPillText, { color: sc.color }]}>
+                    {STATUS_LABEL[status] ?? status}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View style={[styles.ghostDot, { backgroundColor: sc.color }]} />
+                  <Text style={[styles.ghostText, { color: sc.color }]}>
+                    {STATUS_LABEL[status] ?? status}
+                  </Text>
+                  <Text style={[styles.ghostSep, { color: theme.textTertiary }]}>·</Text>
+                </>
+              )}
+              <Text style={[styles.ghostText, { color: pri.color }]}>
+                {PRIORITY_LABEL[priority] ?? priority}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Metadata line — muted gray, middle dots */}
+        <Text style={[styles.cardMeta, { color: theme.textMuted }]} numberOfLines={1}>
+          {meta}
+        </Text>
+        {/* No start/submit affordance on the list card — those actions live
+            exclusively inside the ticket detail sheet. The card only opens it. */}
+      </Pressable>
+    </FadeSlideIn>
+  );
+});
+
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
   const theme  = useTheme();
   const insets = useSafeAreaInsets();
+  const tabBarFootprint = useTabBarFootprint();
+  const reducedMotion = useReducedMotion();
   const { width: screenW } = useWindowDimensions();
   const [segment, setSegment]           = useState<Segment>('active');
   const [activeTab, setActiveTab]       = useState<TicketTab>('assigned');
   const [detailTicket, setDetailTicket] = useState<MaintenanceTicket | null>(null);
   const [search, setSearch]             = useState('');
-  const [showTutorial, setShowTutorial] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [tourVisible, setTourVisible]   = useState(false);
+
+  // Spotlight-tour targets — measured by <SpotlightTour> via measureInWindow.
+  const searchRef  = useRef<View>(null);
+  const filtersRef = useRef<View>(null);
+  const listRef    = useRef<View>(null);
+  const helpRef    = useRef<View>(null);
+  const tourStarted = useRef(false);
 
   const { data: ticketsData, isLoading, isValidating, refetch, forceRefresh } = useTicketList();
   const tickets = ticketsData ?? [];
@@ -220,6 +381,12 @@ export default function DashboardScreen() {
   // Soft revalidation on tab focus — TanStack respects staleTime, so this is
   // a no-op when data is fresh (< 30s old) and a quiet background fetch otherwise.
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
+
+  // Status-bar icons: the brand-blue cloud sits behind the bar here, so always
+  // light (white) icons. Set imperatively on focus — the declarative <StatusBar>
+  // component gets clobbered by expo-router's re-render (expo/router#754), so a
+  // direct native call on every focus is the reliable path.
+  useFocusEffect(useCallback(() => { setStatusBarStyle('light'); }, []));
 
   // Switching segment moves the list to that segment's first status, so the
   // visible list never shows a tab whose chip has been hidden.
@@ -269,97 +436,11 @@ export default function DashboardScreen() {
     return base.sort(byImportance);
   }, [tickets, activeTab, isSearching, query]);
 
-  // ── Soft Card (Apple Wallet / Airbnb feel) ──────────────────────────────────
-  // White surface, 1px faint border, 16px radius, NO shadow/elevation, generous
-  // padding. Status/priority are ghost indicators (tinted text + dot), never
-  // solid pills. The whole card taps into the detail sheet; an optional bottom
-  // text-link hints the next action and also opens the sheet (where the CTA is).
-  const renderCard = (ticket: MaintenanceTicket, i: number, inSearch = false) => {
-    const dbId      = ticket._dbId ?? ticket.ticketId;
-    const status    = ticket.dbStatus ?? 'assigned';
-    const sc        = statusColor(status, theme.status);
-    const priority  = ticket.priority ?? 'low';
-    const pri       = priorityColor(priority, theme.status);
-    const fuCount   = ticket.followUpCount ?? 0;
-
-    const isClosed = status === 'verified' || status === 'cancelled';
-    const titleColor = isClosed ? theme.textMuted : theme.text;
-
-    // Muted metadata line: station · zone · TKT-N · time · revisits.
-    const meta = [
-      ticket.stationId,
-      ticket.anomalyZone ? `Z-${ticket.anomalyZone}` : null,
-      `TKT-${ticket.ticketNumber}`,
-      fmtRelative(ticket.updatedAt),
-      fuCount > 0 ? `Revisit ×${fuCount}` : null,
-    ].filter(Boolean).join('  ·  ');
-
-    return (
-      <FadeSlideIn
-        key={dbId}
-        delay={i * stagger.list}
-        style={[styles.card, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}
-      >
-        <Pressable
-          onPress={() => setDetailTicket(ticket)}
-          android_ripple={{ color: theme.surfaceMuted }}
-          style={({ pressed }) => [
-            styles.cardInner,
-            Platform.OS === 'ios' && pressed && { backgroundColor: theme.surfaceMuted },
-          ]}
-        >
-          {/* Header: status avatar + title + ghost status / priority indicators */}
-          <View style={styles.cardHead}>
-            <View style={styles.avatar}>
-              <StatusIcon status={status} size={46} color={sc.color} />
-            </View>
-
-            <View style={styles.cardHeadText}>
-              <Text
-                style={[styles.cardTitle, { color: titleColor }]}
-                numberOfLines={2}
-                ellipsizeMode="tail"
-              >
-                {ticket.title}
-              </Text>
-
-              {/* Status indicator. In the normal tabbed list it's a flat ghost
-                  (dot + tinted text). In a GLOBAL search result the status is
-                  the key context (rows span every tab), so it's promoted to a
-                  filled soft-token pill for legibility. Priority stays ghost. */}
-              <View style={styles.ghostRow}>
-                {inSearch ? (
-                  <View style={[styles.statusPill, { backgroundColor: sc.bg }]}>
-                    <Text style={[styles.statusPillText, { color: sc.color }]}>
-                      {STATUS_LABEL[status] ?? status}
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <View style={[styles.ghostDot, { backgroundColor: sc.color }]} />
-                    <Text style={[styles.ghostText, { color: sc.color }]}>
-                      {STATUS_LABEL[status] ?? status}
-                    </Text>
-                    <Text style={[styles.ghostSep, { color: theme.textTertiary }]}>·</Text>
-                  </>
-                )}
-                <Text style={[styles.ghostText, { color: pri.color }]}>
-                  {PRIORITY_LABEL[priority] ?? priority}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Metadata line — muted gray, middle dots */}
-          <Text style={[styles.cardMeta, { color: theme.textMuted }]} numberOfLines={1}>
-            {meta}
-          </Text>
-          {/* No start/submit affordance on the list card — those actions live
-              exclusively inside the ticket detail sheet. The card only opens it. */}
-        </Pressable>
-      </FadeSlideIn>
-    );
-  };
+  // Stable open handler passed to every card — one reference for the whole list
+  // so TicketCard's memo holds during scroll (a per-card arrow would defeat it).
+  const openTicket = useCallback((ticket: MaintenanceTicket) => {
+    setDetailTicket(ticket);
+  }, []);
 
   // ── Empty state ────────────────────────────────────────────────────────────
   const renderEmpty = () => {
@@ -392,21 +473,96 @@ export default function DashboardScreen() {
 
   const isEmpty = visibleTickets.length === 0;
 
+  // ── Guided tour ────────────────────────────────────────────────────────────
+  // Resolve a tour target to a window-coord rect (or null → step is skipped).
+  const measureTarget = useCallback(
+    (key: TourTargetKey): Promise<{ x: number; y: number; width: number; height: number } | null> => {
+      // Android RN (0.77–0.85, this app is on 0.83) has a known bug where
+      // measureInWindow subtracts the status-bar height from Y under edge-to-edge
+      // (facebook/react-native#19497, #50509 — fixed in 0.86). Add it back so the
+      // highlight lands on the real element, not the status bar above it.
+      const yFix = Platform.OS === 'android' ? insets.top : 0;
+
+      const measureNode = (node: View | null) =>
+        new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
+          if (!node) return resolve(null);
+          node.measureInWindow((x, y, width, height) => {
+            resolve(width || height ? { x, y: y + yFix, width, height } : null);
+          });
+        });
+
+      if (key === 'search')  return measureNode(searchRef.current);
+      if (key === 'filters') return measureNode(filtersRef.current);
+      if (key === 'help')    return measureNode(helpRef.current);
+      if (key === 'nav')     return measureNode(navTargetRef.current);   // real tab bar
+      if (key === 'card') {
+        // No card to point at when the list is empty → skip this step.
+        if (visibleTickets.length === 0) return Promise.resolve(null);
+        return new Promise((resolve) => {
+          const node = listRef.current;
+          if (!node) return resolve(null);
+          node.measureInWindow((x, y, width, height) => {
+            if (!width && !height) return resolve(null);
+            // Highlight just the first card's region at the top of the list.
+            resolve({
+              x: x + spacing.md,
+              y: y + yFix + spacing.xs,
+              width: width - spacing.md * 2,
+              height: Math.min(height - spacing.xs, 104),
+            });
+          });
+        });
+      }
+      return Promise.resolve(null);
+    },
+    [visibleTickets.length, insets.top],
+  );
+
+  // First launch: once tickets have loaded, show the tour if it hasn't been seen.
+  useEffect(() => {
+    if (tourStarted.current || isLoading) return;
+    tourStarted.current = true;
+    readTutorialSeen().then((seen) => {
+      if (!seen) requestAnimationFrame(() => setTourVisible(true));
+    });
+  }, [isLoading]);
+
+  const closeTour = useCallback(() => {
+    setTourVisible(false);
+    writeTutorialSeen(true);
+  }, []);
+
+  // FlatList adapters — windows the card list so off-screen cards (and their
+  // FadeSlideIn shared values) never mount, bounding the Reanimated pool.
+  const keyExtractor = useCallback(
+    (t: MaintenanceTicket) => t._dbId ?? t.ticketId,
+    [],
+  );
+  const renderItem = useCallback<ListRenderItem<MaintenanceTicket>>(
+    ({ item, index }) => (
+      <TicketCard ticket={item} index={index} inSearch={isSearching} onPress={openTicket} />
+    ),
+    [isSearching, openTicket],
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.isDark ? '#191C23' : '#F2F4F7' }]}>
-      {/* Layered brand cloud at the top (decorative). */}
-      <CloudBackground width={screenW} isDark={theme.isDark} />
+      {/* Layered brand cloud at the top (decorative). Status-bar tint is set
+          imperatively in the useFocusEffect above. */}
+      <CloudBackground width={screenW} isDark={theme.isDark} lite={reducedMotion} />
 
       {/* ── Pinned header controls ────────────────────────────────────────── */}
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <View style={[styles.searchBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Icon name={icons.search} size={17} color={theme.textTertiary} />
+        <View ref={searchRef} collapsable={false} style={[styles.searchBox, { backgroundColor: theme.surface, borderColor: searchFocused ? palette.brand : theme.border }]}>
+          <Ionicons name="search" size={22} color={searchFocused ? palette.brand : theme.textMuted} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
             placeholder="Search tickets"
-            placeholderTextColor={theme.textTertiary}
+            placeholderTextColor={theme.textMuted}
             value={search}
             onChangeText={setSearch}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
@@ -419,20 +575,22 @@ export default function DashboardScreen() {
           )}
         </View>
         <Pressable
-          onPress={() => setShowTutorial(true)}
+          ref={helpRef}
+          collapsable={false}
+          onPress={() => setTourVisible(true)}
           hitSlop={8}
           style={({ pressed }) => [
             styles.helpBtn,
             { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.6 : 1 },
           ]}
         >
-          <Icon name={icons.help} size={19} color={theme.textSecondary} />
+          <CircleQuestionMark size={22} color={theme.textSecondary} strokeWidth={2.25} />
         </Pressable>
       </View>
 
       {/* Two-level filter — hidden while searching */}
       {!isSearching && (
-        <View style={styles.filterBlock}>
+        <View ref={filtersRef} collapsable={false} style={styles.filterBlock}>
           <Segmented value={segment} onChange={changeSegment} activeCount={totalActive} />
 
           <View style={styles.chipRow}>
@@ -463,7 +621,7 @@ export default function DashboardScreen() {
                     style={[
                       styles.chipLabel,
                       isActive
-                        ? { color: hue, fontWeight: '700' }
+                        ? { color: hue }
                         : styles.chipLabelInactive,
                     ]}
                     numberOfLines={1}
@@ -488,9 +646,25 @@ export default function DashboardScreen() {
       )}
 
       {/* ── Ticket list — transparent so the gradient shows through ─────────── */}
-      <AppScrollView
+      {/* Wrapped in a measurable View so the tour can spotlight the first card. */}
+      <View ref={listRef} collapsable={false} style={{ flex: 1 }}>
+      <FlatList
+        data={isLoading ? [] : visibleTickets}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         style={{ flex: 1, backgroundColor: 'transparent' }}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: spacing.xs, flexGrow: 1 }]}
+        contentContainerStyle={[
+          styles.listPad,
+          { paddingTop: spacing.xs, paddingBottom: tabBarFootprint + 24, flexGrow: 1 },
+        ]}
+        bounces={false}
+        overScrollMode="never"
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={Platform.OS === 'android'}
+        initialNumToRender={8}
+        windowSize={7}
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={50}
         refreshControl={
           <RefreshControl
             refreshing={isValidating && !isLoading}
@@ -499,32 +673,18 @@ export default function DashboardScreen() {
             colors={[palette.brand]}
           />
         }
-      >
-        <View style={{ flexGrow: 1 }}>
-          {isLoading ? (
-            <View style={styles.listPad}>
-              <TicketSkeleton count={3} />
-            </View>
-          ) : isEmpty ? (
-            renderEmpty()
+        ListEmptyComponent={
+          isLoading ? (
+            <TicketSkeleton count={3} />
           ) : (
-            <View style={styles.listPad}>
-              {visibleTickets.map((t, idx) => renderCard(t, idx, isSearching))}
-            </View>
-          )}
-        </View>
-      </AppScrollView>
-
-      {/* App tutorial (placeholder) */}
-      <BottomSheet
-        visible={showTutorial}
-        onClose={() => setShowTutorial(false)}
-        title="App Tutorial"
-        message="A guided walkthrough of the app is coming soon. It'll show you how to find assigned tickets, start work on site, and submit inspection reports."
-        actions={[
-          { label: 'Got it', variant: 'primary', onPress: () => {} },
-        ]}
+            renderEmpty()
+          )
+        }
       />
+      </View>
+
+      {/* Guided spotlight tour — auto-shows on first launch, replayable via ? */}
+      <SpotlightTour visible={tourVisible} measure={measureTarget} onClose={closeTour} />
 
       {/* Full ticket detail — also hosts the Start Working / Submit Report CTA */}
       <TicketDetailSheet
@@ -539,12 +699,8 @@ export default function DashboardScreen() {
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: {
-    // Horizontal gutters live on the inner blocks (filterBlock, listPad) so the
-    // segmented underline and cards align. paddingBottom is handled by
-    // AppScrollView (tabBarFootprint + 24px).
-  },
-  // Horizontal gutters for the card list + loading skeletons.
+  // Horizontal gutters for the card list + loading skeletons. Applied to the
+  // FlatList contentContainer; paddingBottom (tabBarFootprint + 24) is set inline.
   listPad: { paddingHorizontal: spacing.md },
 
   // Search + tutorial top bar ─────────────────────────────────────────────
@@ -569,6 +725,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.body.size,
     lineHeight: typography.body.lineHeight,
+    fontWeight: '400',
     paddingVertical: 0,
   },
   helpBtn: {
@@ -654,7 +811,11 @@ const styles = StyleSheet.create({
   // Active = solid white pill; status hue colors the label + count (inline).
   chipActive: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 0,
+    // 1px TRANSPARENT border (invisible on the white pill) so the active chip's
+    // box is exactly as wide as the inactive chip's 1px border. With borderWidth:0
+    // here, activating a chip shrank it by 2px and shifted its neighbours.
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   // Inactive = darker blue overlay → reads as recessed into the gradient,
   // never as a second white pill. Hairline white edge for definition only.
@@ -666,10 +827,13 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: typography.calloutMed.size,   // 15
     lineHeight: typography.calloutMed.lineHeight,
+    // Constant weight for active AND inactive — bold text is wider, so changing
+    // weight on selection reflowed the row. The active chip stands out via its
+    // white pill + hue-coloured text instead, not a heavier font.
+    fontWeight: '600',
   },
   chipLabelInactive: {
     color: 'rgba(255,255,255,0.85)',
-    fontWeight: '500',
   },
   chipCount: {
     minWidth: 18,

@@ -1,27 +1,23 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
+  type ListRenderItem,
   Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
 
-import AppScrollView from '@/components/AppScrollView';
-import CloudBackground from '@/components/CloudBackground';
+import { Ionicons } from '@expo/vector-icons';
+import { Calendar } from 'lucide-react-native';
+import { setStatusBarStyle } from 'expo-status-bar';
+
+import { useTabBarFootprint } from '@/constants/tabBar';
 import { Text } from '@/components/Themed';
 import Icon from '@/components/Icon';
 import StatusIcon from '@/components/StatusIcon';
@@ -29,86 +25,28 @@ import TicketDetailSheet from '@/components/TicketDetailSheet';
 import DateRangePopover, { type AnchorRect } from '@/components/DateRangePopover';
 import { type DateRange } from '@/components/RangeCalendar';
 import { activityMeta, isWithin24h, relativeTime } from '@/constants/activityEvents';
-import { duration, ease, spring, stagger } from '@/constants/Motion';
 import { icons } from '@/constants/icons';
 import { palette, radius, spacing, typography } from '@/constants/theme';
+import { useActivitySeenAt } from '@/hooks/useActivitySeen';
 import { useTheme } from '@/hooks/useTheme';
 import { useQueryClient } from '@tanstack/react-query';
 import { useActivityFeed, ticketDetailKey } from '@/hooks/useTickets';
+import { markActivitySeen } from '@/lib/activitySeen';
 import {
   ActivityItem,
   getTicketById,
   MaintenanceTicket,
 } from '@/services/api';
 
-// ─── Last-seen persistence (client-side "unread" cue) ─────────────────────────
-// The backend has no read-state, so "new since you last looked" is tracked
-// on-device: we store the epoch-ms of when the user last *left* this tab, and
-// any item newer than that snapshot renders as unseen. Platform-branched the
-// same way AppContext persists the theme (SecureStore native / localStorage web).
-const ACTIVITY_LAST_SEEN_KEY = 'activity_last_seen';
+// "New since you last looked" is tracked on-device via the shared activity-seen
+// store (lib/activitySeen.ts): the epoch-ms of when the user last *left* this
+// tab. Any item newer than that renders as unseen here, and drives the bottom-nav
+// "new activity" dot. We stamp "now" on blur (see the focus effect below).
 
-async function readLastSeen(): Promise<number | null> {
-  try {
-    let raw: string | null = null;
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      raw = window.localStorage.getItem(ACTIVITY_LAST_SEEN_KEY);
-    } else {
-      raw = await SecureStore.getItemAsync(ACTIVITY_LAST_SEEN_KEY);
-    }
-    const n = raw ? Number(raw) : NaN;
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
-}
-
-async function writeLastSeen(ms: number): Promise<void> {
-  try {
-    const val = String(ms);
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.localStorage.setItem(ACTIVITY_LAST_SEEN_KEY, val);
-    } else {
-      await SecureStore.setItemAsync(ACTIVITY_LAST_SEEN_KEY, val);
-    }
-  } catch {
-    // Best-effort: a failed write just means dots linger one extra visit.
-  }
-}
-
-// ─── Entrance wrapper (matches the dashboard's FadeSlideIn) ───────────────────
-// Plays the fade+slide ONCE per app session via a module-level flag (reset only
-// on app restart). First feed paint animates; every later tab return renders
-// instantly in the final state.
-//
-// IMPORTANT: each row snapshots the flag into a ref at construction time, BEFORE
-// any sibling's effect can flip it. All rows in one render pass therefore share
-// the same decision (animate vs. instant). Flipping the flag inside each effect
-// without snapshotting caused a race where only the first row animated and every
-// later row stayed stuck at opacity:0 — i.e. invisible.
-let hasAnimatedIn = false;
-
-function FadeSlideIn({ delay, children }: { delay: number; children: React.ReactNode }) {
-  // Locked in on first render; identical for every row mounting together.
-  const shouldAnimate = useRef(!hasAnimatedIn).current;
-
-  const opacity    = useSharedValue(shouldAnimate ? 0 : 1);
-  const translateY = useSharedValue(shouldAnimate ? 10 : 0);
-
-  useEffect(() => {
-    if (!shouldAnimate) return; // already shown this session → stay instant
-    opacity.value    = withDelay(delay, withTiming(1, { duration: duration.normal, easing: ease }));
-    translateY.value = withDelay(delay, withSpring(0, spring.gentle));
-    hasAnimatedIn = true; // safe to set after our own decision is captured
-  }, []); // mount-only; never re-fires on tab focus
-
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  return <Animated.View style={style}>{children}</Animated.View>;
-}
+// The activity feed renders DIRECTLY — no entrance animation. A staggered
+// fade/slide cascade on a virtualized list read as sluggish/low-fps (the eye
+// catches the trailing rows arriving late), so rows just appear, like Telegram /
+// inbox apps. Scrolling and tab-return are instant.
 
 // A flattened render list: a section label or a notification row.
 type Row =
@@ -116,8 +54,8 @@ type Row =
   | { kind: 'event';   key: string; item: ActivityItem; unseen: boolean };
 
 // Split newest-first items into "New" (last 24h) and "Earlier", flagging each
-// against the last-seen snapshot. Returns a flat list so the staggered map and
-// FadeSlideIn index stay simple; empty buckets emit no header.
+// against the last-seen snapshot. Returns a flat list for the FlatList; empty
+// buckets emit no header.
 function buildRows(items: ActivityItem[], lastSeen: number | null): Row[] {
   const fresh: ActivityItem[] = [];
   const older: ActivityItem[] = [];
@@ -139,13 +77,18 @@ function buildRows(items: ActivityItem[], lastSeen: number | null): Row[] {
 }
 
 // ─── Notification row ─────────────────────────────────────────────────────────
-function NotificationRow({
+// memo'd: with the feed virtualized (FlatList recycles rows), this stops a row
+// from re-rendering unless its own props change.
+const NotificationRow = memo(function NotificationRow({
   item, unseen, opening, onPress,
 }: {
   item: ActivityItem;
   unseen: boolean;
   opening: boolean;
-  onPress: () => void;
+  // Receives the item so the parent can pass ONE stable handler (no per-row
+  // closure) — otherwise a fresh arrow each render defeats this memo and every
+  // visible row re-renders on scroll.
+  onPress: (item: ActivityItem) => void;
 }) {
   const theme = useTheme();
   const meta  = activityMeta(item.event, item.actor, theme.status);
@@ -154,9 +97,11 @@ function NotificationRow({
   const title     = item.ticketTitle?.trim() || 'Untitled ticket';
   const when      = relativeTime(item.createdAt);
 
+  const handlePress = useCallback(() => onPress(item), [onPress, item]);
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={`${unseen ? 'Unread, ' : ''}${meta.label}${meta.emphasis ? ' ' + meta.emphasis : ''}, ${ticketRef}, ${when}`}
       style={({ pressed }) => [
@@ -202,16 +147,17 @@ function NotificationRow({
       </View>
     </Pressable>
   );
-}
-
-// Compact date for the filter pill, e.g. "Jun 19".
-const fmtShort = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+});
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function ActivityScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { width: screenW } = useWindowDimensions();
+  const tabBarFootprint = useTabBarFootprint();
+
+  // Neutral screen background for the scrolling feed — rows sit on this so the
+  // grey text stays legible (the header above is a solid brand band).
+  const screenBg = theme.isDark ? '#191C23' : '#F2F4F7';
 
   const qc = useQueryClient();
   const { data: itemsData, isLoading: loading, isValidating, refetch, forceRefresh } = useActivityFeed();
@@ -222,6 +168,7 @@ export default function ActivityScreen() {
 
   // Filters: free-text ticket search + a from–to date range.
   const [search, setSearch]       = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
   const [dateOpen, setDateOpen]   = useState(false);
   const [anchor, setAnchor]       = useState<AnchorRect | null>(null);
@@ -235,21 +182,23 @@ export default function ActivityScreen() {
     });
   }, []);
 
-  // Snapshot of last-seen, read once per focus. null = never visited (or first
-  // run) → nothing is flagged unseen, so the whole list never lights up.
-  const [lastSeen, setLastSeen] = useState<number | null>(null);
+  // Live "last looked at Activity" timestamp from the shared store. It stays
+  // stable while this tab is open (so rows keep their "new" mark while you read),
+  // and only advances when we stamp "now" on blur below.
+  const lastSeen = useActivitySeenAt();
 
-  // On focus: soft revalidation + snapshot last-seen. On blur: stamp "now".
+  // On focus: set status-bar tint + soft revalidation. On blur: stamp "now" so
+  // the rows (and the bottom-nav dot) clear. No cloud here, so the bar sits on
+  // the neutral screenBg → icons follow the theme. Status bar set imperatively
+  // (see index.tsx note on expo/router#754).
   useFocusEffect(
     useCallback(() => {
+      setStatusBarStyle(theme.isDark ? 'light' : 'dark');
       refetch();
-      let active = true;
-      readLastSeen().then((v) => { if (active) setLastSeen(v); });
       return () => {
-        active = false;
-        writeLastSeen(Date.now());
+        markActivitySeen(Date.now());
       };
-    }, [refetch])
+    }, [refetch, theme.isDark])
   );
 
   // Tapping a row opens that ticket's detail sheet.
@@ -306,76 +255,61 @@ export default function ActivityScreen() {
   const isEmpty = !loading && items.length === 0;
   const noMatches = !loading && items.length > 0 && filteredItems.length === 0;
 
-  // Live unread count — items newer than the last-seen snapshot. Drives the
-  // header's count line and the "Mark all read" affordance.
-  const unreadCount = useMemo(() => {
-    if (lastSeen == null) return 0;
-    return items.reduce(
-      (n, it) => (new Date(it.createdAt).getTime() > lastSeen ? n + 1 : n),
-      0,
-    );
-  }, [items, lastSeen]);
+  const keyExtractor = useCallback((row: Row) => row.key, []);
 
-  // Mark all read — stamp last-seen to now so every row clears its unread state
-  // instantly (reuses the existing unread logic; no backend call). Persisted so
-  // it survives navigating away and back.
-  const markAllRead = useCallback(() => {
-    const now = Date.now();
-    setLastSeen(now);
-    writeLastSeen(now);
-  }, []);
+  // One row of the virtualized feed: either a section overline or a notification
+  // (with a hairline divider before the next event). Rendered directly — no
+  // entrance animation — so the feed presents instantly on open.
+  const renderItem = useCallback<ListRenderItem<Row>>(({ item: row, index: i }) => {
+    if (row.kind === 'section') {
+      return (
+        <Text
+          style={[
+            styles.sectionLabel,
+            { color: theme.text },     // visible primary colour, not faint grey
+            i === 0 && styles.sectionLabelFirst,
+          ]}
+        >
+          {row.label}
+        </Text>
+      );
+    }
+    // Hairline divider between consecutive rows; suppressed before a section
+    // break or the very last row, so groups read as blocks.
+    const next = rows[i + 1];
+    const showDivider = next != null && next.kind === 'event';
+    return (
+      <View style={styles.feedRow}>
+        <NotificationRow
+          item={row.item}
+          unseen={row.unseen}
+          opening={opening === row.item.ticketId}
+          onPress={openTicket}
+        />
+        {showDivider && (
+          <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+        )}
+      </View>
+    );
+  }, [rows, theme.textTertiary, theme.divider, opening, openTicket]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.isDark ? '#191C23' : '#F2F4F7' }]}>
-      {/* Layered brand cloud behind the header (decorative), matching the home tab.
-          Lifted a touch so the strong top lobes clear the "Activity" title — it
-          sits on the lighter lower scallop / grey, not the saturated blue. */}
-      <CloudBackground width={screenW} isDark={theme.isDark} offsetY={-screenW * 0.18} />
-
-      {/* Pinned header — large title + live unread count + mark-all-read action.
-          Transparent so the cloud reads through; the feed scrolls in its own area
-          below, not behind it. */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <View style={styles.headerTop}>
-          <Text style={[styles.title, { color: theme.text }]}>Activity</Text>
-
-          {unreadCount > 0 && (
-            <Pressable
-              onPress={markAllRead}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Mark all activity as read"
-              style={({ pressed }) => [
-                styles.markRead,
-                { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.6 : 1 },
-              ]}
-            >
-              <Icon name={icons.check} size={15} color={palette.brand} />
-              <Text style={[styles.markReadText, { color: palette.brand }]}>Mark all read</Text>
-            </Pressable>
-          )}
-        </View>
-
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          {unreadCount > 0
-            ? `${unreadCount} unread`
-            : items.length > 0
-              ? 'You’re all caught up'
-              : 'Updates across your tickets'}
-        </Text>
-
-        {/* Filters — ticket search pill on top, date-range pill beneath. Styled
-            to mirror the dashboard's search/help pills (white surface, hairline
-            border, search icon, clear affordance). */}
+    <View style={[styles.container, { backgroundColor: screenBg }]}>
+      {/* Pinned header — neutral surface; the brand accent lives on the search
+          bar itself, not the header background. */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm, backgroundColor: screenBg }]}>
+        {/* Filters — search pill + calendar icon button on one row. */}
         <View style={styles.filterBlock}>
-          <View style={[styles.searchBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Icon name={icons.search} size={17} color={theme.textTertiary} />
+          <View style={[styles.searchBox, { backgroundColor: theme.surface, borderColor: searchFocused ? palette.brand : theme.border }]}>
+            <Ionicons name="search" size={22} color={searchFocused ? palette.brand : theme.textMuted} />
             <TextInput
               style={[styles.searchInput, { color: theme.text }]}
               placeholder="Search by ticket"
-              placeholderTextColor={theme.textTertiary}
+              placeholderTextColor={theme.textMuted}
               value={search}
               onChangeText={setSearch}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
@@ -392,44 +326,45 @@ export default function ActivityScreen() {
             ref={dateBtnRef}
             collapsable={false}
             onPress={openDatePicker}
+            hitSlop={6}
             style={({ pressed }) => [
-              styles.dateBtn,
+              styles.dateIconBtn,
               {
-                backgroundColor: dateRange.start ? palette.brandSoft : theme.surface,
-                borderColor: dateRange.start ? palette.brand : theme.border,
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
                 opacity: pressed ? 0.7 : 1,
               },
             ]}
+            accessibilityLabel={dateRange.start ? 'Date filter active — change date' : 'Filter by date'}
           >
-            <Icon name={icons.calendar} size={16} color={dateRange.start ? palette.brand : theme.textSecondary} />
-            <Text
-              style={[styles.dateBtnText, { color: dateRange.start ? palette.brand : theme.textSecondary }]}
-              numberOfLines={1}
-            >
-              {dateRange.start
-                ? dateRange.end
-                  ? `${fmtShort(dateRange.start)} – ${fmtShort(dateRange.end)}`
-                  : fmtShort(dateRange.start)
-                : 'Any date'}
-            </Text>
-            {dateRange.start ? (
-              <Pressable
-                onPress={() => setDateRange({ start: null, end: null })}
-                hitSlop={8}
-                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-              >
-                <Icon name={icons.removeItem} size={15} color={palette.brand} />
-              </Pressable>
-            ) : (
-              <Icon name={icons.chevronDown} size={15} color={theme.textTertiary} />
-            )}
+            <Calendar
+              size={21}
+              color={dateRange.start ? palette.brand : theme.textSecondary}
+              strokeWidth={2.25}
+            />
           </Pressable>
         </View>
       </View>
 
-      <AppScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollContent}
+      <FlatList
+        data={loading ? [] : rows}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        style={{ flex: 1, backgroundColor: screenBg }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarFootprint + 24 },
+        ]}
+        bounces={false}
+        overScrollMode="never"
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={Platform.OS === 'android'}
+        initialNumToRender={8}
+        windowSize={7}
+        // Spread row mounting across more, smaller batches so no single frame
+        // stalls building a big chunk of rows during a fast fling.
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={50}
         refreshControl={
           <RefreshControl
             refreshing={isValidating && !loading}
@@ -438,69 +373,34 @@ export default function ActivityScreen() {
             colors={[palette.brand]}
           />
         }
-      >
-        {loading ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={palette.brand} />
-          </View>
-        ) : isEmpty ? (
-          <View style={styles.empty}>
-            <View style={[styles.emptyIconWrap, { backgroundColor: theme.surfaceMuted }]}>
-              <Icon name={icons.tabActivityLine} size={26} color={theme.textSecondary} />
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator color={palette.brand} />
             </View>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>No activity yet</Text>
-            <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
-              Updates to your tickets — assignments, reports, approvals and follow-ups — will show up here.
-            </Text>
-          </View>
-        ) : noMatches ? (
-          <View style={styles.empty}>
-            <View style={[styles.emptyIconWrap, { backgroundColor: theme.surfaceMuted }]}>
-              <Icon name={icons.search} size={26} color={theme.textSecondary} />
+          ) : isEmpty ? (
+            <View style={styles.empty}>
+              <View style={[styles.emptyIconWrap, { backgroundColor: theme.surfaceMuted }]}>
+                <Icon name={icons.tabActivityLine} size={26} color={theme.textSecondary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>No activity yet</Text>
+              <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
+                Updates to your tickets — assignments, reports, approvals and follow-ups — will show up here.
+              </Text>
             </View>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>No matching activity</Text>
-            <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
-              No events match your filters. Try a different ticket or date range.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.feed}>
-            {rows.map((row, i) => {
-              if (row.kind === 'section') {
-                return (
-                  <Text
-                    key={row.key}
-                    style={[
-                      styles.sectionLabel,
-                      { color: theme.textTertiary },
-                      i === 0 && styles.sectionLabelFirst,
-                    ]}
-                  >
-                    {row.label}
-                  </Text>
-                );
-              }
-              // Hairline divider between consecutive rows; suppressed before a
-              // section break or the very last row, so groups read as blocks.
-              const next = rows[i + 1];
-              const showDivider = next != null && next.kind === 'event';
-              return (
-                <FadeSlideIn key={row.key} delay={Math.min(i, 8) * stagger.list}>
-                  <NotificationRow
-                    item={row.item}
-                    unseen={row.unseen}
-                    opening={opening === row.item.ticketId}
-                    onPress={() => openTicket(row.item)}
-                  />
-                  {showDivider && (
-                    <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-                  )}
-                </FadeSlideIn>
-              );
-            })}
-          </View>
-        )}
-      </AppScrollView>
+          ) : noMatches ? (
+            <View style={styles.empty}>
+              <View style={[styles.emptyIconWrap, { backgroundColor: theme.surfaceMuted }]}>
+                <Icon name={icons.search} size={26} color={theme.textSecondary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>No matching activity</Text>
+              <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
+                No events match your filters. Try a different ticket or date range.
+              </Text>
+            </View>
+          ) : null
+        }
+      />
 
       <TicketDetailSheet ticket={detailTicket} onClose={() => setDetailTicket(null)} />
 
@@ -521,60 +421,28 @@ const AVATAR = 48;       // dashboard uses 40; the feed sizes up for legibility
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
-    // paddingBottom is handled by AppScrollView (tabBarFootprint + 24px).
+    // paddingBottom is set inline on the FlatList (tabBarFootprint + 24px).
   },
 
-  // Pinned header — owns its horizontal padding + a hairline-free bottom gap.
+  // Pinned header — solid brand band (color + top inset set inline). Hosts the
+  // white search pill + calendar button.
   header: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
-  },
-  // Title row: large title left, mark-all-read action right, baseline-aligned.
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  title: {
-    fontSize: typography.title.size,
-    lineHeight: typography.title.lineHeight,
-    fontWeight: typography.title.weight,
-    letterSpacing: typography.title.letterSpacing,
-  },
-  // Subtle pill action — white surface, hairline border, brand label. Mirrors
-  // the dashboard's help/search pills so the two screens feel like one product.
-  markRead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingLeft: spacing.xs,
-    paddingRight: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-  },
-  markReadText: {
-    fontSize: typography.caption.size,
-    lineHeight: typography.caption.lineHeight,
-    fontWeight: '700',
-    letterSpacing: 0.1,
-  },
-  subtitle: {
-    fontSize: typography.callout.size,
-    lineHeight: typography.callout.lineHeight,
-    fontWeight: '500',
-    marginTop: spacing.xxs,
   },
 
   // Filters — search pill over date-range pill. Mirrors the dashboard's search
   // pill (white surface, hairline border) so the two screens read as one product.
   filterBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.xs,
-    marginTop: spacing.sm,
   },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
@@ -587,29 +455,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.body.size,
     lineHeight: typography.body.lineHeight,
+    fontWeight: '400',
     paddingVertical: 0,
   },
-  dateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
+  dateIconBtn: {
+    width: 42,
     height: 42,
-    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: radius.md,
     borderWidth: 1,
-  },
-  dateBtnText: {
-    flex: 1,
-    fontSize: typography.calloutMed.size,
-    lineHeight: typography.calloutMed.lineHeight,
-    fontWeight: '600',
   },
 
   loading: { paddingVertical: spacing.xxxl, alignItems: 'center' },
 
   // Flat full-bleed notification feed on the grey backdrop (no white panel).
-  // Rows pull to the screen edge so their pressed/unseen wash spans full width.
-  feed: {
+  // Each row pulls to the screen edge (cancels the list's horizontal padding) so
+  // its pressed/unseen wash spans full width. Applied per-row now that the feed
+  // is a FlatList — the empty/loading states keep the padded, centered layout.
+  feedRow: {
     marginHorizontal: -spacing.md,
   },
 
@@ -623,7 +487,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: spacing.md,
     marginBottom: spacing.xxs,
-    marginLeft: spacing.md,
+    // No feedRow / negative margin here — the header sits inside the list's
+    // normal padding, so marginLeft:0 lines its left edge up with the
+    // notification rows' leading edge (the avatar), instead of being pushed in.
+    marginLeft: 0,
   },
   sectionLabelFirst: {
     marginTop: spacing.xs,
@@ -711,10 +578,11 @@ const styles = StyleSheet.create({
 
   // Empty
   empty: {
+    flex: 1,
     alignItems: 'center',
-    paddingVertical: spacing.xxxl,
+    justifyContent: 'center',
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
+    paddingVertical: spacing.xxxl,
   },
   emptyIconWrap: {
     width: 56, height: 56,
