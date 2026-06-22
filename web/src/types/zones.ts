@@ -38,6 +38,7 @@ export interface ExclusionDetails {
   multi_hour_gaps: number;
   hourly_starts_with_nan: number;
   hourly_ends_with_nan: number;
+  hourly_duplicates: number;
 }
 
 export interface QualityReport {

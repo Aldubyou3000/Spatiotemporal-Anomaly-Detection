@@ -55,6 +55,14 @@ function InfoTip({ text }: { text: string }) {
 
 import type { QualityReport, StationAnomalySummary } from "@/types/zones";
 
+interface IssueRowProps {
+  label: string;
+  value: number;
+  unit: "rows" | "stations";
+  desc: string;
+  tip: string;
+}
+
 function QualityReportCard({
   quality_report: qr,
   anomaly_summary,
@@ -71,26 +79,31 @@ function QualityReportCard({
     qr.exclusion_details.duplicates +
     qr.exclusion_details.multi_hour_gaps +
     qr.exclusion_details.hourly_starts_with_nan +
-    qr.exclusion_details.hourly_ends_with_nan;
+    qr.exclusion_details.hourly_ends_with_nan +
+    qr.exclusion_details.hourly_duplicates;
 
   const allClean = totalExclusions === 0 && qr.stations_excluded === 0;
 
-  const hourlyIssues = [
-    { label: "Gaps ≥ 2 h",      value: qr.exclusion_details.multi_hour_gaps,            desc: "Stations with hourly gaps of 2+ hours",              tip: "A station had 2 or more consecutive missing hourly readings. Stations with this issue are excluded before daily aggregation." },
-    { label: "Starts with NaN", value: qr.exclusion_details.hourly_starts_with_nan,     desc: "Hourly series beginning with missing values",         tip: "The station's first hourly readings were missing. This means the start of its record cannot be reliably aggregated." },
-    { label: "Ends with NaN",   value: qr.exclusion_details.hourly_ends_with_nan,       desc: "Hourly series ending with missing values",            tip: "The station's last hourly readings were missing. This means the end of its record cannot be reliably aggregated." },
+  const hourlyIssues: IssueRowProps[] = [
+    { label: "Gaps ≥ 2 h",          value: qr.exclusion_details.multi_hour_gaps,        unit: "rows", desc: "Hourly readings dropped from 2+ hour gaps",        tip: "Readings inside runs of 2 or more consecutive missing hours are dropped before daily aggregation (single-hour gaps are interpolated instead). This counts the dropped readings, not stations." },
+    { label: "Starts with NaN",     value: qr.exclusion_details.hourly_starts_with_nan, unit: "rows", desc: "Hourly readings dropped at series start",           tip: "Leading missing hourly readings before a station's first real value are dropped — the start of the record can't be reliably aggregated. Counts dropped readings." },
+    { label: "Ends with NaN",       value: qr.exclusion_details.hourly_ends_with_nan,   unit: "rows", desc: "Hourly readings dropped at series end",             tip: "Trailing missing hourly readings after a station's last real value are dropped — the end of the record can't be reliably aggregated. Counts dropped readings." },
+    { label: "Duplicate timestamps", value: qr.exclusion_details.hourly_duplicates,     unit: "rows", desc: "Duplicate hourly rows removed (kept first)",        tip: "Two or more readings shared the same station and timestamp. Extras are dropped keeping the first, so a duplicate can't silently inflate the day's total. Counts dropped readings." },
   ];
 
-  const dailyIssues = [
-    { label: "Gaps ≥ 2 days",        value: qr.exclusion_details.multi_day_gaps,                   desc: "Stations with daily gaps of 2+ days",                  tip: "After aggregating to daily totals, this station had 2 or more consecutive days with no data. These cannot be filled and the station is excluded." },
-    { label: "< 2 valid readings",   value: qr.exclusion_details.insufficient_readings_stations,   desc: "Stations excluded due to too few valid readings",       tip: "The station had fewer than 2 usable daily readings after cleaning. Not enough data to detect anomalies reliably." },
-    { label: "0% valid",             value: qr.exclusion_details.zero_valid_stations,              desc: "Stations with no valid readings at all",               tip: "The station had zero valid readings — every row was missing or unusable. It is excluded entirely." },
-    { label: "Starts with NaN",      value: qr.exclusion_details.starts_with_nan,                 desc: "Daily series beginning with missing values",            tip: "The station's first daily record was missing. Gap-filling only works for values in the middle of a series, not at the edges." },
-    { label: "Ends with NaN",        value: qr.exclusion_details.ends_with_nan,                   desc: "Daily series ending with missing values",              tip: "The station's last daily record was missing. Same edge-case as above — cannot be filled and flags the station for review." },
-    { label: "Duplicates",           value: qr.exclusion_details.duplicates,                      desc: "Duplicate station/date rows removed",                  tip: "More than one row existed for the same station on the same date. Duplicates are removed automatically, keeping only one row per station per day." },
+  const dailyIssues: IssueRowProps[] = [
+    { label: "Gaps ≥ 2 days",   value: qr.exclusion_details.multi_day_gaps,   unit: "rows", desc: "Daily readings dropped from 2+ day gaps", tip: "After aggregating to daily totals, days inside runs of 2 or more consecutive missing days are dropped (not filled). Counts dropped daily readings." },
+    { label: "Starts with NaN", value: qr.exclusion_details.starts_with_nan,  unit: "rows", desc: "Daily readings dropped at series start",  tip: "Leading missing daily records before a station's first real value are dropped. Gap-filling only applies to the middle of a series, not the edges. Counts dropped daily readings." },
+    { label: "Ends with NaN",   value: qr.exclusion_details.ends_with_nan,    unit: "rows", desc: "Daily readings dropped at series end",    tip: "Trailing missing daily records after a station's last real value are dropped. Counts dropped daily readings." },
+    { label: "Duplicates",      value: qr.exclusion_details.duplicates,       unit: "rows", desc: "Duplicate station/date rows removed",     tip: "More than one daily row existed for the same station and date after aggregation. Extras are removed, keeping one row per station per day. Counts dropped daily readings." },
   ];
 
-  function IssueRow({ label, value, desc, tip }: { label: string; value: number; desc: string; tip: string }) {
+  const stationIssues: IssueRowProps[] = [
+    { label: "< 2 valid readings", value: qr.exclusion_details.insufficient_readings_stations, unit: "stations", desc: "Stations excluded — too few valid readings", tip: "A whole station had fewer than 2 usable daily readings after cleaning — not enough data to detect anomalies reliably, so the entire station is excluded. Counts stations." },
+    { label: "0% valid",           value: qr.exclusion_details.zero_valid_stations,            unit: "stations", desc: "Stations excluded — no valid readings",      tip: "A whole station had zero valid readings — every row was missing or unusable. The entire station is excluded. Counts stations." },
+  ];
+
+  function IssueRow({ label, value, unit, desc, tip }: IssueRowProps) {
     const bad = value > 0;
     return (
       <div style={{
@@ -118,8 +131,10 @@ function QualityReportCard({
           padding: bad ? "1px 8px" : "0",
           borderRadius: "var(--r-sm)",
           flexShrink: 0,
+          whiteSpace: "nowrap",
         }}>
-          {value}
+          {value.toLocaleString()}
+          <span style={{ fontWeight: 500, opacity: 0.7, marginLeft: 4 }}>{unit}</span>
         </span>
       </div>
     );
@@ -142,27 +157,37 @@ function QualityReportCard({
         }
       </div>
 
-      {/* Body — two-column exclusion breakdown */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+      {/* Body — three-section exclusion breakdown (hourly rows · daily rows · whole-station) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0 }}>
 
-        {/* Hourly exclusions */}
+        {/* Hourly exclusions (rows, pre-aggregation) */}
         <div style={{ padding: "16px 20px", borderRight: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
             <span style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>Hourly exclusions</span>
             <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>(pre-aggregation)</span>
-            <InfoTip text="Problems found in the raw hourly data before it was converted to daily totals. Stations with these issues are dropped early so they don't corrupt the aggregation step." />
+            <InfoTip text="Hourly readings dropped from the raw data before it was converted to daily totals. These are counts of readings (rows), not stations." />
           </div>
           {hourlyIssues.map((r) => <IssueRow key={r.label} {...r} />)}
         </div>
 
-        {/* Daily exclusions */}
-        <div style={{ padding: "16px 20px" }}>
+        {/* Daily exclusions (rows, post-aggregation) */}
+        <div style={{ padding: "16px 20px", borderRight: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
             <span style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>Daily exclusions</span>
             <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>(post-aggregation)</span>
-            <InfoTip text="Problems found after converting hourly to daily totals. Stations that still have bad data at this stage are excluded from anomaly detection." />
+            <InfoTip text="Daily readings dropped after hourly totals were aggregated to days. These are counts of daily readings (rows), not stations." />
           </div>
           {dailyIssues.map((r) => <IssueRow key={r.label} {...r} />)}
+        </div>
+
+        {/* Station exclusions (whole-station) */}
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>Station exclusions</span>
+            <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>(whole-station)</span>
+            <InfoTip text="Entire stations excluded because they had too little usable data after cleaning. These are counts of stations." />
+          </div>
+          {stationIssues.map((r) => <IssueRow key={r.label} {...r} />)}
         </div>
       </div>
 

@@ -4,8 +4,8 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ProcessResult } from "@/types/zones";
 
 interface ZonesState {
-  file: File | null;
-  setFile: (f: File | null) => void;
+  files: File[];
+  setFiles: (f: File[]) => void;
   contamination: number;
   setContamination: (v: number) => void;
   running: boolean;
@@ -26,7 +26,7 @@ interface ZonesState {
 const ZonesContext = createContext<ZonesState | null>(null);
 
 export function ZonesProvider({ children }: { children: ReactNode }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [contamination, setContamination] = useState(0.05);
   const [running, setRunning] = useState(false);
   const [activeStage, setActiveStage] = useState<0 | 1 | 2>(0);
@@ -36,7 +36,7 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
   const [configOpen, setConfigOpen] = useState(true);
 
   function resetSession() {
-    setFile(null);
+    setFiles([]);
     setResult(null);
     setError(null);
     setProgress(0);
@@ -47,7 +47,7 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
 
   return (
     <ZonesContext.Provider value={{
-      file, setFile,
+      files, setFiles,
       contamination, setContamination,
       running, setRunning,
       activeStage, setActiveStage,

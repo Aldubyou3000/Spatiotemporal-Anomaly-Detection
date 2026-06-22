@@ -31,7 +31,6 @@ from ..schemas.zones import (
 )
 
 REQUIRED_COLUMNS = {"station_id", "date", "latitude", "longitude"}
-MAX_RAW_PREVIEW_ROWS = 200
 
 
 class ZoneProcessingError(ValueError):
@@ -77,10 +76,36 @@ def parse_csv_to_dataframe(file_bytes: bytes) -> pd.DataFrame:
 
 
 def run_pipeline(file_bytes: bytes, contamination: float = 0.05) -> ProcessResult:
-    """End-to-end zone pipeline returning a serializable ProcessResult."""
+    """End-to-end zone pipeline for a single combined CSV (back-compat)."""
+    raw_df = parse_csv_to_dataframe(file_bytes)
+    return _run_from_dataframe(raw_df, contamination)
+
+
+def run_pipeline_multi(
+    files: list[tuple[str, bytes]], contamination: float = 0.05
+) -> ProcessResult:
+    """End-to-end zone pipeline for a batch of uploaded files.
+
+    Each file is auto-detected (raw HMDAS or already-combined CSV), converted,
+    and merged into one frame before the unchanged Zone A→B→C flow runs.
+    """
+    # Imported here to avoid a circular import (hmdas_converter imports from this module).
+    from .hmdas_converter import convert_uploads
+
+    raw_df, conversion_stats = convert_uploads(files)
+    return _run_from_dataframe(
+        raw_df,
+        contamination,
+        hourly_duplicates=conversion_stats.get("hourly_duplicates_dropped", 0),
+    )
+
+
+def _run_from_dataframe(
+    raw_df: pd.DataFrame, contamination: float, hourly_duplicates: int = 0
+) -> ProcessResult:
+    """Run Zone A→B→C on an already-parsed raw frame and project to a ProcessResult."""
     start = time.perf_counter()
 
-    raw_df = parse_csv_to_dataframe(file_bytes)
     raw_preview = _build_raw_preview(raw_df)
     raw_total_rows = int(len(raw_df))
 
@@ -117,7 +142,7 @@ def run_pipeline(file_bytes: bytes, contamination: float = 0.05) -> ProcessResul
 
     return ProcessResult(
         summary=summary,
-        quality_report=_normalize_quality_report(quality_report_dict),
+        quality_report=_normalize_quality_report(quality_report_dict, hourly_duplicates),
         cleaned_data=_dataframe_to_readings(cleaned, rain_col, with_lof=False),
         flagged_data=_dataframe_to_readings(flagged, rain_col, with_lof=True),
         neighbors=_normalize_neighbors(neighbors_dict),
@@ -131,10 +156,12 @@ def run_pipeline(file_bytes: bytes, contamination: float = 0.05) -> ProcessResul
 # ─── helpers ─────────────────────────────────────────────────────────────
 
 def _build_raw_preview(df: pd.DataFrame) -> list[dict[str, Any]]:
-    head = df.head(MAX_RAW_PREVIEW_ROWS).copy()
-    if "date" in head.columns:
-        head["date"] = head["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
-    return _records_safe(head)
+    # No row cap — every uploaded row is returned for full transparency.
+    # The Raw Data tab paginates client-side, so DOM cost stays constant.
+    out = df.copy()
+    if "date" in out.columns:
+        out["date"] = out["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    return _records_safe(out)
 
 
 def _dataframe_to_readings(df: pd.DataFrame, rain_col: str, with_lof: bool) -> list[DailyReading]:
@@ -219,7 +246,7 @@ def _normalize_anomaly_summary(
     return out
 
 
-def _normalize_quality_report(report: dict[str, Any]) -> QualityReport:
+def _normalize_quality_report(report: dict[str, Any], hourly_duplicates: int = 0) -> QualityReport:
     details = report.get("exclusion_details", {}) or {}
     return QualityReport(
         total_input_rows=int(report.get("total_input_rows", 0)),
@@ -237,6 +264,7 @@ def _normalize_quality_report(report: dict[str, Any]) -> QualityReport:
             multi_hour_gaps=int(details.get("multi_hour_gaps", 0)),
             hourly_starts_with_nan=int(details.get("hourly_starts_with_nan", 0)),
             hourly_ends_with_nan=int(details.get("hourly_ends_with_nan", 0)),
+            hourly_duplicates=int(hourly_duplicates),
         ),
         summary_text=str(report.get("summary_text", "")),
     )

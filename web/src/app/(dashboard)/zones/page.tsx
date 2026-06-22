@@ -520,7 +520,7 @@ export default function ZonesPage() {
   const { loading: authLoading } = useAuth();
   const toast = useToast();
   const {
-    file, setFile,
+    files, setFiles,
     contamination, setContamination,
     running, setRunning,
     activeStage, setActiveStage,
@@ -534,7 +534,7 @@ export default function ZonesPage() {
   const [createStation, setCreateStation] = useState<string | null>(null);
 
   async function handleProcess() {
-    if (!file || running) return;
+    if (files.length === 0 || running) return;
     setRunning(true);
     setError(null);
     setActiveStage(0);
@@ -551,15 +551,16 @@ export default function ZonesPage() {
     }, 110);
 
     try {
-      const data = await zonesApi.process(file, contamination);
+      const data = await zonesApi.process(files, contamination);
       clearInterval(ticker);
       setProgress(100);
       setActiveStage(2);
       setResult(data);
       setConfigOpen(false);
       const anomalies = data.flagged_data.filter((r) => r.is_anomaly).length;
+      const filePrefix = files.length > 1 ? `${files.length} files merged · ` : "";
       toast.success("Pipeline complete", {
-        description: `${data.cleaned_data.length.toLocaleString()} readings cleaned · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
+        description: `${filePrefix}${data.cleaned_data.length.toLocaleString()} readings cleaned · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
       });
     } catch (err) {
       clearInterval(ticker);
@@ -608,13 +609,13 @@ export default function ZonesPage() {
               <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>
                 Pipeline configuration
               </span>
-              {!configOpen && file && (
+              {!configOpen && files.length > 0 && (
                 <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", background: "var(--surface-sunken)", padding: "1px 8px", borderRadius: "var(--r-sm)", fontFamily: "var(--font-mono)" }}>
-                  {file.name} · contamination = {contamination.toFixed(2)}
+                  {files.length === 1 ? files[0].name : `${files.length} files`} · contamination = {contamination.toFixed(2)}
                 </span>
               )}
-              {!configOpen && !file && (
-                <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>No file selected</span>
+              {!configOpen && files.length === 0 && (
+                <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>No files selected</span>
               )}
             </div>
             {result && !configOpen && (
@@ -631,7 +632,7 @@ export default function ZonesPage() {
                   <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Upload station data</h3>
                 </div>
                 <div style={{ padding: "14px 16px" }}>
-                  <FileUpload file={file} onFileChange={setFile} onRemove={resetSession} disabled={running} />
+                  <FileUpload files={files} onFilesChange={setFiles} onRemove={resetSession} disabled={running} />
                 </div>
               </div>
 
@@ -662,7 +663,7 @@ export default function ZonesPage() {
 
                   <Button
                     size="lg" style={{ width: "100%" }}
-                    disabled={!file || running} loading={running}
+                    disabled={files.length === 0 || running} loading={running}
                     onClick={handleProcess}
                   >
                     {running ? "Processing…" : "Run Pipeline"}
@@ -715,7 +716,7 @@ export default function ZonesPage() {
       {createStation !== null && (
         <CreateTicketModal
           stationId={createStation} technicians={technicians}
-          onClose={() => setCreateStation(null)} file={file}
+          onClose={() => setCreateStation(null)} file={files[0] ?? null}
         />
       )}
     </div>
@@ -867,7 +868,7 @@ function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTi
           <TabPanel value="overview"><OverviewTab result={result} /></TabPanel>
           <TabPanel value="raw" className="pt-6">
             <DataTable data={result.raw_preview} columns={rawColumns} pageSize={10}
-              caption={<>Showing first {result.raw_preview.length.toLocaleString()} of <span className="font-mono tabular">{result.raw_total_rows.toLocaleString()}</span> uploaded rows</>}
+              caption={<>All <span className="font-mono tabular">{result.raw_total_rows.toLocaleString()}</span> uploaded rows</>}
               emptyMessage="No rows in the uploaded file."
               searchKeys={rawSearchKeys} />
           </TabPanel>

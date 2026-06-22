@@ -49,6 +49,7 @@ class ExclusionDetails(BaseModel):
     multi_hour_gaps: int = 0
     hourly_starts_with_nan: int = 0
     hourly_ends_with_nan: int = 0
+    hourly_duplicates: int = 0
 
 
 class QualityReport(BaseModel):
@@ -82,7 +83,7 @@ class ProcessResult(BaseModel):
     anomaly_summary: list[StationAnomalySummary]
     raw_preview: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="Up to 200 rows of the input file for the Raw Data tab.",
+        description="All rows of the (converted) input data for the Raw Data tab.",
     )
     raw_total_rows: int = 0
     processed_at: datetime
