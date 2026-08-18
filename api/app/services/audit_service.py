@@ -239,6 +239,19 @@ class AuditService:
         `new_value` as plain dicts — they are JSON-serialised for the
         `changes` column.
         """
+        ignored_events = {
+            AuditEvent.CSRF_REJECTED,
+            AuditEvent.RATE_LIMIT_HIT,
+            AuditEvent.SYSTEM_STARTUP,
+            AuditEvent.SESSION_REFRESH,
+            AuditEvent.ZONE_PIPELINE_RUN,
+            AuditEvent.ACCOUNT_DISABLED,
+            AuditEvent.ACCOUNT_ENABLED,
+            AuditEvent.SESSION_HIJACK,
+        }
+        if event in ignored_events:
+            return
+
         rid = request_id or str(uuid.uuid4())[:8]
 
         changes: dict | None = None

@@ -151,6 +151,7 @@ function AuditDetail({ entry }: { entry: AuditLogEntry }) {
     { label: "Entity",     value: entry.entity_type ? `${entry.entity_type}${entry.entity_id ? ` / ${entry.entity_id.slice(0, 12)}` : ""}` : null, accent: "var(--text-muted)" },
     { label: "Actor Name", value: entry.actor_name,  accent: "var(--success)" },
     { label: "Email",      value: entry.actor_email, mono: true,  accent: "var(--success)" },
+    { label: "Role",       value: entry.actor_role,  accent: "var(--brand)" },
   ].filter((f) => f.value);
 
   return (
@@ -315,6 +316,11 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
               {entry.actor_name}
             </span>
           )}
+          {entry.actor_role && (
+            <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 6px", borderRadius: "4px", background: "var(--surface-sunken)", color: "var(--text-muted)", textTransform: "uppercase" }}>
+              {entry.actor_role}
+            </span>
+          )}
           {!entry.actor_name && entry.credential && (
             <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {entry.credential}
@@ -366,11 +372,10 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
 const PAGE_SIZE = 50;
 
 const EVENT_OPTIONS = [
-  "login_success", "login_failed", "login_locked", "session_hijack_attempt",
-  "logout", "session_refresh", "account_created", "account_disabled", "account_enabled",
+  "login_success", "login_failed", "login_locked",
+  "logout", "account_created",
   "ticket_created", "ticket_updated", "ticket_status_changed",
-  "report_submitted", "report_approved", "file_uploaded", "zone_pipeline_run",
-  "csrf_rejected", "rate_limit_hit", "system_startup",
+  "report_submitted", "report_approved", "file_uploaded",
 ];
 
 export default function AuditPage() {
@@ -430,7 +435,7 @@ export default function AuditPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
   const criticalCount = entries.filter(
-    (e) => !e.success || ["login_locked", "session_hijack_attempt", "csrf_rejected"].includes(e.event)
+    (e) => !e.success || ["login_locked"].includes(e.event)
   ).length;
   const hasFilters = !!(eventFilter || outcomeFilter || query);
 
@@ -485,7 +490,7 @@ export default function AuditPage() {
           >
             <ShieldAlert size={15} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 1 }} strokeWidth={2.2} />
             <p style={{ fontSize: "var(--font-sm)", color: "var(--danger)", margin: 0, lineHeight: 1.5 }}>
-              <strong>{criticalCount} CRITICAL</strong> — account lockouts, hijack attempts, or CSRF rejections detected on this page.
+              <strong>{criticalCount} CRITICAL</strong> — account lockouts detected on this page.
             </p>
           </div>
         )}
