@@ -56,6 +56,20 @@ def _build_query(
     table = "audit_log_enriched" if enriched else "audit_log"
     q = sb.table(table).select("*")
 
+    # Hide backend/system events from the Audit Logs page
+    hidden_events = [
+        "csrf_rejected",
+        "rate_limit_hit",
+        "system_startup",
+        "session_refresh",
+        "zone_pipeline_run",
+        "account_disabled",
+        "account_enabled",
+        "session_hijack_attempt",
+    ]
+    for hidden in hidden_events:
+        q = q.neq("event", hidden)
+
     if event:
         q = q.eq("event", event)
     if user_id:
@@ -222,6 +236,20 @@ def audit_stats(
     """
     sb = get_supabase()
     q = sb.table("audit_log").select("event, success")
+
+    hidden_events = [
+        "csrf_rejected",
+        "rate_limit_hit",
+        "system_startup",
+        "session_refresh",
+        "zone_pipeline_run",
+        "account_disabled",
+        "account_enabled",
+        "session_hijack_attempt",
+    ]
+    for hidden in hidden_events:
+        q = q.neq("event", hidden)
+
     if from_dt:
         q = q.gte("created_at", _parse_dt(from_dt))
     if to_dt:
