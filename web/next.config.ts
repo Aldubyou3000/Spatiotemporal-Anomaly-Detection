@@ -16,8 +16,8 @@ const isDev = process.env.NODE_ENV !== "production";
 
 const csp = [
   "default-src 'self'",
-  // Dev needs 'unsafe-eval' for React Fast Refresh / Turbopack HMR; prod does not.
-  `script-src 'self'${isDev ? " 'unsafe-eval' 'unsafe-inline'" : ""}`,
+  // Next.js injects inline scripts for hydration — prod needs 'unsafe-inline' too.
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
