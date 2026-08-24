@@ -83,13 +83,13 @@ def _set_auth_cookies(
         )
 
     # CSRF token — readable by JS so it can be sent in X-CSRF-Token header.
-    # SameSite=Strict prevents it from being sent cross-site at all, but the
-    # header requirement is the primary defence.
+    # For cross-site web (vercel.app) + api (onrender.com) it must be SameSite=None
+    # (with Secure) so the browser keeps it; the header check remains primary defence.
     response.set_cookie(
         "csrf_token", csrf,
         httponly=False,
         secure=secure,
-        samesite="strict",
+        samesite=samesite,
         max_age=_ACCESS_MAX_AGE,
         path="/",
     )

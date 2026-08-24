@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str
     allowed_origins: str = "http://localhost:3000"
     cookie_secure: bool = False
-    # "lax" in dev (cross-site GET ok); override to "strict" in production
-    cookie_samesite: str = "lax"
+    # "none" required when web (vercel.app) and api (onrender.com) are cross-site.
+    # Lax/Strict are blocked as third-party cookies — see browser "SameSite" warning.
+    cookie_samesite: str = "none"
     dev_mode: bool = True
 
     # CSRF — double-submit cookie pattern; generate with: secrets.token_hex(32)
@@ -75,8 +76,8 @@ class Settings(BaseSettings):
             problems.append("CSRF_SECRET is unset/default/too short (need a 32+ char random value)")
         if not self.cookie_secure:
             problems.append("COOKIE_SECURE must be true in production (cookies sent over HTTPS only)")
-        if self.cookie_samesite not in ("lax", "strict"):
-            problems.append(f"COOKIE_SAMESITE must be 'lax' or 'strict', got {self.cookie_samesite!r}")
+        if self.cookie_samesite not in ("lax", "strict", "none"):
+            problems.append(f"COOKIE_SAMESITE must be 'lax', 'strict', or 'none', got {self.cookie_samesite!r}")
         localhost_origins = [o for o in self.allowed_origins_list
                              if "localhost" in o or "127.0.0.1" in o or "192.168." in o]
         if localhost_origins:
