@@ -12,6 +12,7 @@ class DailyReading(BaseModel):
     interpolated_flag: bool = False
     lof_score: float | None = None
     is_anomaly: bool = False
+    is_low_anomaly: bool = False
     is_dry_stuck: bool = False
 
 
@@ -24,6 +25,8 @@ class AnomalyEvent(BaseModel):
     date: date
     rainfall: float
     lof_score: float
+    group_median: float | None = None
+    is_low: bool = False
 
 
 class StationAnomalySummary(BaseModel):
@@ -61,6 +64,8 @@ class ProcessSummary(BaseModel):
     total_rows: int
     total_stations: int
     total_anomalies: int
+    total_high_anomalies: int = 0
+    total_low_anomalies: int = 0
     anomaly_rate: float
     anomalous_stations: int
     processing_time_seconds: float

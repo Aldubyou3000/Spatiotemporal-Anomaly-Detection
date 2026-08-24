@@ -334,10 +334,17 @@ def oauth_start(provider: str = "google", *, callback_url: str | None = None,
     redirect_to = f"{callback_url.rstrip('/')}/{state}"
     storage = _DictStorage()
     client = _pkce_anon_client(storage)
+    # Force Google's account chooser every time — without `prompt=select_account`
+    # Google reuses the existing Chrome session and auto-signs in as the last
+    # account, so the user never gets a chance to pick a different account.
+    # `query_params` are forwarded verbatim to Google via Supabase's /authorize.
     res = client.auth.sign_in_with_oauth(
         {
             "provider": provider,
-            "options": {"redirect_to": redirect_to},
+            "options": {
+                "redirect_to": redirect_to,
+                "query_params": {"prompt": "select_account"},
+            },
         }
     )
 

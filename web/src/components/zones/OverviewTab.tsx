@@ -378,7 +378,7 @@ export function OverviewTab({ result }: OverviewTabProps) {
     for (const row of flagged_data) {
       const t = totals.get(row.station_id) ?? { lat: row.latitude, lon: row.longitude, readings: 0, anomalies: 0 };
       t.readings += 1;
-      if (row.is_anomaly) t.anomalies += 1;
+      if (row.is_anomaly || (row as any).is_low_anomaly) t.anomalies += 1;
       totals.set(row.station_id, t);
     }
     return Array.from(totals, ([station_id, v]) => ({

@@ -147,6 +147,9 @@ def _run_from_dataframe(
         neighbors=neighbors_dict,
         n_neighbors=3,
     )
+    # Ensure is_low_anomaly exists (back-compat for old zone_c)
+    if "is_low_anomaly" not in flagged.columns:
+        flagged["is_low_anomaly"] = False  # type: ignore[attr-defined]
 
     elapsed = time.perf_counter() - start
 
@@ -162,9 +165,16 @@ def _run_from_dataframe(
         ]
     else:
         flagged["is_dry_stuck"] = False  # type: ignore[attr-defined]
-    total_anomalies = int(flagged["is_anomaly"].sum())
+    # Combined high + low for the anomaly report (single-day)
+    high_count = int(flagged["is_anomaly"].sum()) if "is_anomaly" in flagged.columns else 0
+    low_count = int(flagged["is_low_anomaly"].sum()) if "is_low_anomaly" in flagged.columns else 0
+    total_anomalies = high_count + low_count
     total_rows = int(len(flagged))
     anomaly_rate = round(100 * total_anomalies / total_rows, 2) if total_rows else 0.0
+    # Stations with at least one high or low single-day anomaly
+    high_stations = set(flagged[flagged["is_anomaly"]]["station_id"].unique()) if high_count else set()
+    low_stations = set(flagged[flagged["is_low_anomaly"]]["station_id"].unique()) if low_count else set()
+    anomalous_stations = len(high_stations | low_stations)
 
     date_min = flagged["date"].min() if total_rows else None
     date_max = flagged["date"].max() if total_rows else None
@@ -173,8 +183,10 @@ def _run_from_dataframe(
         total_rows=total_rows,
         total_stations=int(flagged["station_id"].nunique()) if total_rows else 0,
         total_anomalies=total_anomalies,
+        total_high_anomalies=high_count,
+        total_low_anomalies=low_count,
         anomaly_rate=anomaly_rate,
-        anomalous_stations=len(anomaly_dict),
+        anomalous_stations=anomalous_stations,
         processing_time_seconds=round(elapsed, 3),
         date_range_start=_to_date(date_min),
         date_range_end=_to_date(date_max),
@@ -214,6 +226,7 @@ def _dataframe_to_readings(df: pd.DataFrame, rain_col: str, with_lof: bool) -> l
     has_flag = "interpolated_flag" in df.columns
     has_lof = with_lof and "lof_score" in df.columns
     has_anom = with_lof and "is_anomaly" in df.columns
+    has_low = with_lof and "is_low_anomaly" in df.columns
     has_dry = "is_dry_stuck" in df.columns
 
     for row in df.itertuples(index=False):
@@ -234,6 +247,7 @@ def _dataframe_to_readings(df: pd.DataFrame, rain_col: str, with_lof: bool) -> l
                 interpolated_flag=bool(rowd.get("interpolated_flag", False)) if has_flag else False,
                 lof_score=round(float(lof_raw), 3) if has_lof and lof_raw is not None and not _isnan(lof_raw) else None,
                 is_anomaly=bool(rowd.get("is_anomaly", False)) if has_anom else False,
+                is_low_anomaly=bool(rowd.get("is_low_anomaly", False)) if has_low else False,
                 is_dry_stuck=bool(rowd.get("is_dry_stuck", False)) if has_dry else False,
             )
         )
@@ -252,7 +266,28 @@ def _normalize_anomaly_summary(
     flagged_df: pd.DataFrame,
     rain_col: str,
 ) -> list[StationAnomalySummary]:
-    if not anomalies:
+    # Unified high + low (low from is_low_anomaly column)
+    unified: dict[str, list[dict[str, Any]]] = {}
+    for sid, evs in (anomalies or {}).items():
+        # high events from Zone C
+        unified.setdefault(str(sid), []).extend([{**e, "is_low": bool(e.get("is_low", False))} for e in evs])
+    if "is_low_anomaly" in flagged_df.columns:
+        try:
+            low_rows = flagged_df[flagged_df["is_low_anomaly"]]
+            for _, row in low_rows.iterrows():  # type: ignore[attr-defined]
+                sid = str(row["station_id"])
+                # group_median not stored in Zone C; frontend computes, keep None here
+                unified.setdefault(sid, []).append(
+                    {
+                        "date": row["date"],
+                        "lof_score": float(row["lof_score"]) if not _isnan(row["lof_score"]) else 0.0,
+                        rain_col: float(row[rain_col]) if not _isnan(row[rain_col]) else 0.0,
+                        "is_low": True,
+                    }
+                )
+        except Exception:
+            pass
+    if not unified:
         return []
     station_locs = (
         flagged_df[["station_id", "latitude", "longitude"]]
@@ -262,7 +297,7 @@ def _normalize_anomaly_summary(
     )
 
     out: list[StationAnomalySummary] = []
-    for sid, events in anomalies.items():
+    for sid, events in unified.items():
         loc = station_locs.get(sid, {})
         normalized_events: list[AnomalyEvent] = []
         for event in events:
@@ -275,6 +310,8 @@ def _normalize_anomaly_summary(
                     date=evt_date,
                     rainfall=round(float(rainfall_val), 2),
                     lof_score=round(float(event.get("lof_score", 0.0)), 3),
+                    group_median=event.get("group_median"),
+                    is_low=bool(event.get("is_low", False)),
                 )
             )
         normalized_events.sort(key=lambda e: e.date)

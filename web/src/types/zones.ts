@@ -7,6 +7,7 @@ export interface DailyReading {
   interpolated_flag: boolean;
   lof_score: number | null;
   is_anomaly: boolean;
+  is_low_anomaly: boolean;
   is_dry_stuck: boolean;
 }
 
@@ -19,6 +20,8 @@ export interface AnomalyEvent {
   date: string;
   rainfall: number;
   lof_score: number;
+  group_median?: number | null;
+  is_low?: boolean;
 }
 
 export interface StationAnomalySummary {
@@ -56,6 +59,8 @@ export interface ProcessSummary {
   total_rows: number;
   total_stations: number;
   total_anomalies: number;
+  total_high_anomalies: number;
+  total_low_anomalies: number;
   anomaly_rate: number;
   anomalous_stations: number;
   processing_time_seconds: number;

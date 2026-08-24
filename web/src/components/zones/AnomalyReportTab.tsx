@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { StationChart, type NeighborSeries } from "./StationChart";
 import { DateComparisonChart, type DateComparisonBar } from "./DateComparisonChart";
 import type { ProcessResult, StationHealth, StationStuckHealth } from "@/types/zones";
+import { useTheme } from "@/context/ThemeContext";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function healthTone(status: StationHealth["status"]): "success" | "warning" | "danger" | "neutral" {
@@ -46,13 +47,15 @@ interface AnomalyReportTabProps {
 }
 
 export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabProps) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const [mode, setMode] = useState<"high" | "low">("high");
   const [selectedId, setSelectedId] = useState<string>(
     result.anomaly_summary[0]?.station_id ?? result.dry_stuck_summary[0]?.station_id ?? "",
   );
   const [compareNeighbors, setCompareNeighbors] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
-  const [showAllDates, setShowAllDates] = useState(false);
+  const [filter, setFilter] = useState("");
 
   const flaggedByStation = useMemo(() => {
     const map = new Map<string, ProcessResult["flagged_data"]>();
@@ -117,8 +120,8 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
     if (!valid) setSelectedDate(topDateForMode);
   }, [mode, selectedStation, selectedDryStation, topDateForMode, selectedDate]);
 
-  // Reset dates expansion when station/mode changes
-  useEffect(() => { setShowAllDates(false); }, [selectedId, mode]);
+  // Clear filter when station/mode changes
+  useEffect(() => { setFilter(""); }, [selectedId, mode]);
 
   const hasHigh = result.anomaly_summary.length > 0;
   const hasLow = (result.dry_stuck_summary ?? []).length > 0;
@@ -138,11 +141,16 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
     );
   }
 
-  const chartData = selectedTimeseries.map((row) => ({
-    date: row.date,
-    rainfall: row.rainfall,
-    is_anomaly: mode === "high" ? row.is_anomaly : !!row.is_dry_stuck,
-  }));
+  const chartData = useMemo(
+    () =>
+      selectedTimeseries.map((row) => ({
+        date: row.date,
+        rainfall: row.rainfall,
+        is_anomaly: mode === "high" ? !!row.is_anomaly : false,
+        is_low_anomaly: mode === "high" ? !!(row as any).is_low_anomaly : !!row.is_dry_stuck,
+      })),
+    [selectedTimeseries, mode],
+  );
 
   const neighborSeries: NeighborSeries[] = useMemo(() => {
     if (!selectedId) return [];
@@ -202,8 +210,14 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
   }
 
   const rawEvents: any[] = mode === "high" ? (selectedStation?.events ?? []) : (selectedDryStation?.events ?? []);
-  const visibleEvents = showAllDates ? rawEvents : rawEvents.slice(0, 4);
-  const hiddenCount = Math.max(0, rawEvents.length - visibleEvents.length);
+  // Most recent first — more useful than earliest-first when scanning
+  const sortedEvents = useMemo(() => [...rawEvents].sort((a: any, b: any) => b.date.localeCompare(a.date)), [rawEvents]);
+  const filteredEvents = useMemo(() => {
+    const q = filter.trim();
+    if (!q) return sortedEvents;
+    return sortedEvents.filter((e: any) => e.date.includes(q));
+  }, [sortedEvents, filter]);
+  const visibleEvents = filteredEvents;
 
   const activeStation = mode === "high" ? selectedStation : selectedDryStation;
   const activeHealth = mode === "high" ? humanHighReason(selectedHealth) : humanLowReason(selectedStuck);
@@ -241,7 +255,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
           <span style={{ background: "var(--surface)", padding: "0 5px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", fontSize: 11 }}>{(result.dry_stuck_summary ?? []).length}</span>
         </button>
         <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-          {mode === "high" ? `${result.summary.total_anomalies} total high events` : `${(result.dry_stuck_summary ?? []).reduce((a, s) => a + s.stuck_count, 0)} total silent events`}
+          {mode === "high" ? `${result.summary.total_high_anomalies ?? result.summary.total_anomalies} high · ${result.summary.total_low_anomalies ?? 0} low · ${result.summary.total_anomalies} total` : `${(result.dry_stuck_summary ?? []).reduce((a, s) => a + s.stuck_count, 0)} total silent pattern events`}
         </span>
       </div>
 
@@ -376,65 +390,129 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                   </button>
                 )}
               </div>
-              <StationChart data={chartData} neighbors={compareNeighbors ? neighborSeries : []} height={130} />
+              <StationChart
+                data={chartData}
+                neighbors={compareNeighbors ? neighborSeries : []}
+                height={130}
+                anomalyColor={mode === "low" ? (isDark ? "#2DD4BF" : "#0D9488") : undefined}
+                anomalyLabel={mode === "low" ? "Silent" : "Anomaly"}
+              />
             </div>
 
             {/* Neighbor comparison bar — shorter */}
             {comparisonBars.length > 0 && (
-              <div style={{ padding: "6px 14px 6px", borderTop: "1px solid var(--divider)", marginTop: 6 }}>
+              <div style={{ padding: "6px 14px 6px", borderTop: "1px solid var(--divider)", marginTop: 6, outline: "none" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "6px 0 4px" }}>
                   <BarChart3 size={12} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
                   <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>By station — {selectedDate}</span>
                 </div>
-                <DateComparisonChart bars={comparisonBars} height={130} />
+                <DateComparisonChart bars={comparisonBars} height={130} mode={mode} />
               </div>
             )}
 
-            {/* Flagged dates — 4 visible + expand, no inner scroll, hide raw LOF */}
+            {/* Flagged dates — fixed-height scroll + filter, no long list, no 25 clicks for 100+ */}
             <div style={{ padding: "8px 14px 12px", borderTop: comparisonBars.length ? "none" : "1px solid var(--divider)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>{mode === "high" ? "Flagged dates" : "Silent dates"}</span>
-                <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>· {rawEvents.length} total</span>
+                <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>· {sortedEvents.length} total</span>
+                {filter && (
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>· {filteredEvents.length} matching</span>
+                )}
+                <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)" }}>Most recent first · Tap to compare</span>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {visibleEvents.map((event: any, i: number) => {
+              {sortedEvents.length > 8 && (
+                <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    placeholder="Filter by date (e.g., 2023-08)"
+                    style={{
+                      flex: 1,
+                      height: 28,
+                      padding: "0 10px",
+                      borderRadius: "var(--r-full)",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      fontSize: "var(--font-xs)",
+                      color: "var(--text)",
+                      outline: "none",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  />
+                  {filter && (
+                    <button
+                      type="button"
+                      onClick={() => setFilter("")}
+                      style={{
+                        fontSize: "var(--font-xs)",
+                        color: "var(--text-secondary)",
+                        background: "var(--surface-sunken)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--r-full)",
+                        padding: "4px 10px",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  maxHeight: 164,
+                  overflowY: "auto",
+                  paddingRight: 2,
+                  scrollbarWidth: "thin",
+                }}
+              >
+                {filteredEvents.map((event: any) => {
                   const active = event.date === selectedDate;
-                  const isHigh = mode === "high";
-                  const median = isHigh ? medianForHigh(event.date, selectedId) : event.group_median;
+                  const isHighMode = mode === "high";
+                  const isLowEvent = !!(event as any).is_low;
+                  // For high mode, low events should show median (teal), high events show times (red)
+                  const median = isLowEvent ? ((event as any).group_median ?? medianForHigh(event.date, selectedId)) : (isHighMode ? medianForHigh(event.date, selectedId) : event.group_median);
                   const times = median && median > 0 ? `${(event.rainfall / median).toFixed(1)}×` : null;
-                  const rightLabel = isHigh
-                    ? (times ? `${times} neighbors` : `· LOF ${event.lof_score?.toFixed(1) ?? "—"}`)
-                    : `median ${event.group_median?.toFixed(1) ?? "—"} mm`;
+                  const rightLabel = isLowEvent
+                    ? `median ${median?.toFixed(1) ?? (event as any).group_median?.toFixed(1) ?? "—"} mm`
+                    : isHighMode
+                      ? (times ? `${times} neighbors` : `· LOF ${event.lof_score?.toFixed(1) ?? "—"}`)
+                      : `median ${event.group_median?.toFixed(1) ?? "—"} mm`;
+                  const tone = isLowEvent ? "teal" : isHighMode ? "danger" : "teal";
                   return (
                     <button
-                      key={i}
+                      key={event.date}
                       type="button"
                       onClick={() => setSelectedDate(event.date)}
                       aria-pressed={active}
                       style={{
                         display: "grid", gridTemplateColumns: "auto 1fr auto auto", alignItems: "center", gap: 10,
                         padding: "6px 10px", borderRadius: "var(--r-md)", textAlign: "left", cursor: "pointer", width: "100%", fontFamily: "inherit",
-                        background: active ? `color-mix(in oklab, var(${isHigh ? "--danger" : "--teal"}) 12%, var(--surface))` : "var(--surface-sunken)",
-                        border: active ? `1px solid var(${isHigh ? "--danger" : "--teal"})` : "1px solid var(--border)",
+                        background: active ? `color-mix(in oklab, var(--${tone}) 12%, var(--surface))` : "var(--surface-sunken)",
+                        border: active ? `1px solid var(--${tone})` : "1px solid var(--border)",
                       }}
                     >
-                      <span style={{ width: 5, height: 5, borderRadius: 99, background: active ? `var(${isHigh ? "--danger" : "--teal"})` : "var(--border)", flexShrink: 0 }} />
+                      <span style={{ width: 5, height: 5, borderRadius: 99, background: active ? `var(--${tone})` : "var(--border)", flexShrink: 0 }} />
                       <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: "var(--text)", fontWeight: active ? 600 : 400 }}>{event.date}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: `var(${isHigh ? "--danger" : "--teal"})`, fontWeight: 500 }}>{event.rainfall.toFixed(1)} mm</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: `var(--${tone})`, fontWeight: 500 }}>{event.rainfall.toFixed(1)} mm</span>
                       <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>{rightLabel}</span>
                     </button>
                   );
                 })}
+                {filteredEvents.length === 0 && (
+                  <div style={{ padding: "12px", textAlign: "center", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+                    {filter ? `No dates matching "${filter}"` : "No dates"}
+                  </div>
+                )}
               </div>
-              {hiddenCount > 0 && (
-                <button type="button" onClick={() => setShowAllDates(true)} style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4, fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-secondary)", background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-full)", padding: "4px 10px", cursor: "pointer" }}>
-                  Show {hiddenCount} more <ChevronDown size={12} />
-                </button>
-              )}
-              {showAllDates && rawEvents.length > 4 && (
-                <button type="button" onClick={() => setShowAllDates(false)} style={{ marginTop: 6, marginLeft: 6, display: "inline-flex", alignItems: "center", gap: 4, fontSize: "var(--font-xs)", color: "var(--text-tertiary)", background: "transparent", border: "none", cursor: "pointer" }}>
-                  Show less <ChevronUp size={12} />
-                </button>
+              {sortedEvents.length > 4 && !filter && (
+                <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-tertiary)", textAlign: "center" }}>
+                  {sortedEvents.length} dates · Scroll to see older — most recent at top
+                </div>
               )}
             </div>
           </div>

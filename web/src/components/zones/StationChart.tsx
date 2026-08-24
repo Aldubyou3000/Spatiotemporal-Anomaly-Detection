@@ -22,10 +22,13 @@ export interface NeighborSeries {
 }
 
 interface StationChartProps {
-  data: { date: string; rainfall: number; is_anomaly: boolean }[];
+  data: { date: string; rainfall: number; is_anomaly: boolean; is_low_anomaly?: boolean }[];
   /** Optional neighbor lines overlaid for spatial comparison. */
   neighbors?: NeighborSeries[];
   height?: number;
+  /** Color for anomaly dots — teal for silent, red for high. */
+  anomalyColor?: string;
+  anomalyLabel?: string;
 }
 
 // Muted, theme-agnostic palette for neighbor lines — kept subdued so the
@@ -33,14 +36,16 @@ interface StationChartProps {
 const NEIGHBOR_COLORS_LIGHT = ["#0D9488", "#7C3AED", "#D97706", "#64748B"];
 const NEIGHBOR_COLORS_DARK = ["#2DD4BF", "#A78BFA", "#FBBF24", "#94A3B8"];
 
-export function StationChart({ data, neighbors = [], height = 200 }: StationChartProps) {
+export function StationChart({ data, neighbors = [], height = 200, anomalyColor, anomalyLabel = "Anomaly" }: StationChartProps & { mode?: "high" | "low" }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
   const axis = isDark ? "rgba(255,255,255,0.3)" : "rgba(15,23,42,0.4)";
   const gridColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
   const areaColor = isDark ? "#3B82F6" : "#2563EB";
-  const dangerColor = isDark ? "#FF6B6B" : "#E53535";
+  // Allow parent to pass explicit color; otherwise pick red for high, teal for silent.
+  const modeColor = (anomalyColor as string | undefined) ?? (isDark ? "#FF6B6B" : "#E53535");
+  const dangerColor = modeColor;
   const neighborPalette = isDark ? NEIGHBOR_COLORS_DARK : NEIGHBOR_COLORS_LIGHT;
 
   const fontXs =
@@ -50,34 +55,58 @@ export function StationChart({ data, neighbors = [], height = 200 }: StationChar
 
   const hasNeighbors = neighbors.length > 0;
 
+  // Thin large timeseries for performance — keep every anomaly (high+low) + every k-th point.
+  const thinnedData = useMemo(() => {
+    if (data.length <= 500) return data;
+    const keep = new Set<string>();
+    for (const d of data) if (d.is_anomaly || (d as any).is_low_anomaly) keep.add(d.date);
+    const step = Math.ceil(data.length / 350);
+    const out: typeof data = [];
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i];
+      if (keep.has(d.date) || i % step === 0 || i === data.length - 1) out.push(d);
+    }
+    return out;
+  }, [data]);
+
   const formatted = useMemo(
     () =>
-      data.map((d) => {
-        const row: Record<string, unknown> = {
-          ...d,
-          label: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        };
+      thinnedData.map((d) => {
+        // Fast label: "2023-06-09" -> "Jun 9" without Date object (perf for 900 points)
+        const label = (() => {
+          const m = d.date.slice(5, 7);
+          const day = String(Number(d.date.slice(8, 10)));
+          const months: Record<string, string> = { "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr", "05": "May", "06": "Jun", "07": "Jul", "08": "Aug", "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec" };
+          return `${months[m] ?? m} ${day}`;
+        })();
+        const row: Record<string, unknown> = { ...d, label };
         // Attach each neighbor's value for this date so recharts can plot them.
         for (const n of neighbors) {
           row[`n_${n.stationId}`] = n.byDate[d.date] ?? null;
         }
         return row;
       }),
-    [data, neighbors],
+    [thinnedData, neighbors],
   );
 
-  const anomalyPoints = useMemo(
-    () => formatted.filter((d) => (d as { is_anomaly?: boolean }).is_anomaly),
+  const highPoints = useMemo(
+    () => formatted.filter((d) => (d as { is_anomaly?: boolean }).is_anomaly && !(d as any).is_low_anomaly),
     [formatted],
   ) as unknown as { label: string; rainfall: number }[];
+  const lowPoints = useMemo(
+    () => formatted.filter((d) => (d as any).is_low_anomaly),
+    [formatted],
+  ) as unknown as { label: string; rainfall: number }[];
+  const anomalyPoints = highPoints; // for backward compat where only high is used
+  const lowColor = isDark ? "#2DD4BF" : "#0D9488";
 
   // With ~900+ daily points, showing every date label overlaps badly. Thin the
   // ticks to ~8 evenly-spaced labels (recharts hides the rest).
   const tickInterval = Math.max(0, Math.floor(formatted.length / 8));
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={formatted} margin={{ top: 12, right: 8, left: -8, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={height} style={{ outline: "none" }}>
+      <ComposedChart data={formatted} margin={{ top: 12, right: 12, left: 8, bottom: 0 }} style={{ outline: "none" }}>
         <defs>
           <linearGradient id="rainfallGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor={areaColor} stopOpacity={0.18} />
@@ -98,7 +127,8 @@ export function StationChart({ data, neighbors = [], height = 200 }: StationChar
           axisLine={false}
           tickLine={false}
           tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-jetbrains)" }}
-          width={36}
+          width={44}
+          tickMargin={6}
         />
         <Tooltip
           contentStyle={{
@@ -118,7 +148,7 @@ export function StationChart({ data, neighbors = [], height = 200 }: StationChar
               return [`${num.toFixed(1)} mm`, name.slice(2)];
             }
             const isAnomaly = (item?.payload as { is_anomaly?: boolean })?.is_anomaly;
-            return [`${num.toFixed(2)} mm`, isAnomaly ? "Anomaly" : "Rainfall"];
+            return [`${num.toFixed(2)} mm`, isAnomaly ? anomalyLabel : "Rainfall"];
           }}
         />
         {hasNeighbors && (
@@ -162,13 +192,24 @@ export function StationChart({ data, neighbors = [], height = 200 }: StationChar
           activeDot={{ r: 4, fill: areaColor, stroke: "var(--surface)", strokeWidth: 2 }}
           isAnimationActive={false}
         />
-        {anomalyPoints.map((pt, i) => (
+        {highPoints.map((pt, i) => (
           <ReferenceDot
-            key={i}
+            key={`h-${i}`}
             x={pt.label}
             y={pt.rainfall}
             r={4}
             fill={dangerColor}
+            stroke="var(--surface)"
+            strokeWidth={2}
+          />
+        ))}
+        {lowPoints.map((pt, i) => (
+          <ReferenceDot
+            key={`l-${i}`}
+            x={pt.label}
+            y={pt.rainfall}
+            r={4}
+            fill={lowColor}
             stroke="var(--surface)"
             strokeWidth={2}
           />

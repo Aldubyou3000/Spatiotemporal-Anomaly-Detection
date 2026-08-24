@@ -26,6 +26,7 @@ export interface DateComparisonBar {
 interface DateComparisonChartProps {
   bars: DateComparisonBar[];
   height?: number;
+  mode?: "high" | "low";
 }
 
 /**
@@ -34,7 +35,7 @@ interface DateComparisonChartProps {
  * Lets an analyst read a flagged spike against its neighbours on that exact day
  * — a lone tall bar = likely sensor fault; several tall bars = real regional event.
  */
-export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartProps) {
+export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateComparisonChartProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -42,6 +43,7 @@ export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartP
   const gridColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
   const brandColor = isDark ? "#3B82F6" : "#2563EB";
   const dangerColor = isDark ? "#FF6B6B" : "#E53535";
+  const tealColor = isDark ? "#2DD4BF" : "#0D9488";
   const neutralColor = isDark ? "#8993A4" : "#A1A9B4"; // --text-muted / --text-tertiary
 
   const fontXs =
@@ -51,6 +53,7 @@ export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartP
 
   function barColor(b: DateComparisonBar): string {
     if (!b.isSelected) return neutralColor;
+    if (mode === "low") return b.isAnomaly ? tealColor : brandColor;
     return b.isAnomaly ? dangerColor : brandColor;
   }
 
@@ -66,8 +69,8 @@ export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartP
   );
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 28, right: 8, left: -8, bottom: 0 }} barCategoryGap="28%">
+    <ResponsiveContainer width="100%" height={height} style={{ outline: "none" }}>
+      <BarChart data={data} margin={{ top: 28, right: 12, left: 8, bottom: 0 }} barCategoryGap="28%" style={{ outline: "none" }}>
         <CartesianGrid vertical={false} stroke={gridColor} />
         <XAxis
           dataKey="stationId"
@@ -81,7 +84,8 @@ export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartP
           axisLine={false}
           tickLine={false}
           tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-jetbrains)" }}
-          width={36}
+          width={44}
+          tickMargin={6}
         />
         <Tooltip
           cursor={{ fill: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)" }}
@@ -102,7 +106,7 @@ export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartP
             return [`${p.value.toFixed(1)} mm${tag}`, ""];
           }}
         />
-        <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+        <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false} activeBar={false}>
           {data.map((b) => (
             <Cell
               key={b.stationId}
@@ -116,10 +120,11 @@ export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartP
             dataKey="value"
             position="top"
             content={(props) => {
-              const { x, y, width, index } = props as { x: number; y: number; width: number; index: number };
-              const b = data[index];
+              const { x, y, width, value, index } = props as { x: number; y: number; width: number; value: number; index: number; payload: { noData: boolean } };
+              const isNoData = (props as unknown as { payload: { noData: boolean } }).payload?.noData;
+              // Use the actual bar value from props, not stale data[index], to avoid off-by-one when Recharts reorders
+              const text = isNoData ? "—" : Number(value).toFixed(1);
               const cx = x + width / 2;
-              const text = b.noData ? "—" : b.value.toFixed(1);
               // Clamp above the plot edge so the tallest bar's label is never clipped.
               const ly = Math.max(y - 5, 10);
               return (
@@ -129,7 +134,7 @@ export function DateComparisonChart({ bars, height = 200 }: DateComparisonChartP
                   textAnchor="middle"
                   fontSize={fontXs}
                   fontFamily="var(--font-jetbrains)"
-                  fill={b.noData ? neutralColor : "var(--text-secondary)"}
+                  fill={isNoData ? neutralColor : "var(--text-secondary)"}
                 >
                   {text}
                 </text>

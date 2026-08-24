@@ -42,6 +42,15 @@ ANOMALY_THRESHOLD = 1.5
 # all-dry, tie-jittered neighborhood and produce a meaningless flag. Tunable.
 MIN_ANOMALY_RAINFALL_MM = 10.0
 
+# Low-side anomaly (silent) — single day, deterministic, no LOF.
+# A station that stays at ≤1 mm while its group median is ≥10 mm and is <25%
+# of that median is a low outlier for that day. This complements the LOF high
+# rule so both extremes are covered: high uses LOF, low uses a simple ratio.
+# Keeps the dataset limited (no new libs) and unbiased (same thresholds for all).
+LOW_MAX_RAIN_MM = 1.0
+LOW_MIN_MEDIAN_MM = 10.0
+LOW_RATIO = 0.25
+
 # Tie-breaking jitter (mm). Added to each day's values before LOF so no two are
 # exactly equal (which would cause divide-by-zero in LOF's density math). Kept
 # far below the 0.1 mm data precision so it cannot change any result. Seeded for
@@ -99,6 +108,7 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
     # Initialize output columns
     flagged_data['lof_score'] = np.nan
     flagged_data['is_anomaly'] = False
+    flagged_data['is_low_anomaly'] = False
 
     # ========================================================================
     # PER-DAY MODE: for each station, score its days against its spatial group
@@ -150,11 +160,6 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
             pos = day_positions.index(global_idx)
             score = float(scores[pos])
 
-            # Flag only HIGH outliers: a station that is an outlier because it read
-            # MORE rain than its same-day neighbors (real storm or sensor spiking
-            # high). A station that is the odd-one-out only because it stayed dry
-            # while neighbors rained (value below the day's median) is not an
-            # actionable anomaly, so it is not flagged.
             station_value = float(day_rows.loc[global_idx, rain_col])
             day_median = float(day_rows[rain_col].median())
             is_high_outlier = station_value > day_median
@@ -163,10 +168,20 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
             # neighbors are dry) is the odd one out but not a real anomaly.
             is_meaningful = station_value >= MIN_ANOMALY_RAINFALL_MM
 
-            flagged_data.loc[global_idx, 'lof_score'] = score
-            flagged_data.loc[global_idx, 'is_anomaly'] = (
-                score <= -ANOMALY_THRESHOLD and is_high_outlier and is_meaningful
+            is_high = (score <= -ANOMALY_THRESHOLD and is_high_outlier and is_meaningful)
+
+            # Low outlier: single day where station stayed ≤1 mm while area rained.
+            # Deterministic, no LOF (LOF on 0 vs median is unstable with n=4).
+            # Catches 0 vs 12, 0.5 vs 11.5 from your screenshots; ignores 0 vs 3 drizzle.
+            is_low_outlier = (
+                station_value <= LOW_MAX_RAIN_MM
+                and day_median >= LOW_MIN_MEDIAN_MM
+                and station_value < day_median * LOW_RATIO
             )
+
+            flagged_data.loc[global_idx, 'lof_score'] = score
+            flagged_data.loc[global_idx, 'is_anomaly'] = is_high
+            flagged_data.loc[global_idx, 'is_low_anomaly'] = is_low_outlier
 
     # ========================================================================
     # Build anomaly summary: group anomalous records by station

@@ -846,6 +846,23 @@ select:-webkit-autofill {
   box-shadow: var(--shadow-md) !important;
 }
 
+/* ─── Recharts — hide focus ring that looks like a blue border around charts ─── */
+.recharts-wrapper,
+.recharts-wrapper *,
+.recharts-surface,
+.recharts-surface * {
+  outline: none !important;
+}
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-wrapper *:focus,
+.recharts-wrapper *:focus-visible,
+.recharts-surface:focus,
+.recharts-surface:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* ─── Station permanent labels ───────────────────────────────────────── */
 .station-label {
   background: var(--surface) !important;
