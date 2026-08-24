@@ -382,7 +382,7 @@ export function ReviewPanel({
                       <span key={t.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 6px 0 8px", borderRadius: "var(--r-full)", background: "color-mix(in oklab, var(--success) 10%, var(--surface))", border: "1px solid color-mix(in oklab, var(--success) 30%, transparent)" }}>
                         <MiniAvatar name={t.full_name} size={20} />
                         <span style={{ fontSize: "var(--font-sm)", color: "var(--text)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.full_name}</span>
-                        <span style={{ fontSize: 9, fontWeight: 700, color: "var(--success)", textTransform: "uppercase", letterSpacing: "0.04em" }}>new</span>
+                        <span style={{ fontSize: "var(--font-xs)", fontWeight: 700, color: "var(--success)", textTransform: "uppercase", letterSpacing: "0.04em" }}>new</span>
                         <button type="button" onClick={() => undoAdd(t.id)} title={`Remove ${t.full_name}`}
                           style={{ width: 18, height: 18, borderRadius: "50%", border: 0, background: "transparent", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--text-muted)", flexShrink: 0 }}>
                           <Minus size={11} />

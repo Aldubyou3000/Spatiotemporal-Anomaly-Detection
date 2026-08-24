@@ -1,6 +1,6 @@
 # Tech Stack — Spatiotemporal Anomaly Detection System
 
-**Last updated**: 2026-06-21
+**Last updated**: 2026-06-27
 **Status**: Migration complete — Streamlit replaced by Next.js + FastAPI. Google OAuth, audit log, and real-time SSE added post-migration.
 
 ---
@@ -16,6 +16,15 @@ Two frontends, one backend, one database.
 | Backend API (`api/`) | Serves both frontends | FastAPI — live |
 
 **Core rule:** No frontend ever talks to Supabase directly. All data flows through FastAPI only.
+
+---
+
+## Team Onboarding Docs
+
+- Full dependency and environment setup runbook: [README.md](README.md) (Team Setup section)
+- Day-to-day architecture and coding conventions: [CLAUDE.md](CLAUDE.md)
+- Mobile Google OAuth via HTTPS tunnel: [docs/NGROK_GOOGLE_SIGNIN_GUIDE.md](docs/NGROK_GOOGLE_SIGNIN_GUIDE.md)
+- Known recurring setup issues: [docs/KNOWN_BUGS_AND_FIXES.md](docs/KNOWN_BUGS_AND_FIXES.md)
 
 ---
 
@@ -97,7 +106,6 @@ Spatiotemporal-Anomaly-Detection/
 ├── web/                  ← Next.js frontend (analyst dashboard)
 ├── api/                  ← FastAPI backend
 ├── App/                  ← Expo mobile app (field technician)
-├── prototypes/           ← Reference only — original Streamlit + zone algorithms
 ├── README.md             ← Project overview and quick start
 ├── CLAUDE.md             ← Codebase instructions for Claude Code
 └── TECHSTACK.md          ← This document
@@ -406,7 +414,7 @@ Enforced in two places: FastAPI `dependencies.py` (application level) and Supaba
 
 ## Migration Status
 
-**Migration complete.** All five phases delivered. Streamlit shut down; `prototypes/` kept as reference only.
+**Migration complete.** All five phases delivered. Streamlit shut down.
 
 | Phase | What Was Built |
 |-------|----------------|
@@ -423,7 +431,7 @@ Enforced in two places: FastAPI `dependencies.py` (application level) and Supaba
 These architectural decisions are enforced throughout the codebase:
 
 - **No frontend → Supabase**: All frontends (Next.js, Expo) communicate exclusively through FastAPI. The backend owns all Supabase interaction.
-- **Zone processing untouched**: `zone_a.py`, `zone_b.py`, `zone_c.py` in `api/app/zones/` are exact copies from prototypes. Algorithms must not change.
+- **Zone processing untouched**: `zone_a.py`, `zone_b.py`, `zone_c.py` in `api/app/zones/` are the canonical source of truth. Algorithms must not change.
 - **Strict layer separation** (backend): Routers (HTTP only) → Services (business logic) → Schemas (Pydantic) → Zones (pure data processing)
 - **Ticket state machine**: `assigned → in-progress → pending_review → verified`; analyst can also branch to `follow_up` (from `pending_review`) or `cancelled` (from `assigned`) — enforced in both API and mobile app
 - **Token auth**: Analyst uses httpOnly cookies (30-min access, 7-day refresh). Technician uses Bearer tokens in SecureStore (native) or localStorage (web).

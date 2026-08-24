@@ -91,7 +91,7 @@ function StatCard({
         <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 4px" }}>
           {label}
         </p>
-        <p style={{ fontSize: 22, fontWeight: 600, color: "var(--text)", margin: 0, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>
+        <p style={{ fontSize: "var(--font-xl)", fontWeight: 600, color: "var(--text)", margin: 0, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>
           {value}
         </p>
       </div>

@@ -224,7 +224,7 @@ export default function LoginPage() {
             <h1
               style={{
                 margin: 0,
-                fontSize: 22,
+                fontSize: "var(--font-xl)",
                 fontWeight: 600,
                 letterSpacing: "-0.02em",
                 color: "var(--text)",

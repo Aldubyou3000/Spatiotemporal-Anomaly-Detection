@@ -101,10 +101,6 @@ async def subscribe() -> AsyncGenerator[dict, None]:
         logger.debug("[events] subscriber removed (total=%d)", len(_subscribers))
 
 
-def subscriber_count() -> int:
-    return len(_subscribers)
-
-
 # ── Mobile projection (security boundary) ───────────────────────────────────
 # Technicians must never receive data — or even metadata like ticket IDs — about
 # tickets they aren't assigned to. The broker carries ids internally (the web

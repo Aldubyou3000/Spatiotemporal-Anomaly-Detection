@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Clock, Database, AlertTriangle, Gauge, HelpCircle, MapPin, CheckCircle2, XCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
-import type { ProcessResult, StationHealth } from "@/types/zones";
+import type { ProcessResult, StationHealth, StationStuckHealth } from "@/types/zones";
 
 const StationMap = dynamic(() => import("./StationMap").then((m) => m.StationMap), {
   ssr: false,
@@ -325,6 +325,88 @@ function StationHealthCard({ station_health }: { station_health: StationHealth[]
   );
 }
 
+function StuckAtZeroCard({ station_stuck_health }: { station_stuck_health: StationStuckHealth[] }) {
+  const suspect = station_stuck_health.filter((h) => h.status === "suspect");
+  const watch = station_stuck_health.filter((h) => h.status === "watch");
+  const normal = station_stuck_health.filter((h) => h.status === "normal");
+  const insufficient = station_stuck_health.filter((h) => h.status === "insufficient_data");
+
+  const hasAny = station_stuck_health.length > 0;
+  const allGood = suspect.length === 0 && watch.length === 0;
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
+        <span style={{ width: 14, height: 14, borderRadius: 999, background: "var(--teal-soft)", border: "1px solid var(--teal)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 999, background: suspect.length > 0 ? "var(--danger)" : watch.length > 0 ? "var(--warning)" : "var(--teal)" }} />
+        </span>
+        <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Stuck at Zero</span>
+        <InfoTip text="Checks rainy days where the area's middle neighbor got ≥10 mm. If a gauge read ≤1 mm on many of those days (repeated, not one dry day), it is flagged." />
+        <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+          {hasAny ? `${station_stuck_health.length} stations graded` : "no stations graded"}
+        </span>
+      </div>
+
+      {!hasAny ? (
+        <div style={{ padding: "16px 20px", fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>No stuck-at-zero data for this run.</div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: "1px solid var(--border)" }}>
+            {[
+              { label: "Suspect", count: suspect.length, color: "var(--danger)", soft: "var(--danger-soft)" },
+              { label: "Watch", count: watch.length, color: "var(--warning)", soft: "var(--warning-soft)" },
+              { label: "Normal", count: normal.length, color: "var(--teal)", soft: "var(--teal-soft)" },
+              { label: "Not enough data", count: insufficient.length, color: "var(--text-tertiary)", soft: "var(--surface-sunken)" },
+            ].map(({ label, count, color, soft }) => (
+              <div key={label} style={{ padding: "14px 16px", borderRight: label !== "Not enough data" ? "1px solid var(--border)" : undefined, background: count > 0 ? soft : "transparent" }}>
+                <div style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 99, background: color, flexShrink: 0 }} />
+                  {label}
+                </div>
+                <div style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-metric)", fontWeight: 700, color: count > 0 ? color : "var(--text-tertiary)" }}>{count}</div>
+              </div>
+            ))}
+          </div>
+
+          {(suspect.length > 0 || watch.length > 0) && (
+            <div style={{ padding: "12px 20px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              {[...suspect, ...watch].slice(0, 12).map((h) => (
+                <span
+                  key={h.station_id}
+                  title={`${h.station_id}: ${h.zero_rate != null ? `${Math.round(h.zero_rate * 100)}% at 0` : `${h.rain_days} rainy days`} · streak ${h.max_zero_streak ?? 0} · bias ${h.bias_ratio != null ? `${h.bias_ratio.toFixed(2)}×` : "—"}`}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "4px 10px", borderRadius: "var(--r-full)",
+                    background: h.status === "suspect" ? "var(--danger-soft)" : "var(--warning-soft)",
+                    border: `1px solid color-mix(in oklab, ${h.status === "suspect" ? "var(--danger)" : "var(--warning)"} 18%, transparent)`,
+                    fontSize: "var(--font-xs)", fontWeight: 500,
+                  }}
+                >
+                  <span style={{ fontFamily: "var(--font-mono)", color: h.status === "suspect" ? "var(--danger)" : "var(--warning-on)", fontVariantNumeric: "tabular-nums" }}>{h.station_id}</span>
+                  <Badge tone={h.status === "suspect" ? "danger" : "warning"} style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+                    {h.zero_rate != null ? `${Math.round(h.zero_rate * 100)}%` : `${h.rain_days}d`}
+                    {h.max_zero_streak != null ? ` · streak ${h.max_zero_streak}` : ""}
+                  </Badge>
+                </span>
+              ))}
+              {(suspect.length + watch.length) > 12 && (
+                <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>+{suspect.length + watch.length - 12} more</span>
+              )}
+            </div>
+          )}
+
+          {allGood && (
+            <div style={{ padding: "10px 20px", background: "color-mix(in oklab, var(--teal) 6%, var(--surface))", display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)" }}>
+              <CheckCircle2 size={13} style={{ color: "var(--teal)", flexShrink: 0 }} />
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--teal-on)", fontWeight: 500 }}>No pattern of zero on rainy days. Gauges are responding when the area is wet.</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface OverviewTabProps {
@@ -437,24 +519,25 @@ export function OverviewTab({ result }: OverviewTabProps) {
           </div>
         </div>
 
-        {/* Parameters */}
+        {/* Next steps — user-facing, no LOF/Haversine internals exposed */}
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", padding: "16px 20px", boxShadow: "var(--shadow-xs)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <Database size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
-            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Pipeline Parameters</span>
-            <InfoTip text="The settings used when this pipeline run was executed. These affect how sensitive anomaly detection is and how stations are compared to each other." />
+            <CheckCircle2 size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
+            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>What to do next</span>
+            <InfoTip text="No thresholds to tune — just upload and review. Flagged means notably higher than nearby stations that same day; use Station Health to tell a one-off storm from a repeated pattern." />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {[
-              { label: "Spatial neighbors", value: 3, tip: "How many nearby stations each station is compared against when detecting anomalies. A higher number considers a wider geographic context." },
-              { label: "Detection threshold", value: "LOF 1.5", tip: "Fixed LOF score cutoff — readings with LOF score worse than -1.5 and above 10 mm are flagged. Flat daily clusters and dry/drizzle days are guarded separately." },
-            ].map(({ label, value, tip }) => (
-              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "var(--font-sm)" }}>
-                <span style={{ color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 5 }}>
+              { label: "Review flagged stations", tip: "Open the Anomaly Report tab for the flagged list, maps, and per-date neighbor comparison." },
+              { label: "Check Station Health", tip: "Single-day spike = likely weather. Reads high every rain day = possible gauge issue." },
+              { label: "Create a ticket", tip: "Dispatch technicians directly from a flagged station — they see it on their mobile devices." },
+            ].map(({ label, tip }, idx, arr) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: idx !== arr.length - 1 ? "1px solid var(--divider)" : "none" }}>
+                <span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--brand-soft)", color: "var(--brand)", border: "1px solid color-mix(in oklab, var(--brand) 14%, transparent)", display: "grid", placeItems: "center", fontSize: "var(--font-xs)", fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0, lineHeight: 1 }}>{idx + 1}</span>
+                <span style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 5 }}>
                   {label}
                   <InfoTip text={tip} />
                 </span>
-                <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", color: "var(--text)", fontWeight: 500 }}>{value}</span>
               </div>
             ))}
           </div>
@@ -463,6 +546,9 @@ export function OverviewTab({ result }: OverviewTabProps) {
 
       {/* ── Row 3.5: Station health (bias profile) — post-LOF triage ── */}
       <StationHealthCard station_health={result.station_health ?? []} />
+
+      {/* ── Row 3.6: Stuck at Zero (symmetric low side) ── */}
+      <StuckAtZeroCard station_stuck_health={result.station_stuck_health ?? []} />
 
       {/* ── Row 4: Quality report ── */}
       <QualityReportCard quality_report={quality_report} anomaly_summary={anomaly_summary} />

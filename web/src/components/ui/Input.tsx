@@ -27,7 +27,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         <label
           htmlFor={inputId}
           style={{
-            fontSize: 12,
+            fontSize: "var(--font-xs)",
             fontWeight: 500,
             color: "var(--text-secondary)",
           }}
@@ -99,10 +99,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         )}
       </div>
       {hint && !error && (
-        <p id={descId} style={{ margin: 0, fontSize: 11, color: "var(--text-muted)" }}>{hint}</p>
+        <p id={descId} style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>{hint}</p>
       )}
       {error && (
-        <p id={descId} style={{ margin: 0, fontSize: 11, color: "var(--danger)" }}>{error}</p>
+        <p id={descId} style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--danger)" }}>{error}</p>
       )}
     </div>
   );

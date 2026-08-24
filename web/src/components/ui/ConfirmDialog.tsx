@@ -77,7 +77,7 @@ export function ConfirmDialog({
             id="confirm-dialog-title"
             style={{
               margin: 0,
-              fontSize: 18,
+              fontSize: "var(--font-lg)",
               fontWeight: 600,
               letterSpacing: "-0.015em",
               color: "var(--text)",
@@ -91,7 +91,7 @@ export function ConfirmDialog({
         {/* Body */}
         <div style={{
           padding: "16px 24px",
-          fontSize: 14,
+          fontSize: "var(--font-base)",
           lineHeight: 1.6,
           color: "var(--text-secondary)",
         }}>
@@ -117,7 +117,7 @@ export function ConfirmDialog({
               border: "1px solid var(--border)",
               background: "var(--surface)",
               color: "var(--text)",
-              fontSize: 13,
+              fontSize: "var(--font-sm)",
               fontWeight: 500,
               cursor: "pointer",
               fontFamily: "inherit",

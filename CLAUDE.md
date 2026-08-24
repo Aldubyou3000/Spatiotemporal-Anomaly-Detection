@@ -4,6 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Architecture Map — Read This First
+
+The `/map/` directory is a persistent architecture map that lets every session (yours and mine) navigate this codebase without re-reading everything from scratch.
+
+1. **Start every task here**: `map/index.md` — it catalogs every component page with a one-line summary. Read only the page(s) relevant to your task.
+2. **Before editing a component**: read its page in `map/components/` to understand dependencies and invariants.
+3. **After editing a component**: update that page (and any pages it now affects), re-check `map/shared-candidates.md` for new rule-of-3 hits, update `map/orphans.md` if references changed, and append a line to `map/log.md`.
+4. **Rule of 3**: any behavior appearing near-identically in 3+ places goes into `shared-candidates.md`. When promoted to a refactor, move the entry to "Resolved".
+5. **Recent activity**: `grep "^## \[" map/log.md | tail -5`
+6. **Query mode**: when asked "what touches X" or "what happens if I change Y", answer from the map's dependency sections before re-searching the repo. If the answer required real investigation, offer to file it back into the map.
+7. **Lint mode**: periodically health-check the map — stale pages, missing pages, orphan pages, new rule-of-3 candidates. Report findings before fixing silently.
+
+The detailed architecture, setup, env vars, and coding conventions live below and in `TECHSTACK.md`. The map is the nav layer; this file is the depth layer.
+
+---
+
 ## System Overview
 
 Three servers must run simultaneously. Start in this order: **API → Web → App**.
@@ -25,6 +41,7 @@ Next.js (web/)      Expo (App/)
 ### API (FastAPI) — Terminal 1
 ```powershell
 cd api
+.\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 `--host 0.0.0.0` is required — the mobile app connects over WiFi.
@@ -41,6 +58,12 @@ npm run dev
 cd App
 npm start
 # Press w for browser, or scan QR with Expo Go on phone (same WiFi as PC)
+```
+
+For Google OAuth testing, use the dev client instead of Expo Go:
+```powershell
+cd App
+npx expo start --dev-client -c
 ```
 
 ---
@@ -103,7 +126,7 @@ Zone pipeline execution order: `zone_a.py` → `zone_b.py` → `zone_c.py`
 - **Zone B**: Haversine distance grouping (1–50 km threshold), adds `neighbor_group_id`
 - **Zone C**: LOF anomaly detection (RobustScaler, 1D rainfall feature, threshold=1.5)
 
-The `zones/` directory is a copy of `prototypes/zone/` — **do not modify the algorithms**.
+The `zones/` directory is the canonical source of truth — **do not modify the algorithms**.
 
 Zone pipeline is CPU-bound; call `zones_service.run_pipeline()` via `fastapi.concurrency.run_in_threadpool` to keep the event loop responsive.
 
@@ -307,7 +330,7 @@ SQL migrations live in `docs/migrations/`, numbered sequentially (`0001_…`, `0
 
 ## Reference
 
-`prototypes/` is kept for reference only — the `zones/` algorithms there are the source of truth for `api/app/zones/`. When editing `api/` or `web/`, do not touch `prototypes/` or the Expo app (unless the task explicitly targets `App/`).
+`prototypes/` has been removed from the repo. The `zones/` algorithms in `api/app/zones/` are the canonical source of truth. When editing `api/` or `web/`, do not touch the Expo app (unless the task explicitly targets `App/`).
 
 In-repo docs (read these before touching the matching area):
 

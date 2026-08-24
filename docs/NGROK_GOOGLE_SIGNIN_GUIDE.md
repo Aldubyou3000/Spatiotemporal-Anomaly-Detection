@@ -37,6 +37,11 @@ winget install ngrok.ngrok
 If `winget` isn't available, download the Windows zip from https://ngrok.com/download, unzip it, and
 put `ngrok.exe` somewhere on your PATH (e.g. `C:\Windows\System32` or a folder you've added to PATH).
 
+If you installed ngrok manually and it is not on PATH, run it by full path:
+```powershell
+& "$env:LOCALAPPDATA\ngrok\ngrok.exe" version
+```
+
 Verify:
 ```powershell
 ngrok version
@@ -112,13 +117,14 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ### Terminal 2 — ngrok (the tunnel)
 ```powershell
-ngrok http --url=<YOUR_NGROK_URL> 8000
+& "$env:LOCALAPPDATA\ngrok\ngrok.exe" http --url=<YOUR_NGROK_URL> 8000
 ```
 Replace `<YOUR_NGROK_URL>` with your domain but **drop the `https://`** — ngrok wants just the
 hostname here. Example:
 ```powershell
 ngrok http --url=spatiotemporal-abc123.ngrok-free.dev 8000
 ```
+If ngrok is on PATH, the shorter command works too.
 You'll see a "Session Status: online" screen. Leave this window open while testing.
 
 > **Quick check:** open `<YOUR_NGROK_URL>/health` in your PC browser — should return `{"status":"ok"}`.

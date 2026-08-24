@@ -77,7 +77,7 @@ export function Modal({
               id="modal-title"
               style={{
                 margin: 0,
-                fontSize: 18,
+                fontSize: "var(--font-lg)",
                 fontWeight: 600,
                 letterSpacing: "-0.015em",
                 color: "var(--text)",
@@ -89,7 +89,7 @@ export function Modal({
             {subtitle && (
               <p style={{
                 margin: "4px 0 0",
-                fontSize: 14,
+                fontSize: "var(--font-sm)",
                 color: "var(--text-muted)",
                 lineHeight: 1.4,
               }}>

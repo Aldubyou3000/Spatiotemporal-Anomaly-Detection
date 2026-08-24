@@ -16,7 +16,7 @@ logger = logging.getLogger("auth.service")
 # The `state` value travels in the URL (it always survives the Google→Supabase→API
 # redirect chain, unlike a cookie), so we key off it instead of relying on a cookie
 # surviving cross-site redirects. A matching, unexpired, single-use entry IS the
-# CSRF defence (state is unguessable and must exist in our store).
+# CSRF defence (state is unguessable and must exist our store).
 # In-process is consistent with the project's single-worker SSE broker constraint;
 # Redis is the documented multi-worker upgrade path.
 _OAUTH_STATE_TTL = 600   # 10 minutes to complete consent
@@ -26,6 +26,60 @@ _OAUTH_STATE_MAX = 1000  # hard ceiling — drop oldest beyond this (abuse guard
 # for the mobile flow, so the callback knows where to bounce the browser.
 _oauth_states: dict[str, tuple[str, str | None, float]] = {}
 _oauth_states_lock = threading.Lock()
+
+
+# ── OAuth state replay hardening ────────────────────────────────────────────
+# Tracks failed state lookups per client IP to throttle brute-force / replay
+# attempts against the callback endpoint.  Same sliding-window design as the
+# login lockout in core/lockout.py but lighter (no credential normalization).
+_STATE_FAIL_WINDOW = 300   # 5 minutes
+_STATE_FAIL_MAX = 5        # failures before cooldown
+_STATE_COOLDOWN = 300      # 5-minute cooldown
+
+
+class _StateFailStore:
+    """Per-IP sliding-window failure counter for OAuth state lookups."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._attempts: dict[str, list[float]] = {}
+        self._cooldown_until: dict[str, float] = {}
+
+    def check(self, ip: str) -> bool:
+        """Return True if the IP is allowed to attempt a state lookup."""
+        now = time.monotonic()
+        with self._lock:
+            until = self._cooldown_until.get(ip, 0)
+            if until > now:
+                return False
+            # Cooldown expired — clear it
+            if until > 0:
+                self._cooldown_until.pop(ip, None)
+                self._attempts.pop(ip, None)
+            return True
+
+    def record_failure(self, ip: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            attempts = self._attempts.setdefault(ip, [])
+            # Prune outside window
+            cutoff = now - _STATE_FAIL_WINDOW
+            attempts[:] = [t for t in attempts if t > cutoff]
+            attempts.append(now)
+            if len(attempts) >= _STATE_FAIL_MAX:
+                self._cooldown_until[ip] = now + _STATE_COOLDOWN
+                logger.warning(
+                    "[auth] OAuth state lookup COOLDOWN for %ds: ip=%s",
+                    _STATE_COOLDOWN, ip,
+                )
+
+    def record_success(self, ip: str) -> None:
+        with self._lock:
+            self._attempts.pop(ip, None)
+            self._cooldown_until.pop(ip, None)
+
+
+_state_fails = _StateFailStore()
 
 
 def _oauth_state_put(state: str, code_verifier: str, return_url: str | None = None) -> None:
@@ -43,17 +97,23 @@ def _oauth_state_put(state: str, code_verifier: str, return_url: str | None = No
         _oauth_states[state] = (code_verifier, return_url, now + _OAUTH_STATE_TTL)
 
 
-def _oauth_state_pop(state: str) -> tuple[str, str | None] | None:
+def _oauth_state_pop(state: str, client_ip: str = "unknown") -> tuple[str, str | None] | None:
     """Return (verifier, return_url) for `state` and remove it (one-time use).
-    None if missing or expired."""
+    None if missing, expired, or IP is in cooldown from prior failures."""
+    if not _state_fails.check(client_ip):
+        logger.warning("[auth] OAuth state lookup blocked by cooldown: ip=%s", client_ip)
+        return None
     now = time.monotonic()
     with _oauth_states_lock:
         entry = _oauth_states.pop(state, None)
     if not entry:
+        _state_fails.record_failure(client_ip)
         return None
     verifier, return_url, expiry = entry
     if expiry <= now:
+        _state_fails.record_failure(client_ip)
         return None
+    _state_fails.record_success(client_ip)
     return verifier, return_url
 
 
@@ -313,7 +373,7 @@ def _oauth_exchange_and_gate(code: str, state: str, *, required_role: str,
     ({access_token, refresh_token, user}, return_url). Raises OAuthGateError
     (a ValueError) on any failure (state/exchange/role/inactive), having audited
     the reason; the error carries the return_url when it is known."""
-    popped = _oauth_state_pop(state) if state else None
+    popped = _oauth_state_pop(state, client_ip=client_ip) if state else None
     if not popped:
         logger.warning("[auth] oauth state lookup failed ip=%s platform=%s", client_ip, platform)
         audit.login_failed(credential="<google-oauth>", ip=client_ip,

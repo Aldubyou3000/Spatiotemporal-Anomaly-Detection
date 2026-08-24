@@ -350,7 +350,7 @@ function StatusDropdown({
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <span style={{
-            fontSize: 10, fontVariantNumeric: "tabular-nums", fontWeight: 500,
+                  fontSize: "var(--font-xs)", fontVariantNumeric: "tabular-nums", fontWeight: 500,
             padding: "1px 6px", borderRadius: "var(--r-full)",
             background: "var(--brand-soft)", color: "var(--brand)",
           }}>
@@ -393,7 +393,7 @@ function StatusDropdown({
               >
                 <span>{label}</span>
                 <span style={{
-                  fontSize: 10, fontVariantNumeric: "tabular-nums", fontWeight: 500,
+            fontSize: "var(--font-xs)", fontVariantNumeric: "tabular-nums", fontWeight: 500,
                   minWidth: 18, textAlign: "center", padding: "1px 5px",
                   borderRadius: "var(--r-full)",
                   background: active ? "color-mix(in oklab, var(--brand) 18%, transparent)" : "var(--surface-sunken)",
@@ -589,11 +589,11 @@ export default function TicketsPage() {
                 return (
                   <div key={ticket.id}>
                     {showReviewHeader && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px 6px", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-secondary)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px 6px", fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-secondary)" }}>
                         <Flag size={11} fill="var(--danger)" color="var(--danger)" strokeWidth={2} />
                         Needs Review
                         <span style={{
-                          fontSize: 10, fontWeight: 600, fontVariantNumeric: "tabular-nums",
+                          fontSize: "var(--font-xs)", fontWeight: 600, fontVariantNumeric: "tabular-nums",
                           color: "#fff", background: "var(--danger)",
                           padding: "1px 6px", borderRadius: "var(--r-full)",
                           minWidth: 17, textAlign: "center", letterSpacing: 0,
@@ -603,7 +603,7 @@ export default function TicketsPage() {
                       </div>
                     )}
                     {showSplit && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 16px 6px", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", borderTop: "1px solid var(--border)", marginTop: 2 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 16px 6px", fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", borderTop: "1px solid var(--border)", marginTop: 2 }}>
                         All Tickets
                       </div>
                     )}

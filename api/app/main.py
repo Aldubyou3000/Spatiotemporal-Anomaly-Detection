@@ -6,14 +6,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from .core.config import settings
 from .routers import audit, auth, events, mobile, mobile_events, reports, technicians, tickets, zones
 
 logger = logging.getLogger("uvicorn.error")
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
+
+def _rate_limit_key(request) -> str:
+    """Rate-limit key that reads X-Forwarded-For (matches _client_ip behavior).
+
+    Without this, slowapi's default get_remote_address reads request.client.host,
+    which is the proxy IP behind ngrok/reverse-proxy — all clients share one bucket.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=_rate_limit_key, default_limits=["120/minute"])
 
 # Fail closed before the app is even constructed: in production (dev_mode=False)
 # this raises if the config still carries insecure dev defaults.

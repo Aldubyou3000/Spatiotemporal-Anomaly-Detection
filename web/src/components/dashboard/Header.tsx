@@ -14,7 +14,15 @@ const TEXT_SIZES = [
 ] as const;
 type SizeIdx = 0 | 1 | 2 | 3;
 
-const SIZE_STORAGE_KEY = "ui-text-size";
+// ── FOR FUTURE AI MODELS / DEVS ─────────────────────────────────────────────
+// The text-size picker below is TEMPORARILY HIDDEN because it was buggy
+// (reported 2026-08-21). It is gated behind SHOW_TEXT_SIZE_PICKER so the code
+// stays type-checked and can be restored by flipping the flag to `true`.
+// While hidden, the UI is pinned to "M": the root font tokens in
+// `web/src/app/globals.css` (:root block) equal M, and sizeIdx initialises to
+// 1 (M). localStorage persistence for text size was already removed — do not
+// reintroduce it without fixing the original bug first.
+const SHOW_TEXT_SIZE_PICKER = false;
 
 interface HeaderProps {
   title: string;
@@ -32,7 +40,7 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [sizeIdx, setSizeIdx] = useState<SizeIdx>(1);
 
-  function applySize(idx: SizeIdx, persist = true) {
+  function applySize(idx: SizeIdx) {
     const s = TEXT_SIZES[idx];
     const root = document.documentElement;
     root.style.setProperty("--font-base",   s.base);
@@ -43,18 +51,7 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
     root.style.setProperty("--font-xl",     s.xl);
     root.style.setProperty("--font-metric", s.metric);
     setSizeIdx(idx);
-    if (persist) localStorage.setItem(SIZE_STORAGE_KEY, String(idx));
   }
-
-  // Re-apply the saved text size on mount so the choice persists across page
-  // navigation and reloads — keeping every tab consistent. Runs once.
-  useEffect(() => {
-    const stored = Number(localStorage.getItem(SIZE_STORAGE_KEY));
-    if (Number.isInteger(stored) && stored >= 0 && stored < TEXT_SIZES.length) {
-      applySize(stored as SizeIdx, false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -101,34 +98,37 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
 
         {/* Right side controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {/* Text size picker */}
-          <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r-md)", overflow: "hidden" }}>
-            {TEXT_SIZES.map((s, i) => {
-              const active = sizeIdx === i;
-              return (
-                <button
-                  key={s.label}
-                  onClick={() => applySize(i as SizeIdx)}
-                  aria-label={`Text size ${s.label}`}
-                  aria-pressed={active}
-                  style={{
-                    width: 28, height: 28,
-                    border: 0,
-                    borderRight: i < TEXT_SIZES.length - 1 ? "1px solid var(--border)" : undefined,
-                    background: active ? "var(--surface-sunken)" : "transparent",
-                    color: active ? "var(--text)" : "var(--text-muted)",
-                    fontSize: 11 + i,
-                    fontWeight: active ? 600 : 400,
-                    cursor: "pointer",
-                    transition: "background var(--duration-fast) var(--ease-std), color var(--duration-fast) var(--ease-std)",
-                    display: "grid", placeItems: "center",
-                  }}
-                >
-                  A
-                </button>
-              );
-            })}
-          </div>
+          {/* Text size picker — hidden behind SHOW_TEXT_SIZE_PICKER (see comment above) */}
+          {SHOW_TEXT_SIZE_PICKER && (
+            <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r-md)", overflow: "hidden" }}>
+              {TEXT_SIZES.map((s, i) => {
+                const active = sizeIdx === i;
+                return (
+                  <button
+                    key={s.label}
+                    onClick={() => applySize(i as SizeIdx)}
+                    aria-label={`Text size ${s.label}`}
+                    aria-pressed={active}
+                    style={{
+                      width: 30, height: 30,
+                      border: 0,
+                      borderRight: i < TEXT_SIZES.length - 1 ? "1px solid var(--border)" : undefined,
+                      background: active ? "var(--surface-sunken)" : "transparent",
+                      color: active ? "var(--text)" : "var(--text-muted)",
+                      fontSize: 11 + i,
+                      fontWeight: active ? 600 : 400,
+                      cursor: "pointer",
+                      transition: "background var(--duration-fast) var(--ease-std), color var(--duration-fast) var(--ease-std)",
+                      display: "grid", placeItems: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    A
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Theme toggle */}
           <button
@@ -146,6 +146,7 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
               className="user-chip"
               aria-haspopup="true"
               aria-expanded={menuOpen}
+              style={{ maxWidth: 180 }}
             >
               <div style={{
                 width: 26, height: 26, borderRadius: "var(--r-full)",
@@ -155,11 +156,11 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
               }}>
                 {initials}
               </div>
-              <div style={{ lineHeight: 1.25, textAlign: "left" }}>
-                <div style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" }}>
+              <div style={{ lineHeight: 1.25, textAlign: "left", minWidth: 0, overflow: "hidden" }}>
+                <div style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user?.full_name || user?.username || "Analyst"}
                 </div>
-                <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   PAGASA · {user?.role || "analyst"}
                 </div>
               </div>
@@ -169,6 +170,7 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
                   color: "var(--text-muted)",
                   transition: "transform var(--duration-fast) var(--ease-std)",
                   transform: menuOpen ? "rotate(180deg)" : "none",
+                  flexShrink: 0,
                 }}
               />
             </button>
@@ -231,7 +233,7 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <h1 style={{
               margin: 0,
-              fontSize: 24,
+              fontSize: "var(--font-xl)",
               fontWeight: 600,
               letterSpacing: "-0.025em",
               color: "var(--text)",

@@ -382,8 +382,8 @@ function PipelineDiagram({
     {
       key: "a", idx: 0 as const,
       title: "Zone A", subtitle: "Data Cleaning",
-      desc: "Linear interpolation · gap exclusion",
-      tip: "Converts hourly readings to daily totals, fills single-day gaps using linear interpolation, and drops stations with too many missing values.",
+      desc: "Validation & daily totals",
+      tip: "Prepares your CSV: checks dates and rainfall, builds daily totals, and handles tiny gaps automatically.",
       icon: <CheckCircle2 size={16} strokeWidth={1.75} />,
       color: "var(--success)", soft: "var(--success-soft)", on: "var(--success-on)",
       count: result ? result.cleaned_data.length : null,
@@ -391,8 +391,8 @@ function PipelineDiagram({
     {
       key: "b", idx: 1 as const,
       title: "Zone B", subtitle: "Spatial Grouping",
-      desc: "Haversine distance · neighbor graph",
-      tip: "Groups stations by geographic proximity using the Haversine formula. Each station is assigned its nearest neighbors for context in the anomaly step.",
+      desc: "Nearby station groups",
+      tip: "Stations are grouped so each reading is compared to its nearby neighbors that same day.",
       icon: <Clock size={16} strokeWidth={1.75} />,
       color: "var(--warning)", soft: "var(--warning-soft)", on: "var(--warning-on)",
       count: result ? result.neighbors.length : null,
@@ -400,8 +400,8 @@ function PipelineDiagram({
     {
       key: "c", idx: 2 as const,
       title: "Zone C", subtitle: "Anomaly Detection",
-      desc: "LOF · RobustScaler · sklearn",
-      tip: "Runs Local Outlier Factor (LOF) on each station's rainfall using RobustScaler normalization. Readings that deviate significantly from their spatial neighbors are flagged as anomalies.",
+      desc: "Per-day comparison",
+      tip: "Each day's readings are compared within their local group; notably higher values are flagged for review.",
       icon: <MapPin size={16} strokeWidth={1.75} />,
       color: "var(--danger)", soft: "var(--danger-soft)", on: "var(--danger-on)",
       count: result ? result.flagged_data.filter((r) => r.is_anomaly).length : null,
@@ -650,7 +650,7 @@ export default function ZonesPage() {
                 <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--divider)" }}>
                   <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Run configuration</h3>
                 </div>
-                <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
                   <Button
                     size="lg" style={{ width: "100%" }}
                     variant={running ? "danger" : "primary"}
@@ -660,6 +660,35 @@ export default function ZonesPage() {
                   >
                     {running ? "Stop" : "Run Pipeline"}
                   </Button>
+
+                  {/* How it works — user-facing, no backend thresholds exposed. Keeps the card from looking hollow after the slider removal, without revealing LOF/Haversine internals. */}
+                  <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-md)", overflow: "hidden", background: "var(--surface)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface-sunken)", borderBottom: "1px solid var(--divider)" }}>
+                      <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--brand)", flexShrink: 0 }} />
+                        How it works
+                      </span>
+                      <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>3 steps</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      {[
+                        { n: "1", title: "Upload", desc: "Drop CSV file — no manual setup required." },
+                        { n: "2", title: "Processing", desc: "Cleaning, grouping, and screening run automatically." },
+                        { n: "3", title: "Review", desc: "Explore the map and anomaly report, then create tickets." },
+                      ].map((s) => (
+                        <div key={s.n} style={{ display: "flex", gap: 10, padding: "10px 12px", borderBottom: s.n !== "3" ? "1px solid var(--divider)" : "none" }}>
+                          <span style={{ width: 22, height: 22, borderRadius: 999, background: "var(--brand-soft)", color: "var(--brand)", border: "1px solid color-mix(in oklab, var(--brand) 14%, transparent)", display: "grid", placeItems: "center", fontSize: "var(--font-xs)", fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0, lineHeight: 1 }}>{s.n}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text)", lineHeight: 1 }}>{s.title}</div>
+                            <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", lineHeight: 1.4, marginTop: 2 }}>{s.desc}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                    No settings to tune — upload and run. Flags are per-day discoveries, not quotas.
+                  </p>
 
                   {error && (
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", borderRadius: "var(--r-md)", background: "var(--danger-soft)", border: "1px solid rgba(220,38,38,0.2)" }}>

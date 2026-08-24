@@ -247,7 +247,7 @@ export function TicketActionDock({
                     style={{
                       marginLeft: -8, width: 26, height: 26, borderRadius: "50%",
                       background: "var(--surface-sunken)", color: "var(--text-muted)",
-                      display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700,
+                      display: "grid", placeItems: "center", fontSize: "var(--font-xs)", fontWeight: 700,
                       boxShadow: "0 0 0 2px var(--surface)", fontVariantNumeric: "tabular-nums",
                       animation: `avatar-pop 300ms cubic-bezier(0.34,1.56,0.64,1) ${shown.length * 55}ms both`,
                     }}
@@ -300,7 +300,7 @@ export function TicketActionDock({
                     Assigned Technicians
                   </span>
                   {assigned.length > 0 && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums", padding: "0 6px", height: 17, display: "inline-flex", alignItems: "center", borderRadius: "var(--r-full)", background: "var(--surface-sunken)", border: "1px solid var(--divider)" }}>
+                    <span style={{ fontSize: "var(--font-xs)", fontWeight: 700, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums", padding: "0 6px", height: 17, display: "inline-flex", alignItems: "center", borderRadius: "var(--r-full)", background: "var(--surface-sunken)", border: "1px solid var(--divider)" }}>
                       {assigned.length}
                     </span>
                   )}

@@ -12,6 +12,7 @@ class DailyReading(BaseModel):
     interpolated_flag: bool = False
     lof_score: float | None = None
     is_anomaly: bool = False
+    is_dry_stuck: bool = False
 
 
 class NeighborInfo(BaseModel):
@@ -92,6 +93,42 @@ class StationHealth(BaseModel):
     median_group_size: int = Field(description="Median number of stations reporting on its rain days.")
 
 
+class DryStuckEvent(BaseModel):
+    """One stuck day — this gauge at ~0 while the area was rainy."""
+
+    date: date
+    rainfall: float
+    group_median: float
+
+
+class StationStuckHealth(BaseModel):
+    """Per-station stuck-at-zero report — symmetric to StationHealth but for low side.
+
+    A gauge is not flagged for a single 0 on a rainy day (could be weather).
+    It is flagged only when 0 is a pattern over many rainy days.
+    """
+
+    station_id: str
+    latitude: float
+    longitude: float
+    status: str = Field(description="normal | watch | suspect | insufficient_data")
+    bias_ratio: float | None = Field(default=None, description="Mean(station / group_median) over rain days; null if insufficient_data.")
+    rain_days: int = Field(description="Rainy days where group median ≥ 10 mm.")
+    zero_rate: float | None = Field(default=None, description="Fraction of rainy days where rainfall ≤ STUCK_ZERO_MM.")
+    max_zero_streak: int | None = Field(default=None, description="Longest run of consecutive rainy days at ≤ STUCK_ZERO_MM.")
+    events: list[DryStuckEvent] = Field(default_factory=list, description="All stuck days for this station.")
+
+
+class StationDryStuckSummary(BaseModel):
+    """Compact per-station list of stuck dates — mirrors anomaly_summary but for low side."""
+
+    station_id: str
+    latitude: float
+    longitude: float
+    stuck_count: int
+    events: list[DryStuckEvent]
+
+
 class ProcessResult(BaseModel):
     summary: ProcessSummary
     quality_report: QualityReport
@@ -107,5 +144,11 @@ class ProcessResult(BaseModel):
     station_health: list[StationHealth] = Field(
         default_factory=list,
         description="Per-station bias report card (post-LOF, plain averages — see StationHealth).",
+    )
+    station_stuck_health: list[StationStuckHealth] = Field(
+        default_factory=list, description="Per-station stuck-at-zero report (symmetric to health, for low side)."
+    )
+    dry_stuck_summary: list[StationDryStuckSummary] = Field(
+        default_factory=list, description="Per-station list of stuck dates (0 while area rainy)."
     )
     processed_at: datetime

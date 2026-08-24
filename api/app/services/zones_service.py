@@ -22,13 +22,16 @@ from ..zones import (
 from ..schemas.zones import (
     AnomalyEvent,
     DailyReading,
+    DryStuckEvent,
     ExclusionDetails,
     NeighborInfo,
     ProcessResult,
     ProcessSummary,
     QualityReport,
     StationAnomalySummary,
+    StationDryStuckSummary,
     StationHealth,
+    StationStuckHealth,
 )
 
 REQUIRED_COLUMNS = {"station_id", "date", "latitude", "longitude"}
@@ -39,6 +42,18 @@ HEALTH_WATCH_RATIO = 1.15  # 1.15–1.50× median → watch
 HEALTH_SUSPECT_RATIO = 1.50  # >1.50× → suspect
 HEALTH_SUSPECT_TOP_RATE = 0.60  # or top on >60% of rain days → suspect
 HEALTH_RAIN_FLOOR_MM = 10.0  # only days where group median ≥ this count as "rain days"
+
+# ── Stuck-at-zero thresholds (flexible, symmetric to health — not biased) ─
+# A gauge is not flagged for a single 0 on a rainy day (could be weather).
+# It is flagged only when 0 is a pattern over many rainy days.
+STUCK_ZERO_MM = 1.0  # ≤ this counts as stuck/trace (covers 0.0, absorbs 0.1 mm + jitter)
+STUCK_WATCH_ZERO_RATE = 0.30  # zero on >30% of its rainy days → watch
+STUCK_SUSPECT_ZERO_RATE = 0.60  # zero on >60% → suspect
+STUCK_WATCH_BIAS_LOW = 0.80  # <0.80× median → watch_low (symmetric to 1.15)
+STUCK_SUSPECT_BIAS_LOW = 0.50  # <0.50× → suspect_low (symmetric to 1.50)
+STUCK_WATCH_STREAK = 3  # ≥3 consecutive rainy days at 0 → watch
+STUCK_SUSPECT_STREAK = 5  # ≥5 → suspect
+STUCK_RAIN_FLOOR_MM = 10.0  # same rainy-day gate as health
 
 
 class ZoneProcessingError(ValueError):
@@ -137,6 +152,16 @@ def _run_from_dataframe(
 
     rain_col = "rainfall" if "rainfall" in flagged.columns else "rainfall_mm"
     station_health = _compute_station_health(flagged, neighbors_dict, anomaly_dict, rain_col)
+    station_stuck_health, dry_stuck_summary, dry_keys = _compute_stuck_at_zero(flagged, neighbors_dict, rain_col)
+    # Per-day dry-stuck flag for the chart/table (DailyReading.is_dry_stuck)
+    # Use same _date_only logic as the helper to match keys
+    if not flagged.empty:
+        _date_only_series = pd.to_datetime(flagged["date"]).dt.date  # type: ignore[attr-defined]
+        flagged["is_dry_stuck"] = [  # type: ignore[attr-defined]
+            (str(sid), str(d)) in dry_keys for sid, d in zip(flagged["station_id"].astype(str), _date_only_series.astype(str))  # type: ignore[attr-defined]
+        ]
+    else:
+        flagged["is_dry_stuck"] = False  # type: ignore[attr-defined]
     total_anomalies = int(flagged["is_anomaly"].sum())
     total_rows = int(len(flagged))
     anomaly_rate = round(100 * total_anomalies / total_rows, 2) if total_rows else 0.0
@@ -165,6 +190,8 @@ def _run_from_dataframe(
         raw_preview=raw_preview,
         raw_total_rows=raw_total_rows,
         station_health=station_health,
+        station_stuck_health=station_stuck_health,
+        dry_stuck_summary=dry_stuck_summary,
         processed_at=datetime.now(timezone.utc),
     )
 
@@ -187,6 +214,7 @@ def _dataframe_to_readings(df: pd.DataFrame, rain_col: str, with_lof: bool) -> l
     has_flag = "interpolated_flag" in df.columns
     has_lof = with_lof and "lof_score" in df.columns
     has_anom = with_lof and "is_anomaly" in df.columns
+    has_dry = "is_dry_stuck" in df.columns
 
     for row in df.itertuples(index=False):
         rowd = row._asdict()
@@ -206,6 +234,7 @@ def _dataframe_to_readings(df: pd.DataFrame, rain_col: str, with_lof: bool) -> l
                 interpolated_flag=bool(rowd.get("interpolated_flag", False)) if has_flag else False,
                 lof_score=round(float(lof_raw), 3) if has_lof and lof_raw is not None and not _isnan(lof_raw) else None,
                 is_anomaly=bool(rowd.get("is_anomaly", False)) if has_anom else False,
+                is_dry_stuck=bool(rowd.get("is_dry_stuck", False)) if has_dry else False,
             )
         )
     return out
@@ -376,6 +405,170 @@ def _compute_station_health(
     order = {"suspect": 0, "watch": 1, "normal": 2, "insufficient_data": 3}
     health.sort(key=lambda h: (order.get(h.status, 99), -(h.bias_ratio or 0)))
     return health
+
+
+def _compute_stuck_at_zero(
+    flagged_df: pd.DataFrame,
+    neighbors: dict[str, list[dict[str, Any]]],
+    rain_col: str,
+) -> tuple[list[StationStuckHealth], list[StationDryStuckSummary], set[tuple[str, str]]]:
+    """Symmetric low-side check — stuck at ~0 while the area was rainy.
+
+    A single 0 on a rainy day (middle neighbor ≥10 mm) is weather, not a fault.
+    A pattern over many rainy days is a gauge.
+
+    Uses the same rainy-day gate as health: group median ≥ STUCK_RAIN_FLOOR_MM
+    and group size ≥4 (needs a quorum to judge). Flexible thresholds at top of file.
+    """
+    if flagged_df.empty or not neighbors:
+        return [], [], set()
+
+    df = flagged_df.copy()
+    if not pd.api.types.is_datetime64_any_dtype(df["date"]):  # type: ignore[arg-type]
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")  # type: ignore[call-overload]
+
+    df["_date_only"] = pd.to_datetime(df["date"]).dt.date  # type: ignore[attr-defined]
+    # date → {station_id: rainfall}
+    date_groups: dict[Any, dict[str, float]] = {}
+    for _, row in df.iterrows():  # type: ignore[attr-defined]
+        d = row["_date_only"]
+        sid = str(row["station_id"])
+        val = float(row[rain_col]) if not _isnan(row[rain_col]) else float("nan")
+        if math.isnan(val):
+            continue
+        date_groups.setdefault(d, {})[sid] = val
+
+    loc_map: dict[str, dict[str, float]] = (  # type: ignore[assignment]
+        df[["station_id", "latitude", "longitude"]]
+        .drop_duplicates(subset=["station_id"])  # type: ignore[call-overload]
+        .set_index("station_id")
+        .to_dict(orient="index")  # type: ignore[call-overload]
+    )
+
+    stuck_health: list[StationStuckHealth] = []
+    stuck_events_by_station: dict[str, list[DryStuckEvent]] = {}
+    dry_keys: set[tuple[str, str]] = set()
+
+    for station_id in df["station_id"].unique():  # type: ignore[attr-defined]
+        sid = str(station_id)
+        neighbor_ids = [str(n["neighbor_id"]) for n in neighbors.get(sid, [])]
+        group_ids = [sid] + neighbor_ids
+        loc = loc_map.get(sid, {"latitude": 0.0, "longitude": 0.0})
+
+        # All rainy days for this station where its group was rainy and had quorum
+        # Collect in chronological order for streak detection
+        station_dates = sorted(set(df[df["station_id"] == sid]["_date_only"].tolist()))  # type: ignore[attr-defined]
+        rainy_days: list[Any] = []
+        ratios: list[float] = []
+        zero_stuck_dates: list[Any] = []
+        events: list[DryStuckEvent] = []
+
+        # Iterate chronologically so streak is calendar streak over rainy days
+        for d in station_dates:
+            day_map = date_groups.get(d, {})
+            group_vals = [day_map[g] for g in group_ids if g in day_map]
+            if len(group_vals) < 4:
+                continue
+            group_median = float(np.median(np.array(group_vals, dtype=float)))  # type: ignore[arg-type]
+            if group_median < STUCK_RAIN_FLOOR_MM:
+                continue
+            rainy_days.append(d)
+            own_val = day_map.get(sid)
+            if own_val is None or group_median < 1e-9:
+                continue
+            ratios.append(own_val / group_median)  # type: ignore[operator]
+            if own_val <= STUCK_ZERO_MM:
+                zero_stuck_dates.append(d)
+                # Record event
+                try:
+                    # Find original date object for this station/day
+                    date_obj = _to_date(d)
+                    if date_obj is None:
+                        # Fallback: use the raw date from df
+                        date_obj = pd.to_datetime(str(d)).date()  # type: ignore[call-overload]
+                    events.append(
+                        DryStuckEvent(
+                            date=date_obj,  # type: ignore[arg-type]
+                            rainfall=round(float(own_val), 2),
+                            group_median=round(float(group_median), 2),
+                        )
+                    )
+                    dry_keys.add((sid, str(d)))
+                except Exception:
+                    pass
+
+        rain_days = len(rainy_days)
+        zero_days = len(zero_stuck_dates)
+        # Max consecutive rainy days at ~0
+        max_streak = 0
+        cur_streak = 0
+        # Map date -> is stuck for quick streak walk in sorted rainy order
+        stuck_set = set(zero_stuck_dates)
+        for d in rainy_days:
+            if d in stuck_set:
+                cur_streak += 1
+                max_streak = max(max_streak, cur_streak)
+            else:
+                cur_streak = 0
+
+        if rain_days < HEALTH_MIN_RAIN_DAYS:
+            status = "insufficient_data"
+            bias_ratio = None
+            zero_rate = None
+        else:
+            bias_ratio = round(float(np.mean(ratios)), 2) if ratios else None
+            zero_rate = round(zero_days / rain_days, 2) if rain_days else 0.0
+            # Symmetric low-side check — two signals required for suspect to avoid single-streak fluke
+            if (bias_ratio is not None and bias_ratio < STUCK_SUSPECT_BIAS_LOW) or (
+                zero_rate is not None and zero_rate > STUCK_SUSPECT_ZERO_RATE and max_streak >= STUCK_SUSPECT_STREAK
+            ):
+                status = "suspect"
+            elif (
+                (bias_ratio is not None and bias_ratio < STUCK_WATCH_BIAS_LOW)
+                or (zero_rate is not None and zero_rate > STUCK_WATCH_ZERO_RATE)
+                or max_streak >= STUCK_WATCH_STREAK
+            ):
+                status = "watch"
+            else:
+                status = "normal"
+
+        stuck_health.append(
+            StationStuckHealth(
+                station_id=sid,
+                latitude=float(loc.get("latitude", 0.0)),
+                longitude=float(loc.get("longitude", 0.0)),
+                status=status,
+                bias_ratio=bias_ratio,
+                rain_days=rain_days,
+                zero_rate=zero_rate,
+                max_zero_streak=max_streak if rain_days >= HEALTH_MIN_RAIN_DAYS else None,
+                events=sorted(events, key=lambda e: e.date),
+            )
+        )
+        if events:
+            stuck_events_by_station[sid] = events
+
+    # Sort: suspect first
+    order_s = {"suspect": 0, "watch": 1, "normal": 2, "insufficient_data": 3}
+    stuck_health.sort(key=lambda h: (order_s.get(h.status, 99), -(h.zero_rate or 0) if h.zero_rate is not None else 99))
+
+    # Build per-station summary list (mirrors anomaly_summary but for low side)
+    # Use loc_map for coords
+    dry_summaries: list[StationDryStuckSummary] = []
+    for sid, evs in stuck_events_by_station.items():
+        loc = loc_map.get(sid, {"latitude": 0.0, "longitude": 0.0})
+        dry_summaries.append(
+            StationDryStuckSummary(
+                station_id=sid,
+                latitude=float(loc.get("latitude", 0.0)),
+                longitude=float(loc.get("longitude", 0.0)),
+                stuck_count=len(evs),
+                events=evs,
+            )
+        )
+    dry_summaries.sort(key=lambda s: s.stuck_count, reverse=True)
+
+    return stuck_health, dry_summaries, dry_keys
 
 
 def _normalize_quality_report(report: dict[str, Any], hourly_duplicates: int = 0) -> QualityReport:

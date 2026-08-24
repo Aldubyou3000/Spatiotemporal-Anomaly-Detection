@@ -129,7 +129,7 @@ function StatCard({ stat }: { stat: AuditStatEntry }) {
           <Icon size={11} strokeWidth={2.2} />
         </div>
       </div>
-      <p style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text)", margin: 0, lineHeight: 1, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+      <p style={{ fontSize: "var(--font-xl)", fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text)", margin: 0, lineHeight: 1, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
         {stat.total.toLocaleString()}
       </p>
       {stat.failures > 0 && (

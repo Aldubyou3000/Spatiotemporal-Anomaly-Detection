@@ -7,6 +7,7 @@ export interface DailyReading {
   interpolated_flag: boolean;
   lof_score: number | null;
   is_anomaly: boolean;
+  is_dry_stuck: boolean;
 }
 
 export interface NeighborInfo {
@@ -76,6 +77,32 @@ export interface StationHealth {
   median_group_size: number;
 }
 
+export interface DryStuckEvent {
+  date: string;
+  rainfall: number;
+  group_median: number;
+}
+
+export interface StationStuckHealth {
+  station_id: string;
+  latitude: number;
+  longitude: number;
+  status: HealthStatus;
+  bias_ratio: number | null;
+  rain_days: number;
+  zero_rate: number | null;
+  max_zero_streak: number | null;
+  events: DryStuckEvent[];
+}
+
+export interface StationDryStuckSummary {
+  station_id: string;
+  latitude: number;
+  longitude: number;
+  stuck_count: number;
+  events: DryStuckEvent[];
+}
+
 export interface ProcessResult {
   summary: ProcessSummary;
   quality_report: QualityReport;
@@ -86,5 +113,7 @@ export interface ProcessResult {
   raw_preview: Record<string, unknown>[];
   raw_total_rows: number;
   station_health: StationHealth[];
+  station_stuck_health: StationStuckHealth[];
+  dry_stuck_summary: StationDryStuckSummary[];
   processed_at: string;
 }
