@@ -5,10 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Activity, Layers, LogOut,
+  Activity, Layers,
   PanelLeftClose, PanelLeftOpen, ShieldCheck, Ticket, Users,
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
 import { useReports } from "@/hooks/useReports";
 
 interface NavItem {
@@ -62,7 +61,6 @@ function NavTooltip({ label, children }: { label: string; children: React.ReactN
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
   const { pending } = useReports();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -176,19 +174,7 @@ export function Sidebar() {
             );
           })}
 
-          {/* Push sign-out to bottom */}
-          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, paddingTop: 12, borderTop: "1px solid var(--divider)", width: "100%" }}>
-            <NavTooltip label="Sign out">
-              <button
-                onClick={logout}
-                style={iconBtn()}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
-              >
-                <LogOut size={16} strokeWidth={1.8} />
-              </button>
-            </NavTooltip>
-          </div>
+
         </div>
       ) : (
         /* ── Expanded layout ── */
@@ -276,42 +262,7 @@ export function Sidebar() {
             })}
           </nav>
 
-          {/* Footer */}
-          <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--divider)", display: "flex", flexDirection: "column", gap: 2 }}>
-            <button
-              onClick={logout}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "8px 10px", height: 38,
-                borderRadius: "var(--r-md)",
-                fontSize: "var(--font-base)", fontWeight: 500,
-                color: "var(--text-secondary)",
-                background: "transparent", border: 0, width: "100%",
-                textAlign: "left", cursor: "pointer",
-                transition: "background 0.12s ease, color 0.12s ease",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
-            >
-              <span style={{ color: "var(--text-muted)", flexShrink: 0, display: "flex" }}>
-                <LogOut size={16} strokeWidth={1.8} />
-              </span>
-              Sign out
-            </button>
 
-            <div style={{
-              padding: "6px 10px 2px",
-              fontSize: "var(--font-xs)", color: "var(--text-muted)",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-            }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--success)", animation: "live-pulse 2s ease-out infinite" }} />
-                All systems normal
-              </span>
-              <span style={{ fontFamily: "var(--font-mono)" }}>v2.4.1</span>
-            </div>
-          </div>
         </div>
       )}
     </aside>

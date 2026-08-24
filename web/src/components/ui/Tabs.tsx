@@ -111,7 +111,7 @@ export function TabPanel({ value, children, className }: TabPanelProps) {
       role="tabpanel"
       id={`${baseId}-panel-${value}`}
       aria-labelledby={`${baseId}-tab-${value}`}
-      className={cn("animate-fade-in-up", className)}
+      className={cn("animate-fade-in", className)}
     >
       {children}
     </div>

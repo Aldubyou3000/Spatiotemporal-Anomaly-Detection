@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, Eye, EyeOff, Layers, Lock, Mail, Moon, Shield, Smartphone, Sun } from "lucide-react";
+import { AlertCircle, ArrowRight, Eye, EyeOff, Layers, Lock, Mail, Moon, Sun } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -208,19 +208,7 @@ export default function LoginPage() {
           }}
         >
           {/* Card header */}
-          <div style={{ padding: "32px 36px 24px" }}>
-            <div
-              style={{
-                fontSize: "var(--font-xs)",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                color: "var(--brand)",
-                textTransform: "uppercase",
-                marginBottom: 6,
-              }}
-            >
-              Welcome back
-            </div>
+          <div style={{ padding: "28px 36px 20px" }}>
             <h1
               style={{
                 margin: 0,
@@ -230,11 +218,8 @@ export default function LoginPage() {
                 color: "var(--text)",
               }}
             >
-              Sign in to your console
+              Sign in
             </h1>
-            <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>
-              Continue to the spatiotemporal anomaly dashboard.
-            </p>
           </div>
 
           {/* Form */}
@@ -538,47 +523,10 @@ export default function LoginPage() {
             )}
           </form>
 
-          {/* Card footer */}
-          <div
-            style={{
-              borderTop: "1px solid var(--divider)",
-              padding: "14px 36px",
-              background: "var(--surface-alt)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              fontSize: "var(--font-sm)",
-              color: "var(--text-muted)",
-            }}
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Smartphone size={13} />
-              Field technician?
-            </span>
-            <span style={{ fontWeight: 500, color: "var(--text-secondary)" }}>
-              Use the mobile app →
-            </span>
-          </div>
+
         </div>
 
-        {/* Below-card meta */}
-        <div
-          style={{
-            marginTop: 20,
-            fontSize: "var(--font-xs)",
-            color: "var(--text-muted)",
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-          }}
-        >
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Shield size={12} />
-            PAGASA · Analyst Console
-          </span>
-          <span>·</span>
-          <span>v2.4.1</span>
-        </div>
+
       </div>
     </div>
   );

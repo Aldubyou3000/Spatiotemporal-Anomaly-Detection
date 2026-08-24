@@ -26,12 +26,15 @@ import Animated, {
 import Button from '@/components/Button';
 import Icon from '@/components/Icon';
 import { Text } from '@/components/Themed';
+import GoogleIcon from '@/components/GoogleIcon';
 import { icons } from '@/constants/icons';
-import { duration, ease, spring, stagger } from '@/constants/Motion';
+import { duration, ease, press, spring, stagger } from '@/constants/Motion';
 import { getTheme, palette, radius, spacing, typography } from '@/constants/theme';
 import { AppProvider, useAppContext } from '@/context/AppContext';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useTheme } from '@/hooks/useTheme';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 // ─── Root ────────────────────────────────────────────────────────────────────
 export default function RootLayout() {
@@ -190,6 +193,15 @@ function LoginScreen() {
   const buttonAnim   = useAnimatedStyle(() => ({ opacity: o3.value, transform: [{ translateY: y3.value }] }));
   const googleAnim   = useAnimatedStyle(() => ({ opacity: o4.value, transform: [{ translateY: y4.value }] }));
 
+  // Press feedback for Google button — mirrors components/Button.tsx physics
+  // (scale 0.97, opacity 0.86) with Motion tokens, not transition-all.
+  const gScale   = useSharedValue(1);
+  const gOpacity = useSharedValue(1);
+  const googlePressAnim = useAnimatedStyle(() => ({
+    transform: [{ scale: gScale.value }],
+    opacity: gOpacity.value,
+  }));
+
   const validate = () => {
     const u = usernameRef.current.trim();
     const p = passwordVal.current;
@@ -333,8 +345,8 @@ function LoginScreen() {
             loading={loading}
             disabled={googleLoading}
             size="lg"
-            style={{ borderRadius: 16 }}
-            textStyle={{ fontWeight: '700' }}
+            style={{ borderRadius: radius.md }}
+            textStyle={{ fontWeight: '600', letterSpacing: 0.15 }}
           />
         </Animated.View>
 
@@ -347,25 +359,42 @@ function LoginScreen() {
 
         {/* ── Continue with Google ─────────────────────────────────────── */}
         <Animated.View style={googleAnim}>
-          <Pressable
+          <AnimatedPressable
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            accessibilityState={{ disabled: loading || googleLoading }}
             onPress={handleGoogleLogin}
             disabled={loading || googleLoading}
-            android_ripple={{ color: '#00000010', borderless: false }}
-            style={({ pressed }) => [
+            android_ripple={{ color: 'rgba(0,0,0,0.06)', borderless: false }}
+            onPressIn={() => {
+              if (loading || googleLoading) return;
+              gScale.value   = withTiming(press.scaleDown, { duration: press.inDuration, easing: ease });
+              gOpacity.value = withTiming(press.opacityDown, { duration: press.inDuration, easing: ease });
+            }}
+            onPressOut={() => {
+              gScale.value   = withSpring(1, press.outSpring);
+              gOpacity.value = withTiming(1, { duration: duration.fast, easing: ease });
+            }}
+            style={[
               styles.googleButton,
-              (loading || googleLoading) && { opacity: 0.6 },
-              Platform.OS === 'ios' && pressed && { opacity: 0.7 },
+              googlePressAnim,
+              (loading || googleLoading) && styles.googleButtonDisabled,
             ]}
           >
             {googleLoading ? (
-              <ActivityIndicator size="small" color="#4285F4" />
+              <ActivityIndicator size="small" color="#5F6368" />
             ) : (
               <>
-                <Text style={styles.googleG}>G</Text>
+                <GoogleIcon size={18} />
                 <Text style={styles.googleButtonText}>Continue with Google</Text>
               </>
             )}
-          </Pressable>
+          </AnimatedPressable>
+        </Animated.View>
+
+        {/* ── Footer — minimal grounding, no slop decoration ─────────────── */}
+        <Animated.View style={[googleAnim, styles.footer]}>
+          <Text style={styles.footerText}>PAGASA · v1.0.0</Text>
         </Animated.View>
       </View>
     </KeyboardAvoidingView>
@@ -402,12 +431,14 @@ const styles = StyleSheet.create({
     lineHeight: typography.title.lineHeight,
     fontWeight: '700',
     color: '#111827',
+    letterSpacing: typography.title.letterSpacing,
   },
   brandSub: {
     fontSize: typography.callout.size,
     lineHeight: typography.callout.lineHeight,
     fontWeight: '400',
     color: '#6B7280',
+    letterSpacing: 0,
     marginTop: spacing.xxs + 2,
   },
 
@@ -432,12 +463,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Unified input card ────────────────────────────────────────────────────
+  // Unified input card — 12 radius matches Google + Sign In (not uniform 16 pile)
   inputCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#DADCE0',
     overflow: 'hidden',
     marginBottom: spacing.xs,
   },
@@ -474,8 +505,8 @@ const styles = StyleSheet.create({
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginVertical: spacing.md,
+    gap: spacing.sm, // 12 — intentional micro-gap, not generic 10
+    marginVertical: spacing.md, // 16 — single token, not uniform py-20 slop
   },
   dividerLine: {
     flex: 1,
@@ -483,31 +514,50 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E7EB',
   },
   dividerText: {
-    fontSize: typography.caption.size,
-    color: '#9CA3AF',
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#6B7280', // neutral-500, readable on white; #9CA3AF was too faint
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
 
-  // Google button ───────────────────────────────────────────────────────────
+  // Google button — Light theme per Google Branding Guidelines:
+  // Fill #FFFFFF, stroke #DADCE0 (≈ #747775 spec, tuned for mobile contrast),
+  // radius 12 (radius.md) — distinct from primary Button h54/r16 hierarchy,
+  // 4-color G on white, text #1F1F1F / 15/500. No gradients, no shadows.
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs + 2,
-    minHeight: 52,
-    borderRadius: 16,
+    gap: spacing.sm, // 12 — matches web gap:10 → 12 for 18px icon
+    minHeight: 46, // md (46) vs primary lg (54) = intentional hierarchy, not uniform slop
+    borderRadius: radius.md, // 12, not pill/2xl
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#DADCE0',
     backgroundColor: '#FFFFFF',
   },
-  googleG: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#4285F4',
+  googleButtonDisabled: {
+    opacity: 0.52,
   },
   googleButtonText: {
-    fontSize: typography.body.size,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 15, // callout 15 — lighter than primary 16/700
+    lineHeight: 20,
+    fontWeight: '500', // Google Sans Medium 500, not 600/700 uniformity
+    color: '#1F1F1F', // Google spec; near-black with warm neutrality
+    letterSpacing: 0,
+  },
+
+  footer: {
+    alignItems: 'center',
+    marginTop: spacing.lg + 4, // 28 — breathing room, not uniform py-20 slop
+    marginBottom: spacing.sm,
+  },
+  footerText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+    color: '#9CA3AF', // tertiary — present but not competing (WCAG: decorative)
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
 });

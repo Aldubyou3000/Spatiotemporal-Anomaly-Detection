@@ -23,6 +23,7 @@ import {
 import { Header } from "@/components/dashboard/Header";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { auditApi } from "@/lib/api/audit";
 import type { AuditLogEntry, AuditFilters, AuditStatEntry } from "@/lib/api/audit";
 
@@ -32,29 +33,29 @@ type Tone = "success" | "danger" | "warning" | "info" | "accent" | "neutral";
 type EventMeta = { tone: Tone; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }> };
 
 const EVENT_META: Record<string, EventMeta> = {
-  login_success:          { tone: "success", label: "Login",            icon: CheckCircle2 },
-  mobile_login_success:   { tone: "success", label: "Mobile Login",     icon: CheckCircle2 },
-  logout:                 { tone: "neutral", label: "Logout",           icon: LogOut },
-  mobile_logout:          { tone: "neutral", label: "Mobile Logout",    icon: LogOut },
-  session_refresh:        { tone: "info",    label: "Token Refresh",    icon: RefreshCw },
-  login_failed:           { tone: "danger",  label: "Login Failed",     icon: AlertTriangle },
-  mobile_login_failed:    { tone: "danger",  label: "Mobile Failed",    icon: AlertTriangle },
-  login_locked:           { tone: "danger",  label: "Account Locked",   icon: ShieldAlert },
-  session_hijack_attempt: { tone: "danger",  label: "Hijack Attempt",   icon: ShieldAlert },
-  csrf_rejected:          { tone: "danger",  label: "CSRF Rejected",    icon: Zap },
-  rate_limit_hit:         { tone: "warning", label: "Rate Limited",     icon: Zap },
-  account_created:        { tone: "info",    label: "Account Created",  icon: UserPlus },
-  account_disabled:       { tone: "warning", label: "Disabled",         icon: AlertTriangle },
-  account_enabled:        { tone: "success", label: "Enabled",          icon: CheckCircle2 },
-  ticket_created:         { tone: "info",    label: "Ticket Created",   icon: Ticket },
-  ticket_updated:         { tone: "neutral", label: "Ticket Updated",   icon: RefreshCw },
-  ticket_status_changed:  { tone: "info",    label: "Status Changed",   icon: Zap },
-  report_submitted:       { tone: "info",    label: "Report Submitted", icon: CheckCircle2 },
-  report_approved:        { tone: "success", label: "Report Approved",  icon: CheckCircle2 },
-  file_uploaded:          { tone: "neutral", label: "File Uploaded",    icon: Upload },
-  photo_uploaded:         { tone: "neutral", label: "Photo Uploaded",   icon: Upload },
-  zone_pipeline_run:      { tone: "accent",  label: "Pipeline Run",     icon: Play },
-  system_startup:         { tone: "neutral", label: "System Start",     icon: Database },
+  login_success:          { tone: "success", label: "Signed in",           icon: CheckCircle2 },
+  mobile_login_success:   { tone: "success", label: "Signed in (mobile)",  icon: CheckCircle2 },
+  logout:                 { tone: "neutral", label: "Signed out",          icon: LogOut },
+  mobile_logout:          { tone: "neutral", label: "Signed out (mobile)", icon: LogOut },
+  session_refresh:        { tone: "info",    label: "Session refreshed",   icon: RefreshCw },
+  login_failed:           { tone: "warning", label: "Failed sign-in",      icon: AlertTriangle },
+  mobile_login_failed:    { tone: "warning", label: "Failed sign-in (mobile)", icon: AlertTriangle },
+  login_locked:           { tone: "warning", label: "Account locked",      icon: ShieldAlert },
+  session_hijack_attempt: { tone: "warning", label: "Security notice",     icon: ShieldAlert },
+  csrf_rejected:          { tone: "warning", label: "Blocked request",     icon: Zap },
+  rate_limit_hit:         { tone: "warning", label: "Too many requests",   icon: Zap },
+  account_created:        { tone: "info",    label: "Account created",     icon: UserPlus },
+  account_disabled:       { tone: "warning", label: "Account disabled",    icon: AlertTriangle },
+  account_enabled:        { tone: "success", label: "Account enabled",     icon: CheckCircle2 },
+  ticket_created:         { tone: "info",    label: "Ticket opened",       icon: Ticket },
+  ticket_updated:         { tone: "neutral", label: "Ticket updated",      icon: RefreshCw },
+  ticket_status_changed:  { tone: "info",    label: "Status updated",      icon: Zap },
+  report_submitted:       { tone: "info",    label: "Report submitted",    icon: CheckCircle2 },
+  report_approved:        { tone: "success", label: "Report approved",     icon: CheckCircle2 },
+  file_uploaded:          { tone: "neutral", label: "File uploaded",       icon: Upload },
+  photo_uploaded:         { tone: "neutral", label: "Photo added",         icon: Upload },
+  zone_pipeline_run:      { tone: "accent",  label: "Pipeline run",        icon: Play },
+  system_startup:         { tone: "neutral", label: "System start",        icon: Database },
 };
 
 function getEventMeta(event: string): EventMeta {
@@ -91,12 +92,11 @@ function formatTs(iso: string) {
   };
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Stat Card — kept for potential use but without scary fail rate ─────────
 
 function StatCard({ stat }: { stat: AuditStatEntry }) {
   const meta = getEventMeta(stat.event);
   const Icon = meta.icon;
-  const failRate = stat.total > 0 ? ((stat.failures / stat.total) * 100).toFixed(0) : "0";
 
   return (
     <div
@@ -112,7 +112,7 @@ function StatCard({ stat }: { stat: AuditStatEntry }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", margin: 0 }}>
+        <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", margin: 0 }}>
           {meta.label}
         </p>
         <div
@@ -132,27 +132,40 @@ function StatCard({ stat }: { stat: AuditStatEntry }) {
       <p style={{ fontSize: "var(--font-xl)", fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text)", margin: 0, lineHeight: 1, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
         {stat.total.toLocaleString()}
       </p>
-      {stat.failures > 0 && (
-        <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--danger)", margin: 0 }}>
-          {failRate}% fail rate
-        </p>
-      )}
+      <p style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", margin: 0 }}>{stat.total === 1 ? "record" : "records"}</p>
     </div>
   );
 }
 
-// ─── Expanded detail ──────────────────────────────────────────────────────────
+// ─── Expanded detail — simple, non-technical ─────────────────────────────────
+
+function prettyStatus(value: string): string {
+  const map: Record<string, string> = {
+    assigned: "Assigned",
+    "in-progress": "In progress",
+    in_progress: "In progress",
+    pending_review: "Pending review",
+    verified: "Verified",
+    follow_up: "Follow-up",
+    cancelled: "Cancelled",
+  };
+  return map[value] ?? value.replace(/_/g, " ");
+}
 
 function AuditDetail({ entry }: { entry: AuditLogEntry }) {
-  const fields: { label: string; value: string | null | undefined; mono?: boolean; accent?: string }[] = [
-    { label: "Actor ID",   value: entry.user_id,     mono: true,  accent: "var(--brand)" },
-    { label: "Trace ID",   value: entry.request_id,  mono: true,  accent: "var(--info)" },
-    { label: "IP Address", value: entry.ip,           mono: true,  accent: "var(--warning)" },
-    { label: "Entity",     value: entry.entity_type ? `${entry.entity_type}${entry.entity_id ? ` / ${entry.entity_id.slice(0, 12)}` : ""}` : null, accent: "var(--text-muted)" },
-    { label: "Actor Name", value: entry.actor_name,  accent: "var(--success)" },
-    { label: "Email",      value: entry.actor_email, mono: true,  accent: "var(--success)" },
-    { label: "Role",       value: entry.actor_role,  accent: "var(--brand)" },
-  ].filter((f) => f.value);
+  const when = new Date(entry.created_at).toLocaleString("en-PH", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+
+  let statusChange: string | null = null;
+  if (entry.event === "ticket_status_changed" && entry.changes) {
+    const oldS = (entry.changes.old as Record<string, unknown> | null)?.status;
+    const newS = (entry.changes.new as Record<string, unknown> | null)?.status;
+    if (oldS || newS) {
+      statusChange = `${oldS ? prettyStatus(String(oldS)) : "—"} → ${newS ? prettyStatus(String(newS)) : "—"}`;
+    }
+  }
 
   return (
     <div
@@ -162,99 +175,35 @@ function AuditDetail({ entry }: { entry: AuditLogEntry }) {
         padding: "16px 20px",
         display: "flex",
         flexDirection: "column",
-        gap: 14,
+        gap: 12,
       }}
     >
-      {/* Fields grid */}
-      {fields.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px 16px" }}>
-          {fields.map(({ label, value, mono, accent }) => (
-            <div
-              key={label}
-              style={{
-                borderLeft: `2px solid color-mix(in oklab, ${accent} 40%, transparent)`,
-                paddingLeft: 10,
-              }}
-            >
-              <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 2px" }}>
-                {label}
-              </p>
-              <p style={{ fontSize: "var(--font-xs)", fontFamily: mono ? "var(--font-mono)" : undefined, color: "var(--text-secondary)", margin: 0, wordBreak: "break-all" }}>
-                {value}
-              </p>
-            </div>
-          ))}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px" }}>
+        <div>
+          <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 4px" }}>Who</p>
+          <p style={{ fontSize: "var(--font-sm)", color: "var(--text)", margin: 0, lineHeight: 1.5 }}>
+            {entry.actor_name ?? entry.credential ?? "Unknown"}
+            {entry.actor_role ? <span style={{ color: "var(--text-muted)" }}> · {entry.actor_role}</span> : null}
+          </p>
+          {entry.actor_email && <p style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", margin: "2px 0 0" }}>{entry.actor_email}</p>}
+        </div>
+        <div>
+          <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 4px" }}>When</p>
+          <p style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", margin: 0 }}>{when}</p>
+        </div>
+      </div>
+
+      {statusChange && (
+        <div style={{ paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+          <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 4px" }}>What changed</p>
+          <p style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", margin: 0 }}>{statusChange}</p>
         </div>
       )}
 
-      {/* User agent */}
-      {entry.user_agent && (
-        <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 4px" }}>
-            User Agent
-          </p>
-          <p style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-muted)", margin: 0, wordBreak: "break-all" }}>
-            {entry.user_agent}
-          </p>
-        </div>
-      )}
-
-      {/* Changes */}
-      {entry.changes && (
-        <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 8px" }}>
-            Changes (Before / After)
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <div style={{ background: "color-mix(in oklab, var(--danger) 5%, transparent)", border: "1px solid color-mix(in oklab, var(--danger) 20%, transparent)", borderRadius: "var(--r-md)", padding: "8px 10px" }}>
-              <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--danger)", opacity: 0.7, margin: "0 0 4px" }}>Before</p>
-              <pre style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                {JSON.stringify(entry.changes.old, null, 2)}
-              </pre>
-            </div>
-            <div style={{ background: "color-mix(in oklab, var(--success) 5%, transparent)", border: "1px solid color-mix(in oklab, var(--success) 20%, transparent)", borderRadius: "var(--r-md)", padding: "8px 10px" }}>
-              <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--success)", opacity: 0.7, margin: "0 0 4px" }}>After</p>
-              <pre style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                {JSON.stringify(entry.changes.new, null, 2)}
-              </pre>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Error */}
       {entry.error_message && (
-        <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--danger)", margin: "0 0 4px" }}>
-            Error Message
-          </p>
-          <p style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--danger)", margin: 0 }}>
-            {entry.error_message}
-          </p>
-        </div>
-      )}
-
-      {/* Metadata */}
-      {entry.meta && Object.keys(entry.meta).length > 0 && (
-        <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 4px" }}>
-            Metadata
-          </p>
-          <pre style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", margin: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "6px 8px", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-            {JSON.stringify(entry.meta, null, 2)}
-          </pre>
-        </div>
-      )}
-
-      {/* Chain hash */}
-      {entry.chain_hash && (
-        <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 4px" }}>
-            Chain Hash (SHA-256)
-          </p>
-          <p style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-muted)", margin: 0, wordBreak: "break-all" }}>
-            {entry.chain_hash}
-          </p>
+        <div style={{ paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+          <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 4px" }}>Note</p>
+          <p style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", margin: 0 }}>{entry.error_message}</p>
         </div>
       )}
     </div>
@@ -280,7 +229,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
         style={{
           width: "100%",
           display: "grid",
-          gridTemplateColumns: "24px 1fr 140px 160px 20px",
+          gridTemplateColumns: "24px 1fr 160px 20px",
           alignItems: "center",
           gap: 14,
           padding: "11px 20px",
@@ -322,22 +271,11 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
             </span>
           )}
           {!entry.actor_name && entry.credential && (
-            <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {entry.credential}
             </span>
           )}
-          {entry.entity_type && (
-            <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
-              {entry.entity_type}
-              {entry.entity_id ? `/${entry.entity_id.slice(0, 8)}` : ""}
-            </span>
-          )}
         </div>
-
-        {/* IP */}
-        <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-          {entry.ip ?? "—"}
-        </span>
 
         {/* Timestamp */}
         <div style={{ textAlign: "right" }}>
@@ -439,24 +377,13 @@ export default function AuditPage() {
   ).length;
   const hasFilters = !!(eventFilter || outcomeFilter || query);
 
-  const selectStyle: React.CSSProperties = {
-    height: 30,
-    padding: "0 8px",
-    borderRadius: "var(--r-md)",
-    border: "1px solid var(--border)",
-    background: "var(--surface-alt)",
-    color: "var(--text)",
-    fontSize: "var(--font-sm)",
-    fontFamily: "inherit",
-    outline: "none",
-    cursor: "pointer",
-  };
+
 
   return (
     <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
       <Header
-        title="Audit Log"
-        description={`${total.toLocaleString()} events recorded · append-only, SHA-256 chain-hashed`}
+        title="Activity History"
+        description={`${total.toLocaleString()} ${total === 1 ? "record" : "records"} · updates live as your team works`}
         live
         actions={
           <Button size="sm" variant="secondary" onClick={handleExport}>
@@ -467,33 +394,6 @@ export default function AuditPage() {
       />
 
       <div style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 20 }}>
-
-        {/* Stat cards */}
-        {!statsLoading && stats.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
-            {stats.map((s) => <StatCard key={s.event} stat={s} />)}
-          </div>
-        )}
-
-        {/* Critical alert */}
-        {criticalCount > 0 && !loading && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 10,
-              padding: "10px 14px",
-              background: "var(--danger-soft)",
-              border: "1px solid rgba(220,38,38,0.25)",
-              borderRadius: "var(--r-md)",
-            }}
-          >
-            <ShieldAlert size={15} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 1 }} strokeWidth={2.2} />
-            <p style={{ fontSize: "var(--font-sm)", color: "var(--danger)", margin: 0, lineHeight: 1.5 }}>
-              <strong>{criticalCount} CRITICAL</strong> — account lockouts detected on this page.
-            </p>
-          </div>
-        )}
 
         {/* Activity card */}
         <div
@@ -518,7 +418,7 @@ export default function AuditPage() {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <h3 style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>Activity stream</h3>
+              <h3 style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>Activity</h3>
               <span
                 style={{
                   height: 20,
@@ -539,12 +439,12 @@ export default function AuditPage() {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {/* IP search */}
+              {/* Search */}
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                 <Search size={12} style={{ position: "absolute", left: 8, color: "var(--text-muted)", pointerEvents: "none" }} />
                 <input
                   type="text"
-                  placeholder="Search IP…"
+                  placeholder="Search…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onBlur={handleQueryBlur}
@@ -559,7 +459,7 @@ export default function AuditPage() {
                     background: "var(--surface-alt)",
                     color: "var(--text)",
                     fontSize: "var(--font-sm)",
-                    fontFamily: "var(--font-mono)",
+                    fontFamily: "inherit",
                     outline: "none",
                     transition: "border-color 0.12s ease",
                   }}
@@ -567,20 +467,24 @@ export default function AuditPage() {
                 />
               </div>
 
-              {/* Event dropdown */}
-              <select value={eventFilter} onChange={(e) => handleEventChange(e.target.value)} style={{ ...selectStyle, width: 160 }}>
-                <option value="">All events</option>
-                {EVENT_OPTIONS.map((ev) => (
-                  <option key={ev} value={ev}>{getEventMeta(ev).label}</option>
-                ))}
-              </select>
-
-              {/* Outcome dropdown */}
-              <select value={outcomeFilter} onChange={(e) => handleOutcomeChange(e.target.value)} style={{ ...selectStyle, width: 130 }}>
-                <option value="">All outcomes</option>
-                <option value="true">Success only</option>
-                <option value="false">Failures only</option>
-              </select>
+              <Select
+                value={eventFilter}
+                onChange={handleEventChange}
+                width={160}
+                ariaLabel="Filter by activity"
+                options={[{ value: "", label: "All activity" }, ...EVENT_OPTIONS.map((ev) => ({ value: ev, label: getEventMeta(ev).label }))]}
+              />
+              <Select
+                value={outcomeFilter}
+                onChange={handleOutcomeChange}
+                width={130}
+                ariaLabel="Filter by result"
+                options={[
+                  { value: "", label: "All results" },
+                  { value: "true", label: "Successful" },
+                  { value: "false", label: "Needs attention" },
+                ]}
+              />
 
               {/* Reset */}
               {hasFilters && (
@@ -601,7 +505,7 @@ export default function AuditPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "24px 1fr 140px 160px 20px",
+              gridTemplateColumns: "24px 1fr 160px 20px",
               alignItems: "center",
               gap: 14,
               padding: "8px 20px",
@@ -609,17 +513,17 @@ export default function AuditPage() {
               borderBottom: "1px solid var(--border)",
             }}
           >
-            {["", "Event · Actor", "IP Address", "Timestamp", ""].map((col, i) => (
+            {["", "Activity", "When", ""].map((col, i) => (
               <p
                 key={i}
                 style={{
                   margin: 0,
                   fontSize: "var(--font-xs)",
                   fontWeight: 600,
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.06em",
                   textTransform: "uppercase",
                   color: "var(--text-muted)",
-                  textAlign: i === 3 ? "right" : "left",
+                  textAlign: i === 2 ? "right" : "left",
                 }}
               >
                 {col}
@@ -669,7 +573,7 @@ export default function AuditPage() {
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
               <Shield size={11} strokeWidth={2} />
-              All entries are append-only and chain-hashed with SHA-256 for tamper detection.
+              Activity is recorded automatically to keep a clear history of changes.
             </div>
             {totalPages > 1 && (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

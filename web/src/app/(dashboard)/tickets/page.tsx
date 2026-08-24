@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/dashboard/Header";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { TicketRowSkeleton } from "@/components/ui/Skeleton";
 import { TicketDetailBody, type DetailModel, type DetailAssignee } from "@/components/tickets/TicketDetailBody";
 import { TicketActionDock } from "@/components/tickets/TicketActionDock";
@@ -543,10 +544,13 @@ export default function TicketsPage() {
 
           {/* Filters */}
           <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid var(--divider)", display: "flex", flexDirection: "column", gap: 6 }}>
-            <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={{ width: "100%", height: 30, padding: "0 8px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "var(--surface-sunken)", color: filterPriority ? "var(--text)" : "var(--text-muted)", fontSize: "var(--font-xs)", outline: "none", fontFamily: "inherit", cursor: "pointer" }}>
-              <option value="">All priorities</option>
-              {ALL_PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-            </select>
+            <Select
+              value={filterPriority}
+              onChange={setFilterPriority}
+              width="100%"
+              ariaLabel="Filter by priority"
+              options={[{ value: "", label: "All priorities" }, ...ALL_PRIORITIES.map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))]}
+            />
             {(filterStatus || filterPriority || query) && (
               <button onClick={() => { setFilterStatus(""); setFilterPriority(""); setFilterStation(""); setQuery(""); }} style={{ width: "100%", height: 30, padding: "0 10px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)", fontSize: "var(--font-xs)", fontWeight: 500, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
                 Reset filters

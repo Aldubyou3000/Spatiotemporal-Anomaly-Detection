@@ -229,37 +229,16 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-          {/* Title + Live badge */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <h1 style={{
-              margin: 0,
-              fontSize: "var(--font-xl)",
-              fontWeight: 600,
-              letterSpacing: "-0.025em",
-              color: "var(--text)",
-              lineHeight: 1.15,
-            }}>
-              {title}
-            </h1>
-            {live && (
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: 5,
-                height: 20, padding: "0 8px",
-                borderRadius: "var(--r-full)",
-                background: "color-mix(in oklab, var(--success) 12%, transparent)",
-                border: "1px solid color-mix(in oklab, var(--success) 28%, transparent)",
-                fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--success)",
-              }}>
-                <span style={{
-                  width: 6, height: 6, borderRadius: "50%",
-                  background: "var(--success)",
-                  animation: "live-pulse 2s ease-out infinite",
-                  flexShrink: 0,
-                }} />
-                Live
-              </span>
-            )}
-          </div>
+          <h1 style={{
+            margin: 0,
+            fontSize: "var(--font-xl)",
+            fontWeight: 600,
+            letterSpacing: "-0.025em",
+            color: "var(--text)",
+            lineHeight: 1.15,
+          }}>
+            {title}
+          </h1>
 
           {description && (
             <p style={{ margin: 0, fontSize: "var(--font-base)", color: "var(--text-muted)", lineHeight: 1.5 }}>

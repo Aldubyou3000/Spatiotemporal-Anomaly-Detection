@@ -333,10 +333,12 @@ body {
   --duration-enter: 240ms;
 }
 
-/* Smooth, consistent transitions on every interactive element */
+/* Smooth, consistent transitions on every interactive element — no transform
+   (Leaflet positions tiles/markers with translate3d; animating transform there
+   makes the map swim and dot halos balloon on tab switches). */
 a, button, input, select, textarea, [role="button"], [role="switch"] {
   transition-property: color, background-color, border-color, outline-color,
-                       box-shadow, opacity, transform;
+                       box-shadow, opacity;
   transition-duration: var(--duration-base);
   transition-timing-function: var(--ease-std);
 }
@@ -351,7 +353,7 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   100% { background-position: -200% 0; }
 }
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fade-in {
@@ -832,6 +834,16 @@ select:-webkit-autofill {
 .leaflet-container {
   background: var(--surface-sunken) !important;
   font-family: var(--font-geist), system-ui, sans-serif !important;
+}
+/* Never let the global a/button transition bleed into Leaflet — its panes
+   move tiles with translate3d and SVG markers with path transforms; animating
+   those makes halos balloon and the map swim on every Overview click. */
+.leaflet-container *,
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+  transition: none !important;
 }
 .leaflet-control-attribution {
   background: var(--surface) !important;

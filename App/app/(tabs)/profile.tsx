@@ -85,10 +85,6 @@ export default function ProfileScreen() {
   // Set imperatively on focus (see index.tsx note on expo/router#754).
   useFocusEffect(useCallback(() => { setStatusBarStyle('light'); }, []));
 
-  const stationDisplay = profile?.station_ids?.length
-    ? profile.station_ids.join(', ')
-    : 'None assigned';
-
   const initials = technicianName
     .split(' ')
     .slice(0, 2)
@@ -122,11 +118,10 @@ export default function ProfileScreen() {
         <SectionLabel label="ACCOUNT" />
         <Card style={styles.listCard}>
           <InfoRow icon={icons.username} label="Username" value={`@${profile?.username ?? '—'}`} />
-          <InfoRow icon={icons.email}    label="Email"    value={profile?.email ?? '—'} />
+          <InfoRow icon={icons.email}    label="Email"    value={profile?.email ?? '—'} last={!profile?.phone} />
           {profile?.phone ? (
-            <InfoRow icon={icons.phone} label="Phone" value={profile.phone} />
+            <InfoRow icon={icons.phone} label="Phone" value={profile.phone} last />
           ) : null}
-          <ActionRow icon={icons.stations} label="Stations" value={stationDisplay} onPress={() => {}} last />
         </Card>
 
         {/* ── Preferences (separated by whitespace) ───────────────────── */}

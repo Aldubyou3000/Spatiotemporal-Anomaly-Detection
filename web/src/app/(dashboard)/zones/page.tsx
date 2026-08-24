@@ -31,6 +31,7 @@ import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkload
 import { byWorkload } from "@/lib/technicianWorkload";
 import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { Header } from "@/components/dashboard/Header";
+import { Select } from "@/components/ui/Select";
 import { FileUpload } from "@/components/zones/FileUpload";
 import { DataTable } from "@/components/zones/DataTable";
 import type { FilterField } from "@/components/zones/DataTable";
@@ -154,7 +155,6 @@ function CreateTicketModal({
     background: "var(--surface)", color: "var(--text)",
     fontSize: "var(--font-sm)", outline: "none",
     boxShadow: "var(--shadow-xs)", fontFamily: "inherit",
-    appearance: "none" as const,
   };
 
   if (done) {
@@ -217,21 +217,29 @@ function CreateTicketModal({
               <Input label="Station ID" value={stationInput} onChange={(e) => setStationInput(e.target.value)} required />
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Zone</label>
-                <select value={zone} onChange={(e) => setZone(e.target.value)} style={selectStyle}>
-                  <option value="">— none —</option>
-                  <option value="A">Zone A</option>
-                  <option value="B">Zone B</option>
-                  <option value="C">Zone C</option>
-                </select>
+                <Select
+                  value={zone}
+                  onChange={setZone}
+                  options={[
+                    { value: "", label: "— none —" },
+                    { value: "A", label: "Zone A" },
+                    { value: "B", label: "Zone B" },
+                    { value: "C", label: "Zone C" },
+                  ]}
+                />
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Priority</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority)} style={selectStyle}>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
+              <Select
+                value={priority}
+                onChange={(v) => setPriority(v as TicketPriority)}
+                options={[
+                  { value: "low", label: "Low" },
+                  { value: "medium", label: "Medium" },
+                  { value: "high", label: "High" },
+                ]}
+              />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Description</label>
@@ -726,7 +734,7 @@ export default function ZonesPage() {
         {/* Results */}
         {running && !result && <RunningSkeleton />}
         {result && (
-          <div className="animate-fade-in-up">
+          <div className="animate-fade-in">
             <Results result={result} onCreateTicket={(stationId) => setCreateStation(stationId)} />
           </div>
         )}

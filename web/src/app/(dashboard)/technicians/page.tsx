@@ -296,8 +296,9 @@ function TechRow({ technician, workload }: { technician: TechnicianProfile; work
               width: 34,
               height: 34,
               borderRadius: "50%",
-              background: "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)",
-              color: "white",
+              background: "var(--brand-soft)",
+              color: "var(--on-brand-soft)",
+              border: "1px solid color-mix(in oklab, var(--brand) 14%, transparent)",
               display: "grid",
               placeItems: "center",
               fontSize: "var(--font-xs)",
@@ -412,12 +413,7 @@ export default function TechniciansPage() {
         }
       />
 
-      <div style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 24 }}>
-        {/* Stat cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, maxWidth: 560 }}>
-          <StatCard label="Active" value={activeCount} icon={<Users size={15} />} tone="success" />
-          <StatCard label="Total Accounts" value={technicians.length} icon={<Users size={15} />} tone="brand" />
-        </div>
+      <div style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* Table card */}
         <div

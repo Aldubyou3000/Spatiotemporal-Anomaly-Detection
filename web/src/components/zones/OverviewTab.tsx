@@ -177,6 +177,9 @@ function QualityReportCard({
 }
 
 // ── Unified Gauge Reliability — merges Station Health + Stuck at Zero ───────
+// Intensity is encoded once and reused: suspect=danger, watch=warning,
+// consistent=success, need_more=neutral — same hues drive the card dots,
+// the badges, and the map halo so the analyst learns one palette.
 
 type UnifiedStatus = "suspect" | "watch" | "normal" | "insufficient_data";
 
@@ -217,53 +220,77 @@ function GaugeReliabilityCard({
       const status = overall(v.high, v.low);
       const high = v.high;
       const low = v.low;
-      // Human reason — prioritize the side that triggered the status
+      // Simple, human wording. One headline + one short line. Extra numbers live in the
+      // hover tooltip title so the card stays scannable but still complete on hover.
       let reason = "";
       let detail = "";
-      let badgeNote = "";
+      let badgeLabel: string;
+      let badgeTone: "danger" | "warning" | "success" | "neutral" = "neutral";
+      let tip = "";
       if (status === "suspect" || status === "watch") {
         const highBad = high && (high.status === "suspect" || high.status === "watch");
         const lowBad = low && (low.status === "suspect" || low.status === "watch");
         if (highBad && lowBad) {
-          const hp = high!.bias_ratio != null ? `${Math.round((high!.bias_ratio - 1) * 100)}% high` : "";
-          const lp = low!.zero_rate != null ? `${Math.round(low!.zero_rate * 100)}% silent` : `streak ${low!.max_zero_streak}`;
-          reason = status === "suspect" ? "Mixed signals" : "Both sides a bit off";
-          detail = `Reads ${hp || "high"} and often silent (${lp}) — worth a site check.`;
-          badgeNote = `${high!.bias_ratio?.toFixed(2) ?? "—"}× · ${low!.zero_rate != null ? Math.round(low!.zero_rate * 100) + "% at 0" : "0"}`;
+          const hp = high!.bias_ratio != null ? `about ${Math.round((high!.bias_ratio - 1) * 100)}% higher` : "reads high";
+          const lp = low!.zero_rate != null ? `silent ${Math.round(low!.zero_rate * 100)}% of the time` : `silent streak ${low!.max_zero_streak}`;
+          reason = status === "suspect" ? "Mixed signals — needs a check" : "A bit high and sometimes silent";
+          detail = status === "suspect"
+            ? `This gauge ${hp} yet is also ${lp}. Likely a sensor issue, not just weather.`
+            : `This gauge ${hp} and is ${lp} when neighbors rained. Worth a site visit.`;
+          badgeLabel = status === "suspect" ? "Needs check" : "Watch";
+          badgeTone = status === "suspect" ? "danger" : "warning";
+          tip = `On ${high!.rain_days} rainy days checked, this gauge averaged ${high!.bias_ratio?.toFixed(2) ?? "—"}× nearby gauges and was silent ${lp}.`;
         } else if (highBad) {
           const pct = high!.bias_ratio != null ? Math.round((high!.bias_ratio - 1) * 100) : 0;
-          const top = high!.top_rate != null ? Math.round(high!.top_rate * 100) : 0;
           if (high!.status === "suspect") {
             reason = "Reads consistently high";
-            detail = `${pct}% above neighbors on ${high!.rain_days} rainy days · highest on ${top}% of them. Likely a gauge issue, not just weather.`;
+            detail = `On rainy days it reads about ${pct}% higher than nearby gauges. Probably a calibration drift.`;
+            badgeLabel = "Needs check";
+            badgeTone = "danger";
           } else {
             reason = "Reads a bit high";
-            detail = `${pct}% above neighbors on ${high!.rain_days} rainy days · top on ${top}% of them. Keep an eye on it.`;
+            detail = `On rainy days it reads about ${pct}% higher than neighbors. Keep an eye on it.`;
+            badgeLabel = "Watch";
+            badgeTone = "warning";
           }
-          badgeNote = `${high!.bias_ratio!.toFixed(2)}× · top ${top}%`;
+          tip = `Compared on ${high!.rain_days} rainy days. Usually a bit above its 3 neighbors.`;
         } else if (lowBad) {
           const pct = low!.zero_rate != null ? Math.round(low!.zero_rate * 100) : 0;
           const streak = low!.max_zero_streak ?? 0;
+          const days = low!.rain_days ?? 0;
           if (low!.status === "suspect") {
             reason = "Often silent when it rained";
-            detail = `At 0 on ${pct}% of ${low!.rain_days} rainy days · longest quiet run ${streak} days. Area was wet while this gauge stayed dry — check for clog or power.`;
+            detail = `On about ${pct}% of rainy days it stayed at 0 while neighbors got rain. Likely clogged or offline.`;
+            badgeLabel = "Needs check";
+            badgeTone = "danger";
           } else {
             reason = "Sometimes silent";
-            detail = `At 0 on ${pct}% of ${low!.rain_days} rainy days · longest run ${streak} days. Worth a quick check.`;
+            detail = `On about ${pct}% of rainy days it stayed at 0 while neighbors rained.`;
+            badgeLabel = "Watch";
+            badgeTone = "warning";
           }
-          badgeNote = `${pct}% at 0 · streak ${streak}`;
+          tip = `On ${days} rainy days checked, stayed at 0 on ${pct}% of them. Longest silent run: ${streak} days.`;
+        } else {
+          reason = "";
+          detail = "";
+          badgeLabel = "";
+          tip = "";
         }
       } else if (status === "normal") {
-        reason = "Looks typical";
-        detail = "In line with neighbors on rainy days. Flags here are likely real weather.";
-        badgeNote = high?.bias_ratio != null ? `${high.bias_ratio.toFixed(2)}×` : low?.zero_rate != null ? `${Math.round(low.zero_rate * 100)}% silent` : "OK";
+        reason = "No long-term drift detected";
+        detail = "Sensor tracks neighbors on rainy days. Flagged days still stand out — they're likely real local rain, not just sensor drift, and still need review.";
+        badgeLabel = "No drift";
+        badgeTone = "neutral";
+        tip = `Checked on ${high?.rain_days ?? low?.rain_days ?? 0} rainy days — no repeated high/silent pattern found.`;
       } else {
         const days = (high?.rain_days ?? low?.rain_days ?? 0);
-        reason = "Not enough rainy days";
-        detail = `Only ${days} rainy days so far — needs more wet weather to judge.`;
-        badgeNote = `${days} rainy days`;
+        reason = "Not enough rainy days to judge";
+        detail = `Only ${days} rainy days so far. Needs more wet weather to tell if the gauge drifts.`;
+        badgeLabel = "Need more rain";
+        badgeTone = "neutral";
+        tip = `Only ${days} rainy days checked — not enough to judge long-term drift.`;
       }
-      return { station_id, lat: v.lat, lon: v.lon, high, low, status, reason, detail, badgeNote };
+      return { station_id, lat: v.lat, lon: v.lon, high, low, status, reason, detail, badgeLabel, badgeTone, tip };
     });
 
     const order: Record<UnifiedStatus, number> = { suspect: 0, watch: 1, insufficient_data: 2, normal: 3 };
@@ -279,16 +306,10 @@ function GaugeReliabilityCard({
 
   const hasAny = merged.length > 0;
 
-  function tone(s: UnifiedStatus): "danger" | "warning" | "success" | "neutral" {
-    if (s === "suspect") return "danger";
-    if (s === "watch") return "warning";
-    if (s === "normal") return "success";
-    return "neutral";
-  }
   function dotColor(s: UnifiedStatus): string {
     if (s === "suspect") return "var(--danger)";
     if (s === "watch") return "var(--warning)";
-    if (s === "normal") return "var(--success)";
+    if (s === "normal") return "var(--text-tertiary)";
     return "var(--text-tertiary)";
   }
 
@@ -298,10 +319,10 @@ function GaugeReliabilityCard({
         <span style={{ width: 22, height: 22, borderRadius: 6, background: needsReview.length > 0 ? "var(--warning-soft)" : "var(--success-soft)", border: `1px solid ${needsReview.length > 0 ? "var(--warning)" : "var(--success)"}`, display: "grid", placeItems: "center", flexShrink: 0 }}>
           <Gauge size={12} strokeWidth={2.4} style={{ color: needsReview.length > 0 ? "var(--warning-on)" : "var(--success-on)" }} />
         </span>
-        <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Gauge Reliability</span>
-        <InfoTip text="Whether each gauge behaves like its nearby neighbors when it rains (group middle ≥10 mm). One dry day is weather; repeating high or silent across many rainy days suggests a gauge to check." />
+        <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Gauge Health</span>
+        <InfoTip text="Long-term gauge drift, not a single rainy day. We compare each gauge to its 3 neighbors on rainy days (≥10 mm). One odd day is weather; repeating high or silent over many days suggests the gauge itself needs checking." />
         <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-          {hasAny ? (needsReview.length > 0 ? `${needsReview.length} need review · ${normalRows.length} OK` : `All ${merged.length} OK`) + (insufficientRows.length ? ` · ${insufficientRows.length} need more data` : "") : "no stations graded"}
+          {hasAny ? (needsReview.length > 0 ? `${needsReview.length} need review · ${normalRows.length} consistent` : `All ${merged.length} consistent`) + (insufficientRows.length ? ` · ${insufficientRows.length} need more rain` : "") : "no stations graded"}
         </span>
       </div>
 
@@ -309,20 +330,19 @@ function GaugeReliabilityCard({
         <div style={{ padding: "14px 16px", fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>No reliability data for this run.</div>
       ) : (
         <>
-          {/* Needs review — always visible */}
+          {/* Needs review — always visible, one concise line per gauge */}
           {needsReview.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {needsReview.slice(0, 12).map((r) => (
-                <div key={r.station_id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--divider)" }}>
+                <div key={r.station_id} title={r.tip} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 14px", borderBottom: "1px solid var(--divider)" }}>
                   <span style={{ width: 7, height: 7, borderRadius: 99, background: dotColor(r.status), marginTop: 6, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{r.station_id}</span>
-                      <Badge tone={tone(r.status)} dot={r.status === "suspect"} style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>{r.status === "suspect" ? "Suspect" : "Watch"}</Badge>
-                      <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>{r.badgeNote}</span>
+                      <Badge tone={r.badgeTone} dot={r.status === "suspect"} style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}><Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{r.badgeLabel}</Badge>
                     </div>
-                    <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: r.status === "suspect" ? "var(--danger-on)" : "var(--warning-on)", marginTop: 2 }}>{r.reason}</div>
-                    <div style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.4, marginTop: 1 }}>{r.detail}</div>
+                    <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: r.status === "suspect" ? "var(--danger)" : "var(--warning-on)", marginTop: 3 }}>{r.reason}</div>
+                    <div style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.5, marginTop: 2 }}>{r.detail}</div>
                   </div>
                 </div>
               ))}
@@ -331,7 +351,7 @@ function GaugeReliabilityCard({
           ) : (
             <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, background: "color-mix(in oklab, var(--success) 6%, var(--surface))", borderBottom: healthyCount > 0 ? "1px solid var(--border)" : "none" }}>
               <CheckCircle2 size={13} style={{ color: "var(--success)", flexShrink: 0 }} />
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500 }}>No gauge looks consistently off — flags are likely real weather.</span>
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500 }}>No gauge shows a long-term drift — flagged days are likely real weather.</span>
             </div>
           )}
 
@@ -343,17 +363,17 @@ function GaugeReliabilityCard({
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", background: "var(--surface-alt)", border: "none", borderTop: needsReview.length === 0 ? "none" : "1px solid var(--border)", cursor: "pointer", fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-secondary)", fontFamily: "inherit" }}
             >
               {showHealthy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {showHealthy ? "Hide" : "Show"} {healthyCount} {healthyCount === 1 ? "other" : "others"} — {normalRows.length} OK{insufficientRows.length ? ` · ${insufficientRows.length} need more rain` : ""}
+              {showHealthy ? "Hide" : "Show"} {healthyCount} {healthyCount === 1 ? "other" : "others"} — {normalRows.length} consistent{insufficientRows.length ? ` · ${insufficientRows.length} need more rain` : ""}
             </button>
           )}
           {showHealthy && visibleHealthy.length > 0 && (
             <div style={{ borderTop: "1px solid var(--divider)", background: "var(--surface-alt)" }}>
               {visibleHealthy.map((r) => (
-                <div key={r.station_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderBottom: "1px solid var(--divider)", opacity: r.status === "insufficient_data" ? 0.9 : 1 }}>
+                <div key={r.station_id} title={r.tip} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid var(--divider)" }}>
                   <span style={{ width: 6, height: 6, borderRadius: 99, background: dotColor(r.status), flexShrink: 0 }} />
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{r.station_id}</span>
-                  <Badge tone={tone(r.status)} style={{ fontSize: 11 }}>{r.status === "normal" ? "OK" : "Not enough data"}</Badge>
-                  <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", marginLeft: "auto", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>{r.badgeNote}</span>
+                  <Badge tone={r.badgeTone} style={{ fontSize: 11 }}><Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />{r.badgeLabel}</Badge>
+                  <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", marginLeft: "auto", maxWidth: 360, textAlign: "right", lineHeight: 1.4 }}>{r.detail}</span>
                 </div>
               ))}
             </div>
@@ -374,6 +394,20 @@ export function OverviewTab({ result }: OverviewTabProps) {
   const { summary, flagged_data, quality_report } = result;
 
   const stationPoints = useMemo(() => {
+    // Gauge status per station — same rule as the card, so dot + badge share one hue.
+    const healthById = new Map<string, string>();
+    for (const h of result.station_health ?? []) healthById.set(h.station_id, h.status);
+    const stuckById = new Map<string, string>();
+    for (const s of result.station_stuck_health ?? []) stuckById.set(s.station_id, s.status);
+    function gaugeFor(id: string): "suspect" | "watch" | "consistent" | "need_more" | null {
+      const hs = healthById.get(id);
+      const ls = stuckById.get(id);
+      if (hs === "suspect" || ls === "suspect") return "suspect";
+      if (hs === "watch" || ls === "watch") return "watch";
+      if (hs === "insufficient_data" || ls === "insufficient_data") return "need_more";
+      if (hs === "normal" || ls === "normal") return "consistent";
+      return null;
+    }
     const totals = new Map<string, { lat: number; lon: number; readings: number; anomalies: number }>();
     for (const row of flagged_data) {
       const t = totals.get(row.station_id) ?? { lat: row.latitude, lon: row.longitude, readings: 0, anomalies: 0 };
@@ -384,8 +418,9 @@ export function OverviewTab({ result }: OverviewTabProps) {
     return Array.from(totals, ([station_id, v]) => ({
       station_id, latitude: v.lat, longitude: v.lon,
       total_readings: v.readings, anomaly_count: v.anomalies,
+      gaugeStatus: gaugeFor(station_id),
     }));
-  }, [flagged_data]);
+  }, [flagged_data, result.station_health, result.station_stuck_health]);
 
   const statCards = [
     {
@@ -446,9 +481,9 @@ export function OverviewTab({ result }: OverviewTabProps) {
               <span style={{ color: "var(--text-tertiary)" }}>·</span>
               <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{stationPoints.length} stations</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--success)", flexShrink: 0 }} />Typical</span>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--danger)", flexShrink: 0 }} />Flagged</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>
+              <span title="No flagged days — tracks neighbors" style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--success)", flexShrink: 0 }} />Typical</span>
+              <span title="At least one flagged day vs neighbors" style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--danger)", flexShrink: 0 }} />Flagged</span>
             </div>
           </div>
           <div style={{ padding: 10 }}>

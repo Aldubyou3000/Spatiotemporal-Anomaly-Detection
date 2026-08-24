@@ -13,32 +13,33 @@ import { useTheme } from "@/context/ThemeContext";
 function healthTone(status: StationHealth["status"]): "success" | "warning" | "danger" | "neutral" {
   if (status === "suspect") return "danger";
   if (status === "watch") return "warning";
-  if (status === "normal") return "success";
+  if (status === "normal") return "neutral";
   return "neutral";
 }
-function stuckTone(status: StationStuckHealth["status"]): "success" | "warning" | "danger" | "neutral" | "teal" {
+function stuckTone(status: StationStuckHealth["status"]): "success" | "warning" | "danger" | "neutral" {
   if (status === "suspect") return "danger";
   if (status === "watch") return "warning";
-  if (status === "normal") return "teal";
+  if (status === "normal") return "neutral";
   return "neutral";
 }
-function humanHighReason(h: StationHealth | null): { title: string; detail: string } | null {
+function humanHighReason(h: StationHealth | null): { title: string; detail: string; tip?: string } | null {
   if (!h) return null;
-  if (h.status === "insufficient_data") return { title: "Not enough rainy days", detail: `Only ${h.rain_days} rainy days — needs more wet weather to judge.` };
+  if (h.status === "insufficient_data") return { title: "Need more rain to judge", detail: `Only ${h.rain_days} rainy days so far. Not enough to judge long-term drift.`, tip: `Only ${h.rain_days} rainy days checked` };
   const pct = h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) : 0;
-  const top = h.top_rate != null ? Math.round(h.top_rate * 100) : 0;
-  if (h.status === "suspect") return { title: "Reads consistently high", detail: `${pct}% above neighbors on ${h.rain_days} rainy days · highest on ${top}% of them.` };
-  if (h.status === "watch") return { title: "Reads a bit high", detail: `${pct}% above neighbors · top on ${top}% of rainy days.` };
-  return { title: "Looks typical", detail: "In line with neighbors. Flag is likely real weather." };
+  const tip = `On ${h.rain_days} rainy days checked, this gauge averaged about ${pct}% above its neighbors.`;
+  if (h.status === "suspect") return { title: "Needs check — reads high", detail: `On rainy days it reads about ${pct}% higher than nearby gauges. Flagged days may be inflated — prioritize a site check.`, tip };
+  if (h.status === "watch") return { title: "Watch — reads a bit high", detail: `On rainy days about ${pct}% higher than nearby gauges. Flagged days may be a bit high, still need review.`, tip };
+  return { title: "No long-term drift", detail: "Sensor tracks neighbors on rainy days. Flagged days still stand out — likely real local rain, not just sensor drift, and still need review.", tip };
 }
-function humanLowReason(s: StationStuckHealth | null): { title: string; detail: string } | null {
+function humanLowReason(s: StationStuckHealth | null): { title: string; detail: string; tip?: string } | null {
   if (!s) return null;
-  if (s.status === "insufficient_data") return { title: "Not enough rainy days", detail: `Only ${s.rain_days} rainy days — needs more wet weather.` };
+  if (s.status === "insufficient_data") return { title: "Need more rain to judge", detail: `Only ${s.rain_days} rainy days so far. Not enough to judge.`, tip: `Only ${s.rain_days} rainy days checked` };
   const pct = s.zero_rate != null ? Math.round(s.zero_rate * 100) : 0;
   const streak = s.max_zero_streak ?? 0;
-  if (s.status === "suspect") return { title: "Often silent when it rained", detail: `At 0 on ${pct}% of ${s.rain_days} rainy days · longest run ${streak} days.` };
-  if (s.status === "watch") return { title: "Sometimes silent", detail: `At 0 on ${pct}% of ${s.rain_days} rainy days · run of ${streak}.` };
-  return { title: "Responds when it rains", detail: "No pattern of staying at zero." };
+  const tip = `On ${s.rain_days} rainy days, it stayed at 0 on ${pct}% of them. Longest silent run: ${streak} days.`;
+  if (s.status === "suspect") return { title: "Needs check — often silent", detail: `Stayed at 0 on about ${pct}% of rainy days while neighbors got rain. Gaps may be missed rain — check for clog.`, tip };
+  if (s.status === "watch") return { title: "Watch — sometimes silent", detail: `Stayed at 0 on about ${pct}% of rainy days. Some rain may have been missed.`, tip };
+  return { title: "No long-term drift", detail: "Sensor responds when it rains. Flagged silent days still stand out and need review, but no stuck pattern found.", tip };
 }
 
 interface AnomalyReportTabProps {
@@ -288,10 +289,9 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                     </div>
                     <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--danger)" : "color-mix(in oklab, var(--danger) 50%, transparent)", borderRadius: 99 }} /></div>
                     {h && (
-                      <span title={h.status === "suspect" ? `Suspect · ${h.bias_ratio?.toFixed(2)}× · top ${h.top_rate != null ? Math.round(h.top_rate * 100) + "%" : "—"}` : h.status === "watch" ? `Watch · ${h.bias_ratio?.toFixed(2)}×` : undefined} style={{ display: "inline-flex" }}>
+                      <span title={h.status === "normal" ? `On ${h.rain_days} rainy days checked — no long-term drift. Flagged days still stand out.` : h.status === "insufficient_data" ? `${h.rain_days} rainy days checked` : `On ${h.rain_days} rainy days, this gauge reads about ${h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) + "% higher" : "high"} than neighbors.`} style={{ display: "inline-flex" }}>
                         <Badge tone={healthTone(h.status)} dot={h.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                          {h.status === "suspect" ? "Suspect" : h.status === "watch" ? "Watch" : h.status === "insufficient_data" ? "Not enough data" : "OK"}
-                          {h.bias_ratio != null ? ` · ${h.bias_ratio.toFixed(2)}×` : ""}
+                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{h.status === "suspect" ? "Needs check" : h.status === "watch" ? "Watch" : h.status === "insufficient_data" ? "Need more rain" : "No drift"}
                         </Badge>
                       </span>
                     )}
@@ -324,10 +324,9 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                     </div>
                     <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--teal)" : "color-mix(in oklab, var(--teal) 50%, transparent)", borderRadius: 99 }} /></div>
                     {s && (
-                      <span title={`${s.zero_rate != null ? Math.round(s.zero_rate * 100) + "% at 0" : ""} · streak ${s.max_zero_streak}`} style={{ display: "inline-flex" }}>
+                      <span title={s.status === "normal" ? `On ${s.rain_days} rainy days checked — no pattern of staying at zero. Flagged days still stand out.` : s.status === "insufficient_data" ? `${s.rain_days} rainy days checked` : `On ${s.rain_days} rainy days, stayed at 0 on ${s.zero_rate != null ? Math.round(s.zero_rate * 100) + "%" : ""} of them. Longest run: ${s.max_zero_streak} days.`} style={{ display: "inline-flex" }}>
                         <Badge tone={stuckTone(s.status)} dot={s.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                          {s.status === "suspect" ? "Suspect" : s.status === "watch" ? "Watch" : s.status === "insufficient_data" ? "Not enough data" : "OK"}
-                          {s.zero_rate != null ? ` · ${Math.round(s.zero_rate * 100)}%` : ""}
+                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{s.status === "suspect" ? "Needs check" : s.status === "watch" ? "Watch" : s.status === "insufficient_data" ? "Need more rain" : "No drift"}
                         </Badge>
                       </span>
                     )}
@@ -362,14 +361,23 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
               </div>
             </div>
 
-            {/* One-line reliability note — replaces the 70px banner */}
-            {activeHealth && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--divider)", background: (selectedHealth?.status === "suspect" || selectedStuck?.status === "suspect") ? "var(--danger-soft)" : (selectedHealth?.status === "watch" || selectedStuck?.status === "watch") ? "var(--warning-soft)" : "var(--surface-alt)" }}>
-                <Gauge size={12} strokeWidth={2.4} style={{ color: (selectedHealth?.status === "suspect" || selectedStuck?.status === "suspect") ? "var(--danger)" : (selectedHealth?.status === "watch" || selectedStuck?.status === "watch") ? "var(--warning)" : "var(--text-tertiary)", flexShrink: 0 }} />
-                <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap" }}>{activeHealth.title}</span>
-                <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>· {activeHealth.detail}</span>
-              </div>
-            )}
+            {/* One-line reliability note — mode-specific so High/Silent stay consistent with the left list */}
+            {activeHealth && (() => {
+              const activeStatus = mode === "high" ? selectedHealth?.status : selectedStuck?.status;
+              const isSuspect = activeStatus === "suspect";
+              const isWatch = activeStatus === "watch";
+              const isNormal = activeStatus === "normal";
+              const bg = isSuspect ? "var(--danger-soft)" : isWatch ? "var(--warning-soft)" : isNormal ? "var(--surface-alt)" : "var(--surface-alt)";
+              const iconColor = isSuspect ? "var(--danger)" : isWatch ? "var(--warning)" : isNormal ? "var(--text-tertiary)" : "var(--text-tertiary)";
+              const titleColor = isNormal ? "var(--text-secondary)" : "var(--text)";
+              return (
+                <div title={(activeHealth as any).tip ?? undefined} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--divider)", background: bg }}>
+                  <Gauge size={12} strokeWidth={2.4} style={{ color: iconColor, flexShrink: 0 }} />
+                  <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: titleColor, whiteSpace: "nowrap" }}>{activeHealth.title}</span>
+                  <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>· {activeHealth.detail}</span>
+                </div>
+              );
+            })()}
 
             {/* Provenance — single line, replaces 4-col grid */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--divider)", background: "var(--surface-sunken)", flexWrap: "wrap" }}>

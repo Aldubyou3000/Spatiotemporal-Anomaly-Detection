@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, Download, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/cn";
 
 interface Column<T> {
@@ -106,18 +107,7 @@ export function DataTable<T>({
 
   const isFiltered = search.trim() !== "" || Object.values(dropdowns).some(Boolean);
 
-  const selectStyle: React.CSSProperties = {
-    height: 30, padding: "0 28px 0 10px",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--r-md)",
-    background: "var(--surface)",
-    color: "var(--text)",
-    fontSize: "var(--font-xs)",
-    fontFamily: "inherit",
-    outline: "none",
-    cursor: "pointer",
-    appearance: "none",
-  };
+
 
   return (
     <div className="bg-surface border border-border rounded-xl overflow-hidden" style={{ boxShadow: "var(--shadow-sm)" }}>
@@ -184,31 +174,14 @@ export function DataTable<T>({
 
         {/* Per-column dropdown filters */}
         {(filterFields ?? []).map((field) => (
-          <div key={field.key} style={{ position: "relative", flexShrink: 0 }}>
-            <select
-              value={dropdowns[field.key]}
-              onChange={(e) => handleDropdownChange(field.key, e.target.value)}
-              style={{
-                ...selectStyle,
-                color: dropdowns[field.key] ? "var(--text)" : "var(--text-muted)",
-                borderColor: dropdowns[field.key] ? "var(--brand)" : "var(--border)",
-                background: dropdowns[field.key] ? "color-mix(in oklab, var(--brand) 8%, var(--surface))" : "var(--surface)",
-              }}
-              aria-label={field.label}
-            >
-              <option value="" style={{ color: "var(--text-muted)", background: "var(--surface)" }}>{field.label}</option>
-              {field.options.map((o) => (
-                <option key={o.value} value={o.value} style={{ color: "var(--text)", background: "var(--surface)" }}>{o.label}</option>
-              ))}
-            </select>
-            {/* Chevron icon */}
-            <svg
-              width="10" height="10" viewBox="0 0 10 10" fill="none"
-              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--text-muted)" }}
-            >
-              <path d="M2 3.5 L5 6.5 L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <Select
+            key={field.key}
+            value={dropdowns[field.key]}
+            onChange={(v) => handleDropdownChange(field.key, v)}
+            width={150}
+            ariaLabel={field.label}
+            options={[{ value: "", label: field.label }, ...field.options]}
+          />
         ))}
 
         {/* Result count + clear all */}
