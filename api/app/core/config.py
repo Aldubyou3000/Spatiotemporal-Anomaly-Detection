@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str
     allowed_origins: str = "http://localhost:3000"
     cookie_secure: bool = False
-    # "none" required when web (vercel.app) and api (onrender.com) are cross-site.
-    # Lax/Strict are blocked as third-party cookies — see browser "SameSite" warning.
-    cookie_samesite: str = "none"
+    # "lax" for localhost http dev; set to "none" in production when web (vercel.app)
+    # and api (onrender.com) are cross-site — otherwise Chrome blocks Lax/Strict.
+    cookie_samesite: str = "lax"
     dev_mode: bool = True
 
     # CSRF — double-submit cookie pattern; generate with: secrets.token_hex(32)
