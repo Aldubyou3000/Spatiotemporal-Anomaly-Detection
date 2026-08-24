@@ -3,12 +3,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class StationLocation(BaseModel):
-    station_id: str
-    latitude: float
-    longitude: float
-
-
 class DailyReading(BaseModel):
     station_id: str
     date: date
@@ -69,9 +63,33 @@ class ProcessSummary(BaseModel):
     anomaly_rate: float
     anomalous_stations: int
     processing_time_seconds: float
-    contamination: float
     date_range_start: date | None = None
     date_range_end: date | None = None
+
+
+class StationHealth(BaseModel):
+    """Per-station bias report card — plain mean ratios, not LOF.
+
+    Computed post-LOF from the same flagged daily frame + Zone B neighbor map.
+    Lets an analyst tell "one weird day" (weather) from "weird every rain day"
+    (gauge calibration / exposure) at a glance.
+    """
+
+    station_id: str
+    latitude: float
+    longitude: float
+    status: str = Field(
+        description="normal | watch | suspect | insufficient_data — see zones_service thresholds."
+    )
+    bias_ratio: float | None = Field(
+        default=None, description="Mean(station / group_median) over rain days; null if insufficient_data."
+    )
+    rain_days: int = Field(description="Rain days where group median ≥ 10 mm.")
+    top_rate: float | None = Field(
+        default=None, description="Fraction of rain days this station was the group's max (null if insufficient_data)."
+    )
+    times_flagged: int = Field(description="How many LOF flags this station has in this run.")
+    median_group_size: int = Field(description="Median number of stations reporting on its rain days.")
 
 
 class ProcessResult(BaseModel):
@@ -86,4 +104,8 @@ class ProcessResult(BaseModel):
         description="All rows of the (converted) input data for the Raw Data tab.",
     )
     raw_total_rows: int = 0
+    station_health: list[StationHealth] = Field(
+        default_factory=list,
+        description="Per-station bias report card (post-LOF, plain averages — see StationHealth).",
+    )
     processed_at: datetime

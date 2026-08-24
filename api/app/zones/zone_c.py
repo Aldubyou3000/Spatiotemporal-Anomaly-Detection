@@ -52,7 +52,6 @@ _rng = np.random.default_rng(0)
 
 def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
                                  neighbors: dict,
-                                 contamination: float = 0.05,
                                  n_neighbors: int = 15) -> tuple:
     """
     Zone C: Anomaly Detection using Local Outlier Factor (LOF), per day.
@@ -72,9 +71,6 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
         REQUIRED. Neighbor dict from Zone B:
         {station_id: [{"neighbor_id": str, "distance_km": float}, ...]}.
         Used to restrict each station's same-day comparison to its spatial group.
-    contamination : float
-        Retained for signature/back-compat. NOT used to force a flag fraction;
-        flagging is governed by ANOMALY_THRESHOLD on the LOF score.
     n_neighbors : int
         Upper bound on LOF's neighbor count; automatically reduced to fit the
         number of stations available on each day.

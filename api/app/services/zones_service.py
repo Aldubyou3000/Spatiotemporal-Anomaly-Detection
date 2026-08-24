@@ -28,9 +28,17 @@ from ..schemas.zones import (
     ProcessSummary,
     QualityReport,
     StationAnomalySummary,
+    StationHealth,
 )
 
 REQUIRED_COLUMNS = {"station_id", "date", "latitude", "longitude"}
+
+# ── Station health thresholds (tunable; see StationHealth doc) ─────────
+HEALTH_MIN_RAIN_DAYS = 5  # fewer than this → insufficient_data (can't judge)
+HEALTH_WATCH_RATIO = 1.15  # 1.15–1.50× median → watch
+HEALTH_SUSPECT_RATIO = 1.50  # >1.50× → suspect
+HEALTH_SUSPECT_TOP_RATE = 0.60  # or top on >60% of rain days → suspect
+HEALTH_RAIN_FLOOR_MM = 10.0  # only days where group median ≥ this count as "rain days"
 
 
 class ZoneProcessingError(ValueError):
@@ -75,14 +83,14 @@ def parse_csv_to_dataframe(file_bytes: bytes) -> pd.DataFrame:
     return df
 
 
-def run_pipeline(file_bytes: bytes, contamination: float = 0.05) -> ProcessResult:
+def run_pipeline(file_bytes: bytes) -> ProcessResult:
     """End-to-end zone pipeline for a single combined CSV (back-compat)."""
     raw_df = parse_csv_to_dataframe(file_bytes)
-    return _run_from_dataframe(raw_df, contamination)
+    return _run_from_dataframe(raw_df)
 
 
 def run_pipeline_multi(
-    files: list[tuple[str, bytes]], contamination: float = 0.05
+    files: list[tuple[str, bytes]],
 ) -> ProcessResult:
     """End-to-end zone pipeline for a batch of uploaded files.
 
@@ -95,13 +103,12 @@ def run_pipeline_multi(
     raw_df, conversion_stats = convert_uploads(files)
     return _run_from_dataframe(
         raw_df,
-        contamination,
         hourly_duplicates=conversion_stats.get("hourly_duplicates_dropped", 0),
     )
 
 
 def _run_from_dataframe(
-    raw_df: pd.DataFrame, contamination: float, hourly_duplicates: int = 0
+    raw_df: pd.DataFrame, hourly_duplicates: int = 0
 ) -> ProcessResult:
     """Run Zone A→B→C on an already-parsed raw frame and project to a ProcessResult."""
     start = time.perf_counter()
@@ -110,17 +117,26 @@ def _run_from_dataframe(
     raw_total_rows = int(len(raw_df))
 
     cleaned, quality_report_dict = process_zone_a(raw_df)
-    neighbors_dict = zone_b_haversine_grouping(cleaned)
+
+    # Guard: Zone A promises no NaN in rainfall, but a daily-format CSV with an
+    # isolated single-day NaN can survive its gap logic. Drop any residual NaN
+    # rows here so sklearn LOF (which raises on NaN) never sees them. Hourly
+    # uploads are unaffected — those days already vanished at the hourly stage.
+    _rain_col_cleaned = "rainfall" if "rainfall" in cleaned.columns else "rainfall_mm"
+    if _rain_col_cleaned in cleaned.columns and bool(cleaned[_rain_col_cleaned].isna().any()):  # type: ignore[attr-defined]
+        cleaned = cleaned[cleaned[_rain_col_cleaned].notna()].copy().reset_index(drop=True)  # type: ignore[attr-defined]
+
+    neighbors_dict = zone_b_haversine_grouping(cleaned)  # type: ignore[arg-type]
     flagged, anomaly_dict = zone_c_lof_anomaly_detection(
-        cleaned,
+        cleaned,  # type: ignore[arg-type]
         neighbors=neighbors_dict,
-        contamination=contamination,
         n_neighbors=3,
     )
 
     elapsed = time.perf_counter() - start
 
     rain_col = "rainfall" if "rainfall" in flagged.columns else "rainfall_mm"
+    station_health = _compute_station_health(flagged, neighbors_dict, anomaly_dict, rain_col)
     total_anomalies = int(flagged["is_anomaly"].sum())
     total_rows = int(len(flagged))
     anomaly_rate = round(100 * total_anomalies / total_rows, 2) if total_rows else 0.0
@@ -135,7 +151,6 @@ def _run_from_dataframe(
         anomaly_rate=anomaly_rate,
         anomalous_stations=len(anomaly_dict),
         processing_time_seconds=round(elapsed, 3),
-        contamination=contamination,
         date_range_start=_to_date(date_min),
         date_range_end=_to_date(date_max),
     )
@@ -143,12 +158,13 @@ def _run_from_dataframe(
     return ProcessResult(
         summary=summary,
         quality_report=_normalize_quality_report(quality_report_dict, hourly_duplicates),
-        cleaned_data=_dataframe_to_readings(cleaned, rain_col, with_lof=False),
-        flagged_data=_dataframe_to_readings(flagged, rain_col, with_lof=True),
+        cleaned_data=_dataframe_to_readings(cleaned, rain_col, with_lof=False),  # type: ignore[arg-type]
+        flagged_data=_dataframe_to_readings(flagged, rain_col, with_lof=True),  # type: ignore[arg-type]
         neighbors=_normalize_neighbors(neighbors_dict),
-        anomaly_summary=_normalize_anomaly_summary(anomaly_dict, flagged, rain_col),
+        anomaly_summary=_normalize_anomaly_summary(anomaly_dict, flagged, rain_col),  # type: ignore[arg-type]
         raw_preview=raw_preview,
         raw_total_rows=raw_total_rows,
+        station_health=station_health,
         processed_at=datetime.now(timezone.utc),
     )
 
@@ -211,7 +227,7 @@ def _normalize_anomaly_summary(
         return []
     station_locs = (
         flagged_df[["station_id", "latitude", "longitude"]]
-        .drop_duplicates("station_id")
+        .drop_duplicates(subset=["station_id"])  # type: ignore[call-overload]
         .set_index("station_id")
         .to_dict(orient="index")
     )
@@ -244,6 +260,122 @@ def _normalize_anomaly_summary(
         )
     out.sort(key=lambda s: s.anomaly_count, reverse=True)
     return out
+
+
+def _compute_station_health(
+    flagged_df: pd.DataFrame,
+    neighbors: dict[str, list[dict[str, Any]]],
+    anomaly_dict: dict[str, list[dict[str, Any]]],
+    rain_col: str,
+) -> list[StationHealth]:
+    """Post-LOF bias report card — plain averages, not LOF.
+
+    For each station, looks at all *rain days* (group median ≥ HEALTH_RAIN_FLOOR_MM)
+    where its Zone B group had ≥4 stations reporting. On each rain day computes
+    station / group_median. The mean of those ratios is `bias_ratio`.
+    Classification:
+      rain_days < 5                  → insufficient_data
+      bias_ratio > 1.50 or top>60%   → suspect
+      bias_ratio > 1.15              → watch
+      else                           → normal
+    """
+    if flagged_df.empty or not neighbors:
+        return []
+
+    # Index for fast per-date lookups: (station_id, date) → rainfall
+    # Normalize date to date-only (no time) for grouping.
+    df = flagged_df.copy()
+    # Ensure date is a pandas datetime for .dt access; _to_date already normalized flagged dates to date objects via readings, but flagged_df here is still Timestamps.
+    if not pd.api.types.is_datetime64_any_dtype(df["date"]):  # type: ignore[arg-type]
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")  # type: ignore[call-overload]
+
+    # Build lookup: date → {station_id: rainfall}
+    # Use date only (ignore time) since flagged is daily.
+    df["_date_only"] = pd.to_datetime(df["date"]).dt.date  # type: ignore[attr-defined]
+    # station → (lat, lon) for the health record
+    loc_map: dict[str, dict[str, float]] = (  # type: ignore[assignment]
+        df[["station_id", "latitude", "longitude"]]
+        .drop_duplicates(subset=["station_id"])  # type: ignore[call-overload]
+        .set_index("station_id")
+        .to_dict(orient="index")  # type: ignore[call-overload]
+    )
+
+    # Group rainfall by date for fast median calc
+    # date → dict station_id → rainfall
+    date_groups: dict[Any, dict[str, float]] = {}
+    for _, row in df.iterrows():  # type: ignore[attr-defined]
+        d = row["_date_only"]
+        sid = str(row["station_id"])
+        val = float(row[rain_col]) if not _isnan(row[rain_col]) else float("nan")
+        if math.isnan(val):
+            continue
+        date_groups.setdefault(d, {})[sid] = val
+
+    health: list[StationHealth] = []
+    for station_id in df["station_id"].unique():  # type: ignore[attr-defined]
+        sid = str(station_id)
+        neighbor_ids = [str(n["neighbor_id"]) for n in neighbors.get(sid, [])]
+        group_ids = [sid] + neighbor_ids
+        loc = loc_map.get(sid, {"latitude": 0.0, "longitude": 0.0})
+
+        ratios: list[float] = []
+        top_hits = 0
+        group_sizes: list[int] = []
+
+        # Iterate over every calendar date in the dataset where this station reported
+        station_dates = set(df[df["station_id"] == sid]["_date_only"].tolist())  # type: ignore[attr-defined]
+        for d in station_dates:
+            day_map = date_groups.get(d, {})
+            # Only stations in this station's group that actually reported that day
+            group_vals = [day_map[g] for g in group_ids if g in day_map]
+            if len(group_vals) < 4:  # same gate as Zone C's MIN_STATIONS_PER_DAY
+                continue
+            group_median = float(np.median(np.array(group_vals, dtype=float)))  # type: ignore[arg-type]
+            if group_median < HEALTH_RAIN_FLOOR_MM:
+                continue  # dry/drizzle day — not informative
+            group_sizes.append(len(group_vals))
+            own_val = day_map.get(sid)
+            if own_val is None or group_median < 1e-9:
+                continue
+            ratios.append(own_val / group_median)  # type: ignore[operator]
+            if own_val == max(group_vals):
+                top_hits += 1
+
+        rain_days = len(ratios)
+        times_flagged = len(anomaly_dict.get(sid, []))
+
+        if rain_days < HEALTH_MIN_RAIN_DAYS:
+            status = "insufficient_data"
+            bias_ratio = None
+            top_rate = None
+        else:
+            bias_ratio = round(float(np.mean(ratios)), 2)
+            top_rate = round(top_hits / rain_days, 2) if rain_days else 0.0
+            if bias_ratio > HEALTH_SUSPECT_RATIO or (top_rate is not None and top_rate > HEALTH_SUSPECT_TOP_RATE):
+                status = "suspect"
+            elif bias_ratio > HEALTH_WATCH_RATIO:
+                status = "watch"
+            else:
+                status = "normal"
+
+        health.append(
+            StationHealth(
+                station_id=sid,
+                latitude=float(loc.get("latitude", 0.0)),
+                longitude=float(loc.get("longitude", 0.0)),
+                status=status,
+                bias_ratio=bias_ratio,
+                rain_days=rain_days,
+                top_rate=top_rate,
+                times_flagged=times_flagged,
+                median_group_size=int(np.median(group_sizes)) if group_sizes else 0,
+            )
+        )
+
+    # Sort: suspect first, then watch, then normal, then insufficient; within tier by bias_ratio desc
+    order = {"suspect": 0, "watch": 1, "normal": 2, "insufficient_data": 3}
+    health.sort(key=lambda h: (order.get(h.status, 99), -(h.bias_ratio or 0)))
+    return health
 
 
 def _normalize_quality_report(report: dict[str, Any], hourly_duplicates: int = 0) -> QualityReport:

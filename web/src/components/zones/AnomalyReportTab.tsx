@@ -1,11 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, MapPin, Plus, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, Gauge, HelpCircle, MapPin, Plus, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { StationChart, type NeighborSeries } from "./StationChart";
 import { DateComparisonChart, type DateComparisonBar } from "./DateComparisonChart";
-import type { ProcessResult } from "@/types/zones";
+import type { ProcessResult, StationHealth } from "@/types/zones";
+
+// ── Health helpers — consistent with globals.css tokens & Badge tones ─────
+function healthTone(status: StationHealth["status"]): "success" | "warning" | "danger" | "neutral" {
+  if (status === "suspect") return "danger";
+  if (status === "watch") return "warning";
+  if (status === "normal") return "success";
+  return "neutral";
+}
+function healthLabel(h: StationHealth): string {
+  if (h.status === "insufficient_data") return `Not enough data · ${h.rain_days} rain days`;
+  if (h.status === "normal") return `Normal · ${h.bias_ratio!.toFixed(2)}×`;
+  if (h.status === "watch") return `Watch · ${h.bias_ratio!.toFixed(2)}×`;
+  return `Suspect · ${h.bias_ratio!.toFixed(2)}×`;
+}
+function healthTooltip(h: StationHealth): string {
+  if (h.status === "insufficient_data") return `Only ${h.rain_days} rain days where its group median was ≥10 mm — not enough history to judge. More data will grade this station.`;
+  const pct = h.top_rate != null ? `${Math.round(h.top_rate * 100)}%` : "—";
+  return `Reads ${h.bias_ratio!.toFixed(2)}× its group median on ${h.rain_days} rain days · top on ${pct} of them · flagged ${h.times_flagged}×. Ratio >1.50 or top >60% → suspect; >1.15 → watch.`;
+}
 
 interface AnomalyReportTabProps {
   result: ProcessResult;
@@ -49,6 +69,14 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
     [result.anomaly_summary],
   );
 
+  const healthById = useMemo(() => {
+    const m = new Map<string, StationHealth>();
+    for (const h of result.station_health ?? []) m.set(h.station_id, h);
+    return m;
+  }, [result.station_health]);
+
+  const selectedHealth = selectedId ? healthById.get(selectedId) ?? null : null;
+
   const selectedStation = result.anomaly_summary.find((s) => s.station_id === selectedId) ?? null;
   const selectedTimeseries = selectedId ? (flaggedByStation.get(selectedId) ?? []) : [];
 
@@ -75,8 +103,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
           <div>
             <h3 style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>No anomalies detected.</h3>
             <p style={{ margin: "4px 0 0", fontSize: "var(--font-sm)", color: "var(--text-secondary)" }}>
-              All processed readings fell within the local outlier threshold ({result.summary.contamination}).
-              Try a higher contamination value to surface borderline outliers.
+              All processed readings fell within the fixed LOF threshold (score &gt; -1.5). No readings with strong local deviation were found.
             </p>
           </div>
         </div>
@@ -163,6 +190,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
           {result.anomaly_summary.map((station) => {
             const selected = station.station_id === selectedId;
             const barPct = (station.anomaly_count / maxAnomalies) * 100;
+            const h = healthById.get(station.station_id) ?? null;
             return (
               <button
                 key={station.station_id}
@@ -202,6 +230,14 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                     {station.latitude.toFixed(3)}, {station.longitude.toFixed(3)}
                   </span>
                 </div>
+                {h && (
+                  <span title={healthTooltip(h)} style={{ display: "inline-flex" }}>
+                    <Badge tone={healthTone(h.status)} dot={h.status === "suspect"} style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+                      {h.status === "suspect" ? "Suspect" : h.status === "watch" ? "Watch" : h.status === "normal" ? "Normal" : "Not enough data"}
+                      {h.bias_ratio != null ? ` · ${h.bias_ratio.toFixed(2)}×` : ` · ${h.rain_days} days`}
+                    </Badge>
+                  </span>
+                )}
               </button>
             );
           })}
@@ -241,6 +277,57 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                 )}
               </div>
             </div>
+
+            {/* Station health banner — plain-English triage: one weird day vs. every rain day */}
+            {selectedHealth && (
+              <div
+                title={healthTooltip(selectedHealth)}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "10px 16px",
+                  borderBottom: "1px solid var(--border)",
+                  background:
+                    selectedHealth.status === "suspect" ? "var(--danger-soft)"
+                    : selectedHealth.status === "watch" ? "var(--warning-soft)"
+                    : selectedHealth.status === "normal" ? "var(--success-soft)"
+                    : "var(--surface-sunken)",
+                }}
+              >
+                <div style={{
+                  width: 26, height: 26, borderRadius: "var(--r-md)",
+                  background: selectedHealth.status === "suspect" ? "var(--danger)" : selectedHealth.status === "watch" ? "var(--warning)" : selectedHealth.status === "normal" ? "var(--success)" : "var(--text-tertiary)",
+                  color: "#fff", display: "grid", placeItems: "center", flexShrink: 0, marginTop: 1,
+                }}>
+                  <Gauge size={13} strokeWidth={2.4} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{
+                      fontSize: "var(--font-sm)", fontWeight: 600,
+                      color: selectedHealth.status === "suspect" ? "var(--danger-on)" : selectedHealth.status === "watch" ? "var(--warning-on)" : selectedHealth.status === "normal" ? "var(--success-on)" : "var(--text-secondary)",
+                    }}>
+                      {selectedHealth.status === "suspect" ? "Suspect gauge — reads high every rain day" : selectedHealth.status === "watch" ? "Watch — reads a bit high" : selectedHealth.status === "normal" ? "No systematic bias — likely weather" : "Not enough rain days to judge"}
+                    </span>
+                    <Badge tone={healthTone(selectedHealth.status)} style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+                      {selectedHealth.bias_ratio != null ? `${selectedHealth.bias_ratio.toFixed(2)}× median` : `${selectedHealth.rain_days} rain days`}
+                      {selectedHealth.top_rate != null ? ` · top ${Math.round(selectedHealth.top_rate * 100)}%` : ""}
+                    </Badge>
+                    <span style={{ display: "inline-flex", alignItems: "center", color: "var(--text-tertiary)" }} title={healthTooltip(selectedHealth)}>
+                      <HelpCircle size={12} strokeWidth={2} style={{ cursor: "help" }} />
+                    </span>
+                  </div>
+                  <p style={{ margin: "4px 0 0", fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    {selectedHealth.status === "suspect"
+                      ? `Reads ${selectedHealth.bias_ratio!.toFixed(2)}× its group median on ${selectedHealth.rain_days} rain days, highest on ${selectedHealth.top_rate != null ? Math.round(selectedHealth.top_rate * 100) : "—"}% of them. Recommend calibration / exposure check — not a one-off storm.`
+                      : selectedHealth.status === "watch"
+                      ? `Reads ${selectedHealth.bias_ratio!.toFixed(2)}× median on ${selectedHealth.rain_days} rain days. Keep an eye on it — not yet a clear gauge fault.`
+                      : selectedHealth.status === "normal"
+                      ? `Normal on ${selectedHealth.rain_days} rain days — this flag looks like a localized weather event rather than a gauge issue.`
+                      : `Only ${selectedHealth.rain_days} rain days with group median ≥10 mm. Grade will appear after more rainy data is collected.`}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* KV metrics */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: "1px solid var(--border)" }}>

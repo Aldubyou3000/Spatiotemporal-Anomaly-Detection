@@ -58,9 +58,22 @@ export interface ProcessSummary {
   anomaly_rate: number;
   anomalous_stations: number;
   processing_time_seconds: number;
-  contamination: number;
   date_range_start: string | null;
   date_range_end: string | null;
+}
+
+export type HealthStatus = "normal" | "watch" | "suspect" | "insufficient_data";
+
+export interface StationHealth {
+  station_id: string;
+  latitude: number;
+  longitude: number;
+  status: HealthStatus;
+  bias_ratio: number | null;
+  rain_days: number;
+  top_rate: number | null;
+  times_flagged: number;
+  median_group_size: number;
 }
 
 export interface ProcessResult {
@@ -72,5 +85,6 @@ export interface ProcessResult {
   anomaly_summary: StationAnomalySummary[];
   raw_preview: Record<string, unknown>[];
   raw_total_rows: number;
+  station_health: StationHealth[];
   processed_at: string;
 }

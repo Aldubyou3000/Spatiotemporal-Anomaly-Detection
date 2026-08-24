@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTicketTechnicians } from "@/hooks/useTechnicians";
 import {
   Activity,
@@ -193,7 +193,7 @@ function CreateTicketModal({
           return (
             <div key={s.n} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", cursor: done ? "pointer" : "default" }} onClick={() => { if (done) setStep(s.n); }}>
-                <div style={{ width: 20, height: 20, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700, background: active ? "var(--brand)" : done ? "var(--success)" : "var(--surface-sunken)", color: active || done ? "#fff" : "var(--text-muted)", border: `1.5px solid ${active ? "var(--brand)" : done ? "var(--success)" : "var(--border)"}`, flexShrink: 0 }}>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: "var(--font-xs)", fontWeight: 700, background: active ? "var(--brand)" : done ? "var(--success)" : "var(--surface-sunken)", color: active || done ? "#fff" : "var(--text-muted)", border: `1.5px solid ${active ? "var(--brand)" : done ? "var(--success)" : "var(--border)"}`, flexShrink: 0 }}>
                   {done ? <CheckCircle2 size={11} strokeWidth={3} /> : s.n}
                 </div>
                 <span style={{ fontSize: "var(--font-xs)", fontWeight: active ? 600 : 500, color: active ? "var(--text)" : "var(--text-muted)", whiteSpace: "nowrap" }}>{s.label}</span>
@@ -370,11 +370,12 @@ function CreateTicketModal({
 // ─── Pipeline Diagram ─────────────────────────────────────────────────────────
 
 function PipelineDiagram({
-  running, activeStage, progress, result,
+  running, activeStage, progress, finalizing, result,
 }: {
   running: boolean;
   activeStage: 0 | 1 | 2;
   progress: number;
+  finalizing: boolean;
   result: ProcessResult | null;
 }) {
   const stages = [
@@ -420,20 +421,20 @@ function PipelineDiagram({
 
   return (
     <div style={{ padding: "20px 24px 24px" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 28px 1fr 28px 1fr", gap: 8, alignItems: "stretch" }}>
+      {/* Desktop: 3-column grid with connectors. Mobile: stacked single column */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignItems: "stretch" }}>
         {stages.map((s, i) => {
-          const isDone  = hasResult || (running && activeStage > s.idx);
-          const isActive = running && activeStage === s.idx;
-          const isIdle  = !running && !hasResult;
+          const isDone  = hasResult || finalizing || (running && activeStage > s.idx);
+          const isActive = running && !finalizing && activeStage === s.idx;
+          const isIdle  = !running && !hasResult && !finalizing;
           const barWidth = isActive ? stageProgress(s.idx) : isDone ? 100 : 0;
-          const connectorActive = running && activeStage >= s.idx;
 
           return (
             <div key={s.key} style={{ display: "contents" }}>
               <div style={{
                 padding: "16px 18px",
                 borderRadius: "var(--r-lg)",
-                background: isActive ? s.soft : "var(--surface-alt)",
+                background: isDone ? s.soft : isActive ? "var(--surface-sunken)" : "var(--surface-alt)",
                 border: `1px solid ${isActive || isDone ? s.color : "var(--border)"}`,
                 transition: "background .25s ease, border-color .25s ease",
                 position: "relative", overflow: "hidden",
@@ -480,32 +481,16 @@ function PipelineDiagram({
                   {s.desc}
                 </div>
 
-                {/* Progress bar — only while this stage is actively running */}
-                {isActive && (
+                {/* Progress bar */}
+                {(isActive || isDone) && (
                   <div style={{
                     position: "absolute", left: 0, bottom: 0, height: 2,
                     width: `${barWidth}%`,
                     background: s.color,
-                    transition: "width .2s ease",
+                    transition: "width .3s ease-out",
                   }} />
                 )}
               </div>
-
-              {/* Connector arrow */}
-              {i < stages.length - 1 && (
-                <div style={{ display: "grid", placeItems: "center" }}>
-                  <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
-                    <line x1="2" y1="10" x2="26" y2="10"
-                      stroke="var(--border-strong)" strokeWidth="1.5"
-                      strokeDasharray={connectorActive ? "3 3" : "0"}>
-                      {connectorActive && (
-                        <animate attributeName="stroke-dashoffset" from="6" to="0" dur="0.5s" repeatCount="indefinite" />
-                      )}
-                    </line>
-                    <path d="M22 6 L26 10 L22 14" stroke="var(--border-strong)" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              )}
             </div>
           );
         })}
@@ -521,10 +506,10 @@ export default function ZonesPage() {
   const toast = useToast();
   const {
     files, setFiles,
-    contamination, setContamination,
     running, setRunning,
     activeStage, setActiveStage,
     progress, setProgress,
+    finalizing, setFinalizing,
     result, setResult,
     error, setError,
     configOpen, setConfigOpen,
@@ -532,6 +517,19 @@ export default function ZonesPage() {
   } = useZones();
   const { technicians } = useTicketTechnicians();
   const [createStation, setCreateStation] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function handleCancel() {
+    if (tickerRef.current) clearInterval(tickerRef.current);
+    tickerRef.current = null;
+    setRunning(false);
+    setProgress(0);
+    setActiveStage(0);
+    setFinalizing(false);
+    setError(null);
+    setConfirmCancel(false);
+  }
 
   async function handleProcess() {
     if (files.length === 0 || running) return;
@@ -539,22 +537,31 @@ export default function ZonesPage() {
     setError(null);
     setActiveStage(0);
     setProgress(0);
+    setFinalizing(false);
 
-    // Start the animation ticker — organic pacing per spec
+    // Start the animation ticker — smooth 60fps-ish
     let p = 0;
-    const ticker = setInterval(() => {
-      p += 4 + Math.random() * 8;
-      const clamped = Math.min(99, p); // hold at 99 until API resolves
+    tickerRef.current = setInterval(() => {
+      p += 0.8 + Math.random() * 1.5;
+      const clamped = Math.min(100, p);
       setProgress(clamped);
       if      (clamped >= 33 && clamped < 66) setActiveStage(1);
       else if (clamped >= 66)                  setActiveStage(2);
-    }, 110);
+
+      if (clamped >= 100) {
+        clearInterval(tickerRef.current!);
+        tickerRef.current = null;
+        setFinalizing(true);
+      }
+    }, 60);
 
     try {
-      const data = await zonesApi.process(files, contamination);
-      clearInterval(ticker);
+      const data = await zonesApi.process(files);
+      if (tickerRef.current) clearInterval(tickerRef.current);
+      tickerRef.current = null;
       setProgress(100);
       setActiveStage(2);
+      setFinalizing(false);
       setResult(data);
       setConfigOpen(false);
       const anomalies = data.flagged_data.filter((r) => r.is_anomaly).length;
@@ -563,9 +570,11 @@ export default function ZonesPage() {
         description: `${filePrefix}${data.cleaned_data.length.toLocaleString()} readings cleaned · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
       });
     } catch (err) {
-      clearInterval(ticker);
+      if (tickerRef.current) clearInterval(tickerRef.current);
+      tickerRef.current = null;
       const msg = err instanceof Error ? err.message : "Failed to process file.";
       setError(msg);
+      setFinalizing(false);
       toast.error("Pipeline failed", { description: msg });
     } finally {
       setRunning(false);
@@ -603,7 +612,7 @@ export default function ZonesPage() {
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <ChevronRight
-                size={14}
+                size={16}
                 style={{ color: "var(--text-muted)", transition: "transform 0.2s ease", transform: configOpen ? "rotate(90deg)" : "rotate(0deg)", flexShrink: 0 }}
               />
               <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>
@@ -611,7 +620,7 @@ export default function ZonesPage() {
               </span>
               {!configOpen && files.length > 0 && (
                 <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", background: "var(--surface-sunken)", padding: "1px 8px", borderRadius: "var(--r-sm)", fontFamily: "var(--font-mono)" }}>
-                  {files.length === 1 ? files[0].name : `${files.length} files`} · contamination = {contamination.toFixed(2)}
+                  {files.length === 1 ? files[0].name : `${files.length} files`}
                 </span>
               )}
               {!configOpen && files.length === 0 && (
@@ -625,7 +634,7 @@ export default function ZonesPage() {
 
           {/* Collapsible body */}
           {configOpen && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--gap-card)", padding: "16px 20px 20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--gap-card)", padding: "16px 20px 20px" }}>
               {/* File upload */}
               <div style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", overflow: "hidden" }}>
                 <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--divider)" }}>
@@ -642,31 +651,14 @@ export default function ZonesPage() {
                   <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Run configuration</h3>
                 </div>
                 <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                      <span style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                        LOF contamination
-                        <InfoTip text="The expected proportion of anomalies in your data. Lower values (e.g. 0.05) flag only the most extreme outliers. Higher values (e.g. 0.20) flag more readings as suspicious. Start conservative and increase if anomalies are missed." />
-                      </span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{contamination.toFixed(2)}</span>
-                    </div>
-                    <input
-                      type="range" min={0.01} max={0.30} step={0.01}
-                      value={contamination} onChange={(e) => setContamination(Number(e.target.value))}
-                      disabled={running} style={{ width: "100%", accentColor: "var(--brand)" }}
-                    />
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-xs)", color: "var(--text-muted)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
-                      <span>0.01 — conservative</span>
-                      <span>0.30 — aggressive</span>
-                    </div>
-                  </div>
-
                   <Button
                     size="lg" style={{ width: "100%" }}
-                    disabled={files.length === 0 || running} loading={running}
-                    onClick={handleProcess}
+                    variant={running ? "danger" : "primary"}
+                    disabled={files.length === 0 && !running}
+                    loading={false}
+                    onClick={running ? () => setConfirmCancel(true) : handleProcess}
                   >
-                    {running ? "Processing…" : "Run Pipeline"}
+                    {running ? "Stop" : "Run Pipeline"}
                   </Button>
 
                   {error && (
@@ -689,18 +681,15 @@ export default function ZonesPage() {
               <InfoTip text="CSV → Zone A cleans and validates readings → Zone B groups stations by proximity → Zone C runs Local Outlier Factor to flag anomalies." />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-muted)", background: "var(--surface-sunken)", padding: "2px 8px", borderRadius: "var(--r-sm)", fontFamily: "var(--font-mono)" }}>
-                contamination = {contamination.toFixed(2)}
-              </span>
               {running && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--success-on)", padding: "2px 8px", borderRadius: "var(--r-full)", background: "var(--success-soft)" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--success)", animation: "live-pulse 2s ease-out infinite" }} />
-                  Running
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--font-xs)", fontWeight: 500, color: finalizing ? "var(--warning-on)" : "var(--success-on)", padding: "2px 8px", borderRadius: "var(--r-full)", background: finalizing ? "var(--warning-soft)" : "var(--success-soft)", transition: "background .3s, color .3s" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 999, background: finalizing ? "var(--warning)" : "var(--success)", animation: "live-pulse 2s ease-out infinite" }} />
+                  {finalizing ? "Finalizing…" : "Running"}
                 </span>
               )}
             </div>
           </div>
-          <PipelineDiagram running={running} activeStage={activeStage} progress={progress} result={result} />
+          <PipelineDiagram running={running} activeStage={activeStage} progress={progress} finalizing={finalizing} result={result} />
         </div>
 
         {/* Results */}
@@ -717,6 +706,17 @@ export default function ZonesPage() {
         <CreateTicketModal
           stationId={createStation} technicians={technicians}
           onClose={() => setCreateStation(null)} file={files[0] ?? null}
+        />
+      )}
+
+      {confirmCancel && (
+        <ConfirmDialog
+          title="Stop pipeline?"
+          message="The detection pipeline is still running. Are you sure you want to stop it?"
+          confirmLabel="Stop pipeline"
+          isDangerous
+          onConfirm={handleCancel}
+          onCancel={() => setConfirmCancel(false)}
         />
       )}
     </div>

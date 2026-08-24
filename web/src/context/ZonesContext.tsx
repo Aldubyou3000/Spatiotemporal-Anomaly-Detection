@@ -6,14 +6,14 @@ import type { ProcessResult } from "@/types/zones";
 interface ZonesState {
   files: File[];
   setFiles: (f: File[]) => void;
-  contamination: number;
-  setContamination: (v: number) => void;
   running: boolean;
   setRunning: (v: boolean) => void;
   activeStage: 0 | 1 | 2;
   setActiveStage: (v: 0 | 1 | 2) => void;
   progress: number;
   setProgress: (v: number) => void;
+  finalizing: boolean;
+  setFinalizing: (v: boolean) => void;
   result: ProcessResult | null;
   setResult: (r: ProcessResult | null) => void;
   error: string | null;
@@ -27,10 +27,10 @@ const ZonesContext = createContext<ZonesState | null>(null);
 
 export function ZonesProvider({ children }: { children: ReactNode }) {
   const [files, setFiles] = useState<File[]>([]);
-  const [contamination, setContamination] = useState(0.05);
   const [running, setRunning] = useState(false);
   const [activeStage, setActiveStage] = useState<0 | 1 | 2>(0);
   const [progress, setProgress] = useState(0);
+  const [finalizing, setFinalizing] = useState(false);
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(true);
@@ -41,6 +41,7 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
     setError(null);
     setProgress(0);
     setActiveStage(0);
+    setFinalizing(false);
     setRunning(false);
     setConfigOpen(true);
   }
@@ -48,10 +49,10 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
   return (
     <ZonesContext.Provider value={{
       files, setFiles,
-      contamination, setContamination,
       running, setRunning,
       activeStage, setActiveStage,
       progress, setProgress,
+      finalizing, setFinalizing,
       result, setResult,
       error, setError,
       configOpen, setConfigOpen,

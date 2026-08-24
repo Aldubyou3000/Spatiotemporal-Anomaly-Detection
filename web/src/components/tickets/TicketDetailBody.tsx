@@ -195,7 +195,7 @@ function AssigneeCell({ assignees, assigneeName }: { assignees?: DetailAssignee[
               marginLeft: -7, width: 24, height: 24, borderRadius: "50%",
               background: "var(--surface)", border: "2px solid var(--surface-sunken)",
               display: "grid", placeItems: "center",
-              fontSize: 9.5, fontWeight: 700, color: "var(--text-muted)",
+              fontSize: "var(--font-xs)", fontWeight: 700, color: "var(--text-muted)",
               fontVariantNumeric: "tabular-nums", flexShrink: 0,
             }}>
               +{overflow}
@@ -436,7 +436,7 @@ function buildActivity(m: DetailModel): ActivityEntry[] {
     out.push({
       id: "created", kind: "created", who: "Pipeline", ts: m.createdAt,
       text: conf !== null
-        ? `Anomaly detected via Zone ${m.zone} LOF (contamination ${conf.toFixed(2)})`
+        ? `Anomaly detected via Zone ${m.zone} LOF (score ${conf.toFixed(2)})`
         : `Anomaly detected via Zone ${m.zone} — ticket opened`,
     });
   } else if (m.createdAt) {
@@ -534,7 +534,7 @@ function PhotoGrid({ photos, onOpen }: { photos: DetailPhoto[]; onOpen: (u: stri
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p.photo_url} alt={`Attachment ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px", background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)", fontSize: 10, color: "white", fontFamily: "var(--font-mono)" }}>
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px", background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)", fontSize: "var(--font-xs)", color: "white", fontFamily: "var(--font-mono)" }}>
               IMG_{String(i + 1).padStart(3, "0")}
             </div>
           </button>
@@ -560,7 +560,7 @@ function PriorRoundCard({ round: r, onOpenPhoto }: { round: PriorRound; onOpenPh
         aria-expanded={open}
         style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", background: "transparent", border: 0, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}
       >
-        <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 8px", borderRadius: "var(--r-sm)", background: "var(--surface)", border: "1px solid var(--border)", fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.02em", flexShrink: 0 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 8px", borderRadius: "var(--r-sm)", background: "var(--surface)", border: "1px solid var(--border)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.02em", flexShrink: 0 }}>
           Round {r.round}
         </span>
         {r.submittedAt && (
@@ -701,14 +701,14 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
         <div style={{ flex: 1, minWidth: 0, padding: "16px 20px 16px 18px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 7px", borderRadius: "var(--r-sm)", background: "var(--surface-sunken)", border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.03em" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 7px", borderRadius: "var(--r-sm)", background: "var(--surface-sunken)", border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.03em" }}>
                 {prefix}-{model.refId}
               </span>
               <Badge tone={STATUS_TONE[model.status]} dot>{STATUS_LABEL[model.status]}</Badge>
               {model.priority && <Badge tone={PRIORITY_TONE[model.priority]}>{model.priority[0].toUpperCase() + model.priority.slice(1)} priority</Badge>}
               {model.zone && <Badge tone={ZONE_TONE[model.zone] ?? "info"}>Zone {model.zone}</Badge>}
               {round > 1 && (
-                <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 7px", borderRadius: "var(--r-sm)", background: "color-mix(in oklab, var(--warning) 10%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 25%, transparent)", fontSize: 11, fontWeight: 600, color: "var(--warning-on)", letterSpacing: "0.02em" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 7px", borderRadius: "var(--r-sm)", background: "color-mix(in oklab, var(--warning) 10%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 25%, transparent)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--warning-on)", letterSpacing: "0.02em" }}>
                   Round {round}
                 </span>
               )}
@@ -723,7 +723,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
                   <>
                     {model.subtitle && <span style={{ color: "var(--text-tertiary)" }}>·</span>}
                     <span>linked to</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--brand)", background: "var(--brand-soft)", padding: "1px 6px", borderRadius: "var(--r-sm)" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-xs)", fontWeight: 700, color: "var(--brand)", background: "var(--brand-soft)", padding: "1px 6px", borderRadius: "var(--r-sm)" }}>
                       TKT-{model.linkedTicketNum ?? model.linkedTicketId?.slice(0, 8).toUpperCase()}
                     </span>
                   </>

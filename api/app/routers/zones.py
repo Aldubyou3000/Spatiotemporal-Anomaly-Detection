@@ -6,8 +6,10 @@ and returns the structured result. Analyst-only.
 """
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ..core.dependencies import require_analyst
 from ..schemas.auth import UserProfile
@@ -17,24 +19,21 @@ from ..services.zones_service import ZoneProcessingError, run_pipeline_multi
 logger = logging.getLogger("zones.router")
 
 router = APIRouter(prefix="/api/zones", tags=["zones"])
+limiter = Limiter(key_func=get_remote_address)
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 @router.post("/process", response_model=ProcessResult)
+@limiter.limit("10/minute")
 async def process_zones(
+    request: Request,
     files: list[UploadFile] = File(
         ...,
         description=(
             "One or more CSVs: raw HMDAS station files (auto-detected and converted) "
             "and/or a combined CSV (station_id, date, latitude, longitude, rainfall)."
         ),
-    ),
-    contamination: float = Query(
-        0.05,
-        ge=0.01,
-        le=0.5,
-        description="Expected fraction of anomalies (Zone C LOF contamination).",
     ),
     _user: UserProfile = Depends(require_analyst),
 ) -> ProcessResult:
@@ -68,7 +67,7 @@ async def process_zones(
         payload.append((name, contents))
 
     try:
-        return await run_in_threadpool(run_pipeline_multi, payload, contamination)
+        return await run_in_threadpool(run_pipeline_multi, payload)
     except ZoneProcessingError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

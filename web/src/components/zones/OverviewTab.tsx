@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, Database, AlertTriangle, HelpCircle, MapPin, CheckCircle2, XCircle } from "lucide-react";
+import { Clock, Database, AlertTriangle, Gauge, HelpCircle, MapPin, CheckCircle2, XCircle } from "lucide-react";
 import dynamic from "next/dynamic";
-import type { ProcessResult } from "@/types/zones";
+import { Badge } from "@/components/ui/Badge";
+import type { ProcessResult, StationHealth } from "@/types/zones";
 
 const StationMap = dynamic(() => import("./StationMap").then((m) => m.StationMap), {
   ssr: false,
@@ -242,6 +243,88 @@ function QualityReportCard({
   );
 }
 
+// ── Station Health Card (post-LOF bias profile) ────────────────────────────
+
+function StationHealthCard({ station_health }: { station_health: StationHealth[] }) {
+  const suspect = station_health.filter((h) => h.status === "suspect");
+  const watch = station_health.filter((h) => h.status === "watch");
+  const normal = station_health.filter((h) => h.status === "normal");
+  const insufficient = station_health.filter((h) => h.status === "insufficient_data");
+
+  const hasAny = station_health.length > 0;
+  const allGood = suspect.length === 0 && watch.length === 0;
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
+        <Gauge size={14} strokeWidth={2.2} style={{ color: suspect.length > 0 ? "var(--danger)" : watch.length > 0 ? "var(--warning)" : "var(--success)" }} />
+        <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Station Health</span>
+        <InfoTip text="Per-station bias vs. its Zone B neighbors on rain days (group median ≥10 mm). Ratio is mean(station ÷ median). >1.50 or top >60% → suspect; >1.15 → watch; <5 rain days → not enough data." />
+        <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+          {hasAny ? `${station_health.length} stations graded` : "no stations graded"}
+        </span>
+      </div>
+
+      {!hasAny ? (
+        <div style={{ padding: "16px 20px", fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>No station health available for this run.</div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: "1px solid var(--border)" }}>
+            {[
+              { label: "Suspect", count: suspect.length, color: "var(--danger)", soft: "var(--danger-soft)" },
+              { label: "Watch", count: watch.length, color: "var(--warning)", soft: "var(--warning-soft)" },
+              { label: "Normal", count: normal.length, color: "var(--success)", soft: "var(--success-soft)" },
+              { label: "Not enough data", count: insufficient.length, color: "var(--text-tertiary)", soft: "var(--surface-sunken)" },
+            ].map(({ label, count, color, soft }) => (
+              <div key={label} style={{ padding: "14px 16px", borderRight: label !== "Not enough data" ? "1px solid var(--border)" : undefined, background: count > 0 ? soft : "transparent" }}>
+                <div style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 99, background: color, flexShrink: 0 }} />
+                  {label}
+                </div>
+                <div style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-metric)", fontWeight: 700, color: count > 0 ? color : "var(--text-tertiary)" }}>{count}</div>
+              </div>
+            ))}
+          </div>
+
+          {(suspect.length > 0 || watch.length > 0) && (
+            <div style={{ padding: "12px 20px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              {[...suspect, ...watch].slice(0, 12).map((h) => (
+                <span
+                  key={h.station_id}
+                  title={`${h.station_id}: ${h.bias_ratio != null ? `${h.bias_ratio.toFixed(2)}× median` : `${h.rain_days} rain days`} · top ${h.top_rate != null ? Math.round(h.top_rate * 100) + "%" : "—"} · flagged ${h.times_flagged}×`}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "4px 10px", borderRadius: "var(--r-full)",
+                    background: h.status === "suspect" ? "var(--danger-soft)" : "var(--warning-soft)",
+                    border: `1px solid color-mix(in oklab, ${h.status === "suspect" ? "var(--danger)" : "var(--warning)"} 18%, transparent)`,
+                    fontSize: "var(--font-xs)", fontWeight: 500,
+                  }}
+                >
+                  <span style={{ fontFamily: "var(--font-mono)", color: h.status === "suspect" ? "var(--danger)" : "var(--warning-on)", fontVariantNumeric: "tabular-nums" }}>{h.station_id}</span>
+                  <Badge tone={h.status === "suspect" ? "danger" : "warning"} style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+                    {h.bias_ratio != null ? `${h.bias_ratio.toFixed(2)}×` : `${h.rain_days}d`}
+                    {h.top_rate != null ? ` · ${Math.round(h.top_rate * 100)}%` : ""}
+                  </Badge>
+                </span>
+              ))}
+              {(suspect.length + watch.length) > 12 && (
+                <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>+{suspect.length + watch.length - 12} more</span>
+              )}
+            </div>
+          )}
+
+          {allGood && (
+            <div style={{ padding: "10px 20px", background: "color-mix(in oklab, var(--success) 6%, var(--surface))", display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)" }}>
+              <CheckCircle2 size={13} style={{ color: "var(--success)", flexShrink: 0 }} />
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500 }}>All graded stations are within normal bias. Flags are likely localized weather, not gauge issues.</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface OverviewTabProps {
@@ -308,7 +391,7 @@ export function OverviewTab({ result }: OverviewTabProps) {
               <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-secondary)" }}>{label}</span>
               <InfoTip text={tip} />
             </div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", lineHeight: 1, fontVariantNumeric: "tabular-nums", fontFamily: "var(--font-mono)", marginBottom: 6 }}>{value}</div>
+            <div style={{ fontSize: "var(--font-metric)", fontWeight: 700, color: "var(--text)", lineHeight: 1, fontVariantNumeric: "tabular-nums", fontFamily: "var(--font-mono)", marginBottom: 6 }}>{value}</div>
             <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>{hint}</div>
           </div>
         ))}
@@ -363,8 +446,8 @@ export function OverviewTab({ result }: OverviewTabProps) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { label: "Contamination", value: summary.contamination, tip: "The expected proportion of anomalies in your data. A value of 0.05 means roughly 5% of readings are expected to be anomalous. Lower values flag only the most extreme outliers." },
               { label: "Spatial neighbors", value: 3, tip: "How many nearby stations each station is compared against when detecting anomalies. A higher number considers a wider geographic context." },
+              { label: "Detection threshold", value: "LOF 1.5", tip: "Fixed LOF score cutoff — readings with LOF score worse than -1.5 and above 10 mm are flagged. Flat daily clusters and dry/drizzle days are guarded separately." },
             ].map(({ label, value, tip }) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "var(--font-sm)" }}>
                 <span style={{ color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 5 }}>
@@ -377,6 +460,9 @@ export function OverviewTab({ result }: OverviewTabProps) {
           </div>
         </div>
       </div>
+
+      {/* ── Row 3.5: Station health (bias profile) — post-LOF triage ── */}
+      <StationHealthCard station_health={result.station_health ?? []} />
 
       {/* ── Row 4: Quality report ── */}
       <QualityReportCard quality_report={quality_report} anomaly_summary={anomaly_summary} />
