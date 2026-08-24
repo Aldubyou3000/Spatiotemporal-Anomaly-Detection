@@ -6,7 +6,9 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Clock,
   Compass,
   Download,
@@ -775,6 +777,50 @@ function RunningSkeleton() {
   );
 }
 
+function FullAnomalyTable({
+  data,
+  columns,
+  searchKeys,
+  filterFields,
+}: {
+  data: DailyReading[];
+  columns: { key: keyof DailyReading & string; header: string; mono?: boolean; width?: string; align?: "left" | "right" | "center"; render?: (value: unknown) => React.ReactNode }[];
+  searchKeys: (keyof DailyReading & string)[];
+  filterFields: FilterField[];
+}) {
+  const [open, setOpen] = useState(false);
+  if (data.length === 0) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-secondary)",
+          background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-full)",
+          padding: "5px 12px", cursor: "pointer",
+        }}
+      >
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        {open ? "Hide full table" : `View full table — ${data.length} rows`}
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <DataTable<DailyReading>
+            data={data} columns={columns} pageSize={10}
+            caption="All flagged anomaly events" emptyMessage="No anomalies — nothing to list."
+            onDownload={() => import("@/lib/csv").then((m) => m.downloadCsv("anomalies.csv", data as unknown as Record<string, unknown>[]))}
+            downloadLabel="Download anomalies"
+            searchKeys={searchKeys}
+            filterFields={filterFields}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTicket: (stationId: string) => void }) {
   const cleanedColumns = useMemo(() => [
     { key: "station_id" as const, header: "Station", mono: true, width: "20%" },
@@ -910,15 +956,7 @@ function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTi
           <TabPanel value="neighbors"><NeighborGroupsTab neighbors={result.neighbors} /></TabPanel>
           <TabPanel value="anomalies">
             <AnomalyReportTab result={result} onCreateTicket={onCreateTicket} />
-            <div style={{ marginTop: 32 }}>
-              <DataTable<DailyReading>
-                data={result.flagged_data.filter((r) => r.is_anomaly)} columns={flaggedColumns} pageSize={10}
-                caption="All flagged anomaly events" emptyMessage="No anomalies — nothing to list."
-                onDownload={() => import("@/lib/csv").then((m) => m.downloadCsv("anomalies.csv", result.flagged_data.filter((r) => r.is_anomaly) as unknown as Record<string, unknown>[]))}
-                downloadLabel="Download anomalies"
-                searchKeys={["station_id", "date"]}
-                filterFields={flaggedFilterFields} />
-            </div>
+            <FullAnomalyTable data={result.flagged_data.filter((r) => r.is_anomaly)} columns={flaggedColumns} searchKeys={["station_id", "date"]} filterFields={flaggedFilterFields} />
           </TabPanel>
         </div>
       </Tabs>
