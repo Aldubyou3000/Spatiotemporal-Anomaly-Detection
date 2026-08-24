@@ -435,59 +435,63 @@ export function OverviewTab({ result }: OverviewTabProps) {
         ))}
       </div>
 
-      {/* ── Row 2: Map */}
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <MapPin size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
-            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Station Map</span>
-            <span style={{ color: "var(--text-tertiary)" }}>·</span>
-            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{stationPoints.length} stations</span>
+      {/* ── Row 2: Map (narrow) + side stack — map no longer spans full width */}
+      <div className="overview-map-row" style={{ display: "grid", gridTemplateColumns: "1.45fr 0.95fr", gap: 12, alignItems: "start" }}>
+        {/* Map — ~60% width, less of a long rectangle */}
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <MapPin size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
+              <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Station Map</span>
+              <span style={{ color: "var(--text-tertiary)" }}>·</span>
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{stationPoints.length} stations</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--success)", flexShrink: 0 }} />Typical</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--danger)", flexShrink: 0 }} />Flagged</span>
+            </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--success)", flexShrink: 0 }} />Typical</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--danger)", flexShrink: 0 }} />Flagged</span>
+          <div style={{ padding: 10 }}>
+            <StationMap stations={stationPoints} height={360} />
           </div>
         </div>
-        <div style={{ padding: 12 }}>
-          <StationMap stations={stationPoints} height={420} />
-        </div>
-      </div>
 
-      {/* ── Row 3: Date range + Next steps ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", padding: "14px 16px", boxShadow: "var(--shadow-xs)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <Clock size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
-            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Date Range</span>
-            <InfoTip text="Earliest and latest dates in your cleaned CSV." />
+        {/* Right stack — stays beside map on desktop, stacks under on mobile */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", padding: "14px 16px", boxShadow: "var(--shadow-xs)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Clock size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
+              <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Date Range</span>
+              <InfoTip text="Earliest and latest dates in your cleaned CSV." />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{summary.date_range_start ?? "—"}</div>
+              <div style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>→</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{summary.date_range_end ?? "—"}</div>
+            </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{summary.date_range_start ?? "—"}</div>
-            <div style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>→</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{summary.date_range_end ?? "—"}</div>
-          </div>
-        </div>
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", padding: "14px 16px", boxShadow: "var(--shadow-xs)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <CheckCircle2 size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
-            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>What to do next</span>
-            <InfoTip text="No thresholds to tune — just review and dispatch." />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            {[
-              { label: "Review flagged stations", tip: "Open Anomaly Report for the per-date comparison." },
-              { label: "Check Gauge Reliability", tip: "One-off spike = weather; repeating pattern = possible gauge issue." },
-              { label: "Create a ticket", tip: "Technicians see it on their phones immediately." },
-            ].map(({ label, tip }, idx, arr) => (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: idx !== arr.length - 1 ? "1px solid var(--divider)" : "none" }}>
-                <span style={{ width: 18, height: 18, borderRadius: 999, background: "var(--brand-soft)", color: "var(--brand)", border: "1px solid color-mix(in oklab, var(--brand) 14%, transparent)", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0, lineHeight: 1 }}>{idx + 1}</span>
-                <span style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 5 }}>{label}<InfoTip text={tip} /></span>
-              </div>
-            ))}
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", padding: "14px 16px", boxShadow: "var(--shadow-xs)", flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <CheckCircle2 size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
+              <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>What to do next</span>
+              <InfoTip text="No thresholds to tune — just review and dispatch." />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {[
+                { label: "Review flagged stations", tip: "Open Anomaly Report for the per-date comparison." },
+                { label: "Check Gauge Reliability", tip: "One-off spike = weather; repeating pattern = possible gauge issue." },
+                { label: "Create a ticket", tip: "Technicians see it on their phones immediately." },
+              ].map(({ label, tip }, idx, arr) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: idx !== arr.length - 1 ? "1px solid var(--divider)" : "none" }}>
+                  <span style={{ width: 18, height: 18, borderRadius: 999, background: "var(--brand-soft)", color: "var(--brand)", border: "1px solid color-mix(in oklab, var(--brand) 14%, transparent)", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0, lineHeight: 1 }}>{idx + 1}</span>
+                  <span style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 5 }}>{label}<InfoTip text={tip} /></span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
+      <style>{`@media (max-width: 880px) { .overview-map-row { grid-template-columns: 1fr !important; } }`}</style>
 
       {/* ── Row 4: Gauge reliability (unified) ── */}
       <GaugeReliabilityCard station_health={result.station_health ?? []} station_stuck_health={result.station_stuck_health ?? []} />
