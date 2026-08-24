@@ -19,7 +19,7 @@ interface StationMapProps {
   height?: number;
 }
 
-const LIGHT_TILES = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+const LIGHT_TILES = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
 const DARK_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 const ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
@@ -87,19 +87,32 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
     const bounds = L.latLngBounds([]);
     stations.forEach((station) => {
       const isAnomalous = station.anomaly_count > 0;
-      const color = isAnomalous
-        ? getCssVar("--danger") || "#E53535"
-        : getCssVar("--success") || "#0DB976";
-      const fill = isAnomalous
-        ? getCssVar("--danger") || "#E53535"
-        : getCssVar("--success") || "#0DB976";
+      const baseColor = isAnomalous
+        ? getCssVar("--danger") || "#DC2626"
+        : getCssVar("--success") || "#16A34A";
+
+      // Subtle halo for flagged stations — makes anomalous points feel alive
+      // without adding new hues. Low opacity, non-interactive, sits behind marker.
+      if (isAnomalous) {
+        const halo = L.circleMarker([station.latitude, station.longitude], {
+          radius: 14,
+          fillColor: baseColor,
+          fillOpacity: 0.13,
+          color: "transparent",
+          weight: 0,
+          interactive: false,
+        }).addTo(map);
+        markersRef.current.push(halo);
+      }
 
       const marker = L.circleMarker([station.latitude, station.longitude], {
-        radius: isAnomalous ? 9 : 6,
-        color,
+        radius: isAnomalous ? 8 : 6,
+        // White stroke keeps the dot crisp on both Voyager blues and dark tiles,
+        // while the solid fill carries the semantic color.
+        color: "#ffffff",
         weight: 2,
-        fillColor: fill,
-        fillOpacity: isAnomalous ? 0.55 : 0.35,
+        fillColor: baseColor,
+        fillOpacity: isAnomalous ? 0.96 : 0.88,
       }).addTo(map);
 
       marker.bindPopup(
@@ -128,7 +141,7 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
       marker.bindTooltip(station.station_id, {
         permanent: true,
         direction: "top",
-        offset: L.point(0, isAnomalous ? -11 : -8),
+        offset: L.point(0, isAnomalous ? -12 : -9),
         className: "station-label",
       });
 
