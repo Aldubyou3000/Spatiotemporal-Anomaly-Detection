@@ -64,6 +64,8 @@ def _set_auth_cookies(
     """
     samesite = settings.cookie_samesite
     secure = settings.cookie_secure
+    # Partitioned (CHIPS) required for cross-site SameSite=None cookies in modern Chrome.
+    partitioned = samesite == "none"
 
     fp = make_session_fingerprint(_client_ip(request), _client_ua(request), settings.csrf_secret)
     csrf = secrets.token_hex(32)
@@ -80,11 +82,12 @@ def _set_auth_cookies(
             samesite=samesite,
             max_age=max_age,
             path=path,
+            partitioned=partitioned,
         )
 
     # CSRF token — readable by JS so it can be sent in X-CSRF-Token header.
     # For cross-site web (vercel.app) + api (onrender.com) it must be SameSite=None
-    # (with Secure) so the browser keeps it; the header check remains primary defence.
+    # (with Secure + Partitioned) so the browser keeps it; header check remains primary defence.
     response.set_cookie(
         "csrf_token", csrf,
         httponly=False,
@@ -92,6 +95,7 @@ def _set_auth_cookies(
         samesite=samesite,
         max_age=_ACCESS_MAX_AGE,
         path="/",
+        partitioned=partitioned,
     )
 
 
