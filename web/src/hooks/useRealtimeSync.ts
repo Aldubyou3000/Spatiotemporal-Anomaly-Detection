@@ -21,6 +21,15 @@ import { mutate as globalMutate } from "swr";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// Same-origin on Vercel so the SSE stream goes through the rewrite proxy —
+// first-party cookies, no third-party blocking.
+function apiBase(): string {
+  if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+    return window.location.origin;
+  }
+  return BASE_URL;
+}
+
 // Audit events fire on EVERY mutation (and on auth/security events), so the
 // audit-page revalidation is coalesced to avoid refetch storms during bulk ops.
 const AUDIT_DEBOUNCE_MS = 1500;
@@ -65,7 +74,7 @@ export function useRealtimeSync(): { connected: boolean } {
   const auditTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const es = new EventSource(`${BASE_URL}/api/events`, { withCredentials: true });
+    const es = new EventSource(`${apiBase()}/api/events`, { withCredentials: true });
 
     es.onopen = () => setConnected(true);
 

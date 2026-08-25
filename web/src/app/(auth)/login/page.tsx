@@ -9,6 +9,15 @@ import { useTheme } from "@/context/ThemeContext";
 const LOGIN_TIMEOUT_MS = 60_000;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Same-origin on Vercel so the OAuth /start navigation hits the rewrite proxy —
+// cookies then get set first-party on vercel.app.
+function apiBase(): string {
+  if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+    return window.location.origin;
+  }
+  return API_URL;
+}
 const GOOGLE_OAUTH_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_OAUTH === "true";
 
 function parseLockoutSeconds(msg: string): number | null {
@@ -65,7 +74,7 @@ export default function LoginPage() {
   function handleGoogleSignIn() {
     if (loading || isLocked) return;
     // Top-level navigation (not fetch) so the OAuth redirect chain + cookies work.
-    window.location.href = `${API_URL}/api/auth/oauth/google/start`;
+    window.location.href = `${apiBase()}/api/auth/oauth/google/start`;
   }
 
   async function handleSubmit(e: React.FormEvent) {

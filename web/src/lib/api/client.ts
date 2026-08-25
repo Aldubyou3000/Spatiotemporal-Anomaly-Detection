@@ -1,5 +1,16 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// On the Vercel deployment, call the API same-origin ("/api/...") — next.config.ts
+// rewrites proxy it to Render. Cookies become first-party on vercel.app, so Chrome
+// never applies third-party blocking / CHIPS purging. Localhost dev still hits
+// :8000 directly (no rewrite is registered for localhost).
+function apiBase(): string {
+  if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+    return window.location.origin;
+  }
+  return BASE_URL;
+}
+
 type RequestOptions = Omit<RequestInit, "body"> & {
   params?: Record<string, string | number | boolean | undefined>;
 };
@@ -26,7 +37,7 @@ let _refreshPromise: Promise<boolean> | null = null;
 
 async function _doRefresh(): Promise<boolean> {
   try {
-    const res = await fetch(new URL("/api/auth/refresh", BASE_URL).toString(), {
+    const res = await fetch(new URL("/api/auth/refresh", apiBase()).toString(), {
       method: "POST",
       credentials: "include",
       headers: withCsrf("POST", {}),
@@ -47,7 +58,7 @@ function _refresh(): Promise<boolean> {
 }
 
 async function request<T>(path: string, init: RequestInit, params?: RequestOptions["params"]): Promise<T> {
-  const url = new URL(path, BASE_URL);
+  const url = new URL(path, apiBase());
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined) url.searchParams.set(k, String(v));
