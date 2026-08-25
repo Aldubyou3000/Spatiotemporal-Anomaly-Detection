@@ -82,7 +82,8 @@ export const auditApi = {
   },
 
   exportUrl(filters: AuditFilters = {}): string {
-    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const raw = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const base = typeof window !== "undefined" && window.location.hostname.includes("vercel.app") ? window.location.origin : raw;
     const url = new URL("/api/audit/export", base);
     for (const [k, v] of Object.entries(filters)) {
       if (v !== undefined) url.searchParams.set(k, String(v));

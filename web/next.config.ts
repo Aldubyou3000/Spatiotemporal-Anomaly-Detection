@@ -42,6 +42,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async rewrites() {
+    // Proxy /api/* to Render so cookies are first-party (vercel.app).
+    // Without this, vercel.app → onrender.com is third-party and Chrome
+    // blocks Lax cookies and requires Partitioned + user interaction.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl || apiUrl.includes("localhost")) return [];
+    return [{ source: "/api/:path*", destination: `${apiUrl.replace(/\/$/, "")}/api/:path*` }];
+  },
 };
 
 export default nextConfig;

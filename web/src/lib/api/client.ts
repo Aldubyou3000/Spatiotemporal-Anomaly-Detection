@@ -1,5 +1,14 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+function getBaseUrl(): string {
+  // On Vercel (vercel.app) use same-origin so Next.js rewrite proxies to Render.
+  // This makes cookies first-party (Lax) instead of third-party (None+Partitioned).
+  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+    return window.location.origin;
+  }
+  return BASE_URL;
+}
+
 type RequestOptions = Omit<RequestInit, "body"> & {
   params?: Record<string, string | number | boolean | undefined>;
 };
@@ -26,7 +35,7 @@ let _refreshPromise: Promise<boolean> | null = null;
 
 async function _doRefresh(): Promise<boolean> {
   try {
-    const res = await fetch(new URL("/api/auth/refresh", BASE_URL).toString(), {
+    const res = await fetch(new URL("/api/auth/refresh", getBaseUrl()).toString(), {
       method: "POST",
       credentials: "include",
       headers: withCsrf("POST", {}),
@@ -47,7 +56,7 @@ function _refresh(): Promise<boolean> {
 }
 
 async function request<T>(path: string, init: RequestInit, params?: RequestOptions["params"]): Promise<T> {
-  const url = new URL(path, BASE_URL);
+  const url = new URL(path, getBaseUrl());
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined) url.searchParams.set(k, String(v));

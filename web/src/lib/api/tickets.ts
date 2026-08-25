@@ -85,8 +85,9 @@ export const ticketsApi = {
     apiClient.get<TicketReportHistory>(`/api/tickets/${id}/report`),
 
   downloadPdf: async (id: string, filename: string) => {
-    const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-    const url = `${BASE_URL}/api/tickets/${id}/pdf`;
+    const raw = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const base = typeof window !== "undefined" && window.location.hostname.includes("vercel.app") ? window.location.origin : raw;
+    const url = `${base}/api/tickets/${id}/pdf`;
     const res = await fetch(url, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to generate PDF");
     const blob = await res.blob();
