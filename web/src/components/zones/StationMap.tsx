@@ -102,25 +102,36 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
       const baseColor = isAnomalous ? getCssVar("--danger") || "#DC2626" : getCssVar("--success") || "#16A34A";
 
       if (isAnomalous) {
+        // Outer faint ring — makes flagged visible even at zoom 7
+        const outer = L.circleMarker([station.latitude, station.longitude], {
+          radius: 20,
+          fillColor: baseColor,
+          fillOpacity: 0.07,
+          color: baseColor,
+          weight: 1,
+          opacity: 0.18,
+          interactive: false,
+        }).addTo(map);
+        markersRef.current.push(outer);
         const halo = L.circleMarker([station.latitude, station.longitude], {
           radius: 14,
           fillColor: baseColor,
-          fillOpacity: 0.13,
-          color: "transparent",
-          weight: 0,
+          fillOpacity: 0.22,
+          color: baseColor,
+          weight: 1,
+          opacity: 0.25,
           interactive: false,
         }).addTo(map);
         markersRef.current.push(halo);
       }
 
       const marker = L.circleMarker([station.latitude, station.longitude], {
-        radius: isAnomalous ? 8 : 6,
-        // White stroke keeps the dot crisp on both Voyager blues and dark tiles,
-        // while the solid fill carries the semantic color.
+        radius: isAnomalous ? 10 : 5,
+        // White stroke keeps the dot crisp; flagged gets thicker stroke and full opacity
         color: "#ffffff",
-        weight: 2,
+        weight: isAnomalous ? 3 : 2,
         fillColor: baseColor,
-        fillOpacity: isAnomalous ? 0.96 : 0.88,
+        fillOpacity: isAnomalous ? 1 : 0.62,
       }).addTo(map);
 
       const gaugeLabel = status === "suspect" ? "Gauge needs check" : status === "watch" ? "Gauge watch" : status === "consistent" ? "Gauge normal" : status === "need_more" ? "Gauge — need more rain" : "—";
@@ -160,14 +171,16 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
         }
       );
 
-      marker.bindTooltip(station.station_id, {
+      const label = isAnomalous ? `${station.station_id} • ${station.anomaly_count}` : station.station_id;
+      marker.bindTooltip(label, {
         permanent: true,
         direction: "top",
-        offset: L.point(0, isAnomalous ? -12 : -9),
-        className: "station-label",
+        offset: L.point(0, isAnomalous ? -14 : -9),
+        className: isAnomalous ? "station-label station-label--flagged" : "station-label",
       });
 
       markersRef.current.push(marker);
+      if (isAnomalous) marker.bringToFront();
       bounds.extend([station.latitude, station.longitude]);
     });
 
