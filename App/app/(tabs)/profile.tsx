@@ -95,7 +95,7 @@ export default function ProfileScreen() {
     <View style={[styles.wrapper, { backgroundColor: theme.isDark ? '#191C23' : '#F2F4F7' }]}>
       {/* Lifted so the scallop bottoms out around the middle of the avatar — the
           name and role sit on plain grey below it. */}
-      <CloudBackground width={screenW} isDark={theme.isDark} offsetY={-screenW * 0.35} lite={reducedMotion} />
+      <CloudBackground width={screenW} isDark={theme.isDark} offsetY={-screenW * 0.33} lite={reducedMotion} />
       <AppScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
@@ -138,15 +138,22 @@ export default function ProfileScreen() {
           </Card>
         </View>
 
-        {/* ── Sign out — red-text ghost button ────────────────────────── */}
-        <Pressable
-          onPress={() => setShowLogoutSheet(true)}
-          android_ripple={{ color: palette.danger + '22', borderless: false }}
-          style={({ pressed }) => [styles.signOut, Platform.OS === 'ios' && { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Icon name={icons.logout} size={16} color={palette.danger} style={{ marginRight: 8 }} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
+        {/* ── Sign out — familiar centered system row ───────────────────── */}
+        <View style={styles.signOutWrap}>
+          <Card style={styles.signOutCard}>
+            <Pressable
+              onPress={() => setShowLogoutSheet(true)}
+              android_ripple={{ color: palette.dangerSoft }}
+              style={({ pressed }) => [
+                styles.signOutRow,
+                { backgroundColor: pressed ? palette.dangerSoft : 'transparent' },
+              ]}
+            >
+              <Icon name={icons.logout} size={16} color={palette.danger} style={{ marginRight: 8 }} />
+              <Text style={styles.signOutLabel}>Sign Out</Text>
+            </Pressable>
+          </Card>
+        </View>
       </AppScrollView>
 
       <BottomSheet
@@ -270,15 +277,22 @@ const styles = StyleSheet.create({
     height: 1,
   },
 
-  // Sign out — transparent ghost, red text ──────────────────────────────────
-  signOut: {
+  // Sign out — familiar centered row (iOS Settings style) ─────────────────
+  signOutWrap: {
+    marginTop: spacing.lg,
+  },
+  signOutCard: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  signOutRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.xl,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.md + 2,
+    minHeight: 56,
   },
-  signOutText: {
+  signOutLabel: {
     fontSize: typography.body.size,
     lineHeight: typography.body.lineHeight,
     fontWeight: '600',

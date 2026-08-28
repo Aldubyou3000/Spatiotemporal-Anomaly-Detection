@@ -160,7 +160,7 @@ export default function ActivityScreen() {
   const screenBg = theme.isDark ? '#191C23' : '#F2F4F7';
 
   const qc = useQueryClient();
-  const { data: itemsData, isLoading: loading, isValidating, refetch, forceRefresh } = useActivityFeed();
+  const { data: itemsData, isLoading: loading, isValidating, forceRefresh } = useActivityFeed();
   const items = itemsData ?? [];
 
   const [opening, setOpening]           = useState<string | null>(null);
@@ -194,11 +194,10 @@ export default function ActivityScreen() {
   useFocusEffect(
     useCallback(() => {
       setStatusBarStyle(theme.isDark ? 'light' : 'dark');
-      refetch();
       return () => {
         markActivitySeen(Date.now());
       };
-    }, [refetch, theme.isDark])
+    }, [theme.isDark])
   );
 
   // Tapping a row opens that ticket's detail sheet.

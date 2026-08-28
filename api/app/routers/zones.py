@@ -77,5 +77,5 @@ async def process_zones(
         logger.exception("[zones] pipeline failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="The pipeline could not process this file. Please check the file and try again.",
+            detail="The process could not process this file. Please check the file and try again.",
         ) from exc

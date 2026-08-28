@@ -101,11 +101,7 @@ function ChipsRow({
           {PRIORITY_LABEL[priority] ?? priority} priority
         </Text>
       </View>
-      {anomalyZone ? (
-        <View style={[styles.chip, { backgroundColor: theme.surfaceAlt }]}>
-          <Text style={[styles.chipText, { color: theme.textMuted }]}>Zone {anomalyZone}</Text>
-        </View>
-      ) : null}
+      {/* Zone hidden — matches web (plain "Checked vs nearby" instead of Z-A/B/C) */}
     </View>
   );
 }
@@ -499,7 +495,7 @@ export default function TicketDetailContent({
 
   const detailRows: Array<{ icon: IconName; label: string; value: string }> = [];
   if (ticket.location)    detailRows.push({ icon: icons.station,     label: 'Station',     value: ticket.location });
-  if (ticket.coordinates) detailRows.push({ icon: icons.coordinates, label: 'Coordinates', value: ticket.coordinates });
+  {/* Coordinates hidden — tap Station to open map, matches web plain station name only */}
   if (scheduled)          detailRows.push({ icon: icons.calendar,    label: isHistory ? 'Completed' : 'Scheduled', value: scheduled });
 
   const hasFindings = activeReport && (
@@ -522,7 +518,6 @@ export default function TicketDetailContent({
         </Text>
         <Text style={[styles.titleMeta, { color: theme.textMuted }]}>
           TKT-{ticket.ticketNumber}
-          {ticket.anomalyZone ? `  ·  Zone ${ticket.anomalyZone}` : ''}
         </Text>
         <ChipsRow
           statusKey={statusKey}
@@ -546,15 +541,15 @@ export default function TicketDetailContent({
           icon={icons.followUp}
           accent={theme.status.warning}
           tint={palette.warningSoft}
-          title={`Follow-up requested${(ticket.followUpCount ?? 0) > 1 ? ` · visit ${ticket.followUpCount}` : ''}`}
+          title={`Revisit needed${(ticket.followUpCount ?? 0) > 1 ? ` · visit ${ticket.followUpCount}` : ''}`}
           body={ticket.followUpNotes}
         />
       )}
 
-      {/* ── Panel C · Description block ────────────────────────────────────── */}
+      {/* ── Panel C · Description block — simplified plain language (hide raw ML prose) ─ */}
       {ticket.flaggedAnomaly ? (
         <Panel>
-          <PanelLabel>Description</PanelLabel>
+          <PanelLabel>What to check</PanelLabel>
           <CollapsibleText text={ticket.flaggedAnomaly} style={[styles.descText, { color: theme.text }]} />
         </Panel>
       ) : null}

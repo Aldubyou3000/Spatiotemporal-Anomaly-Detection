@@ -20,7 +20,7 @@ import { Header } from "@/components/dashboard/Header";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { TicketRowSkeleton } from "@/components/ui/Skeleton";
+import { TicketRowSkeleton, DetailSkeleton } from "@/components/ui/Skeleton";
 import { TicketDetailBody, type DetailModel, type DetailAssignee } from "@/components/tickets/TicketDetailBody";
 import { TicketActionDock } from "@/components/tickets/TicketActionDock";
 import { ReviewPanel } from "@/components/tickets/ReviewPanel";
@@ -428,7 +428,6 @@ function TicketRow({ ticket, selected, onClick }: { ticket: TicketListItem; sele
         <Badge tone={STATUS_TONE[ticket.status]} dot>{STATUS_LABEL[ticket.status]}</Badge>
         {/* Priority only earns a colored chip when high; low/medium are quiet text */}
         {ticket.priority === "high" && <Badge tone="danger">High</Badge>}
-        {ticket.follow_up_count > 0 && <Badge tone="neutral">FU×{ticket.follow_up_count}</Badge>}
       </div>
       <div style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)", lineHeight: 1.35, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {ticket.title}
@@ -437,9 +436,6 @@ function TicketRow({ ticket, selected, onClick }: { ticket: TicketListItem; sele
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
           <span style={{ color: "var(--text-tertiary)" }}><MapPin size={10} /></span>
           <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", flexShrink: 0 }}>{ticket.station_id}</span>
-          {ticket.anomaly_zone && (
-            <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)", flexShrink: 0 }}>· Z-{ticket.anomaly_zone}</span>
-          )}
           {primaryTech && (
             <>
               <span style={{ color: "var(--divider)", flexShrink: 0 }}>·</span>
@@ -626,11 +622,8 @@ export default function TicketsPage() {
         {/* Right detail */}
         <div style={{ overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
           {detailLoading ? (
-            <div style={{ flex: 1, display: "grid", placeItems: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)" }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                <Loader2 size={20} style={{ color: "var(--brand)", animation: "spin 700ms linear infinite" }} />
-                <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>Loading ticket…</p>
-              </div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}>
+              <DetailSkeleton />
             </div>
           ) : detailTicket ? (
             <DetailPanel ticket={detailTicket} onUpdated={updateCache} updateCache={updateCache} />

@@ -59,14 +59,14 @@ const TAB_STATUSES: Record<TicketTab, string[]> = {
 const TAB_LABEL: Record<TicketTab, string> = {
   assigned:      'Assigned',
   'in-progress': 'In Progress',
-  submitted:     'Submitted',
-  follow_up:     'Follow-up',
+  submitted:     'Ready for Review',
+  follow_up:     'Revisit Needed',
   closed:        'Closed',
 };
 
 // The two-level filter: a segment scopes which status chips are shown.
 //   active  → work the technician must act on
-//   archive → states they only look back at
+//   archive → states they only look back at (including Ready for Review — awaiting analyst)
 const SEGMENT_TABS: Record<Segment, TicketTab[]> = {
   active:  ['assigned', 'in-progress', 'follow_up'],
   archive: ['submitted', 'closed'],
@@ -275,13 +275,11 @@ const TicketCard = memo(function TicketCard({
   const isClosed = status === 'verified' || status === 'cancelled';
   const titleColor = isClosed ? theme.textMuted : theme.text;
 
-  // Muted metadata line: station · zone · TKT-N · time · revisits.
+  // Muted metadata line: station · TKT-N · time (zone & revisit count removed — status chip already shows Revisit Needed).
   const meta = [
     ticket.stationId,
-    ticket.anomalyZone ? `Z-${ticket.anomalyZone}` : null,
     `TKT-${ticket.ticketNumber}`,
     fmtRelative(ticket.updatedAt),
-    fuCount > 0 ? `Revisit ×${fuCount}` : null,
   ].filter(Boolean).join('  ·  ');
 
   const handlePress = useCallback(() => onPress(ticket), [onPress, ticket]);
@@ -375,12 +373,13 @@ export default function DashboardScreen() {
   const helpRef    = useRef<View>(null);
   const tourStarted = useRef(false);
 
-  const { data: ticketsData, isLoading, isValidating, refetch, forceRefresh } = useTicketList();
+  const { data: ticketsData, isLoading, isValidating, forceRefresh } = useTicketList();
   const tickets = ticketsData ?? [];
 
-  // Soft revalidation on tab focus — TanStack respects staleTime, so this is
-  // a no-op when data is fresh (< 30s old) and a quiet background fetch otherwise.
-  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
+  // No focus refetch — persisted cache (PersistQueryClientProvider, maxAge
+  // 7d) + staleTime 30s + live SSE (useRealtimeSync → invalidate) already keep
+  // data fresh. A forced refetch() here ignores staleTime and caused a spinner
+  // on every tab switch.
 
   // Status-bar icons: the brand-blue cloud sits behind the bar here, so always
   // light (white) icons. Set imperatively on focus — the declarative <StatusBar>
@@ -455,8 +454,8 @@ export default function DashboardScreen() {
       : ({
           'assigned':    { icon: icons.assigned,   title: 'Nothing assigned',     sub: 'Tickets assigned to you will appear here.' },
           'in-progress': { icon: icons.startWork,  title: 'Nothing in progress',  sub: 'Tickets you start working on will appear here.' },
-          'submitted':   { icon: icons.reportDoc,  title: 'Nothing submitted',    sub: 'Reports awaiting analyst review will appear here.' },
-          'follow_up':   { icon: icons.followUp,   title: 'No follow-ups',        sub: 'Tickets sent back for another visit will appear here.' },
+          'submitted':   { icon: icons.reportDoc,  title: 'Nothing to review',    sub: 'Reports you sent will appear here once ready for review.' },
+          'follow_up':   { icon: icons.followUp,   title: 'No revisits needed',        sub: 'Tickets sent back for another visit will appear here.' },
           'closed':      { icon: icons.success,    title: 'No closed tickets',    sub: 'Verified and cancelled tickets will appear here.' },
         } as Record<TicketTab, { icon: IconName; title: string; sub: string }>)[activeTab];
 
@@ -549,7 +548,7 @@ export default function DashboardScreen() {
     <View style={[styles.container, { backgroundColor: theme.isDark ? '#191C23' : '#F2F4F7' }]}>
       {/* Layered brand cloud at the top (decorative). Status-bar tint is set
           imperatively in the useFocusEffect above. */}
-      <CloudBackground width={screenW} isDark={theme.isDark} lite={reducedMotion} />
+      <CloudBackground width={screenW} isDark={theme.isDark} offsetY={-screenW * 0.11} lite={reducedMotion} />
 
       {/* ── Pinned header controls ────────────────────────────────────────── */}
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>

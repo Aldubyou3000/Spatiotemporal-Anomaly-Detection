@@ -258,7 +258,7 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
       {confirmLogout && (
         <ConfirmDialog
           title="Sign out?"
-          message="You'll be returned to the login screen. Any unsaved pipeline results will be lost."
+          message="You'll be returned to the login screen. Any unsaved process results will be lost."
           confirmLabel="Sign out"
           onConfirm={logout}
           onCancel={() => setConfirmLogout(false)}

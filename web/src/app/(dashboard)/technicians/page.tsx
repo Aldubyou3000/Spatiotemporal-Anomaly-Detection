@@ -19,6 +19,7 @@ import { Modal, ModalFooter } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
+import { TechRowSkeleton } from "@/components/ui/Skeleton";
 import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkloadBadge";
 import { techniciansApi } from "@/lib/api/technicians";
 import type { TechnicianCreate, TechnicianProfile } from "@/types/technicians";
@@ -489,18 +490,36 @@ export default function TechniciansPage() {
 
           {/* Table body */}
           {loading ? (
-            <div style={{ padding: "48px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <div
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  border: "2px solid var(--border)",
-                  borderTopColor: "var(--brand)",
-                  animation: "spin 700ms linear infinite",
-                }}
-              />
-              <p style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)", margin: 0 }}>Loading technicians…</p>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "var(--surface-alt)" }}>
+                    {["Account", "Email / Phone", "Active Load", "Status", "Joined"].map((col) => (
+                      <th
+                        key={col}
+                        style={{
+                          padding: "9px 20px",
+                          fontSize: "var(--font-xs)",
+                          fontWeight: 600,
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                          color: "var(--text-muted)",
+                          textAlign: "left",
+                          borderBottom: "1px solid var(--border)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <TechRowSkeleton key={i} />
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : error ? (
             <div style={{ padding: "48px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>

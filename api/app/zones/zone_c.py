@@ -31,8 +31,8 @@ MIN_STATIONS_PER_DAY = 4
 
 # Anomaly cutoff on the LOF score. sklearn's negative_outlier_factor_ is ~ -1
 # for inliers and more negative for outliers; a value <= -ANOMALY_THRESHOLD is
-# flagged. 1.5 matches the threshold documented for Zone C. Tunable later.
-ANOMALY_THRESHOLD = 1.5
+# flagged. 2.0 is strict — only extreme outliers flag, natural heavy days ignored. Tunable later.
+ANOMALY_THRESHOLD = 2.0
 
 # Minimum rainfall (mm) for a station to be eligible as an anomaly. Below this,
 # a reading is a trace/light drizzle — not a notable rain event — so even if it

@@ -278,8 +278,8 @@ export function ReviewPanel({
             active={!isApprove}
             accent="warning"
             icon={<RefreshCw size={12} strokeWidth={2.4} />}
-            title="Request follow-up"
-            subtitle="Send back for a re-visit"
+            title="Revisit needed"
+            subtitle="Send back for another visit"
             onSelect={() => setDecision("follow_up")}
             disabled={approving}
           />
@@ -310,7 +310,7 @@ export function ReviewPanel({
           <div style={{ borderRadius: "var(--r-md)", border: `1px solid ${followReady ? "var(--border)" : "color-mix(in oklab, var(--warning) 40%, var(--border))"}`, background: "var(--surface)", overflow: "hidden" }}>
             <div style={{ padding: "8px 12px 2px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-                Instructions for technician <span style={{ color: "var(--danger)" }}>*</span>
+                What to do on revisit <span style={{ color: "var(--danger)" }}>*</span>
               </span>
               <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
                 {followReady ? `${followNotes.trim().length} chars` : "required"}
@@ -319,7 +319,7 @@ export function ReviewPanel({
             <textarea
               value={followNotes}
               onChange={(e) => setFollowNotes(e.target.value)}
-              placeholder="Describe what needs to be done differently on the re-visit…"
+              placeholder="Tell the team what to check or fix on the next visit…"
               rows={3}
               disabled={approving}
               autoFocus
@@ -338,7 +338,7 @@ export function ReviewPanel({
               <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 <UserPlus size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                 <span style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" }}>
-                  Re-assign re-visit
+                  Change team
                 </span>
                 <span style={{ fontSize: "var(--font-xs)", color: reassignTouched ? "var(--warning-on)" : "var(--text-muted)", fontWeight: reassignTouched ? 600 : 400 }}>
                   {reassignTouched ? "· changes staged" : "· optional"}
@@ -350,7 +350,7 @@ export function ReviewPanel({
             {reassignOpen && (
               <div className="animate-fade-in" style={{ padding: "2px 12px 12px", borderTop: "1px solid var(--divider)" }}>
                 <p style={{ margin: "10px 0 8px", fontSize: "var(--font-xs)", color: "var(--text-muted)", lineHeight: 1.5 }}>
-                  Keep the current team or change who handles the re-visit. Applied when you send the follow-up.
+                  Keep the same team or pick someone else for the next visit. Changes apply when you send the request.
                 </p>
 
                 {/* Add control */}
@@ -434,8 +434,8 @@ export function ReviewPanel({
         onMouseLeave={(e) => { e.currentTarget.style.filter = ""; }}
       >
         {isApprove
-          ? <><CheckCircle2 size={15} strokeWidth={2.4} /> {approving ? "Approving…" : "Approve & verify"}</>
-          : <><RefreshCw size={14} strokeWidth={2.4} /> {approving ? "Sending…" : "Send follow-up"}</>}
+          ? <><CheckCircle2 size={15} strokeWidth={2.4} /> {approving ? "Approving…" : "Approve"}</>
+          : <><RefreshCw size={14} strokeWidth={2.4} /> {approving ? "Sending…" : "Request revisit"}</>}
       </Button>
 
       {error && (

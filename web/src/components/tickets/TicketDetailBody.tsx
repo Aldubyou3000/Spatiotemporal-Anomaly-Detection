@@ -349,18 +349,16 @@ function AnomalyMetrics({ data, zone }: { data: Record<string, unknown> | null |
   const confPct = confRaw !== null ? (confRaw <= 1 ? confRaw * 100 : confRaw) : null;
 
   const cards: { label: string; value: string; accent?: MetricAccent }[] = [];
-  if (rain  !== null) cards.push({ label: "24h rainfall", value: `${rain.toFixed(1)} mm`,  accent: rain > 80 ? "red" : rain > 40 ? "amber" : "none" });
-  if (neigh !== null) cards.push({ label: "Neighbor avg", value: `${neigh.toFixed(1)} mm` });
-  if (z     !== null) cards.push({ label: "Z-score",      value: `${z.toFixed(1)}σ`,        accent: Math.abs(z) > 3 ? "red" : "amber" });
-  if (confPct !== null) cards.push({ label: "Model conf.", value: `${confPct.toFixed(0)}%` });
+  if (rain  !== null) cards.push({ label: "Rainfall", value: `${rain.toFixed(1)} mm`,  accent: rain > 80 ? "red" : rain > 40 ? "amber" : "none" });
+  if (neigh !== null) cards.push({ label: "Nearby average", value: `${neigh.toFixed(1)} mm` });
 
   if (cards.length === 0 && entries.length > 0) {
-    entries.slice(0, 4).forEach(([k, v]) => cards.push({ label: k.replace(/_/g, " "), value: fmtNum(v) }));
+    entries.slice(0, 2).forEach(([k, v]) => cards.push({ label: k.replace(/_/g, " "), value: fmtNum(v) }));
   }
   if (cards.length === 0) return null;
 
   return (
-    <Section title="Anomaly Metrics" badge={confPct !== null ? `conf ${confPct.toFixed(0)}%` : zone ? `Zone ${zone}` : undefined}>
+    <Section title="Details" badge={zone ? `Checked vs nearby` : undefined}>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(cards.length, 4)}, 1fr)`, gap: 10 }}>
         {cards.slice(0, 8).map((c) => <Metric key={c.label} {...c} />)}
       </div>
@@ -434,17 +432,15 @@ function buildActivity(m: DetailModel): ActivityEntry[] {
         })()
       : null;
     out.push({
-      id: "created", kind: "created", who: "Pipeline", ts: m.createdAt,
-      text: conf !== null
-        ? `Anomaly detected via Zone ${m.zone} LOF (score ${conf.toFixed(2)})`
-        : `Anomaly detected via Zone ${m.zone} — ticket opened`,
+      id: "created", kind: "created", who: "Process", ts: m.createdAt,
+      text: `Unusual rainfall spotted — ticket opened`,
     });
   } else if (m.createdAt) {
     out.push({ id: "created", kind: "created", who: "System", ts: m.createdAt, text: "Ticket created" });
   }
 
   if (m.priority === "high" && m.createdAt) {
-    out.push({ id: "priority", kind: "priority", who: "System", ts: m.createdAt, text: "Priority set to High (z > 4σ)" });
+    out.push({ id: "priority", kind: "priority", who: "System", ts: m.createdAt, text: "Marked as high priority" });
   }
 
   if (allNames && m.createdAt) {
@@ -462,13 +458,13 @@ function buildActivity(m: DetailModel): ActivityEntry[] {
     });
   }
 
-  // Follow-up event (injected between report and next verify)
+  // Revisit event (injected between report and next verify)
   if ((m.followUpCount ?? 0) > 0 && r?.submittedAt) {
     out.push({
       id: "follow_up", kind: "follow_up", who: "Analyst", ts: r.submittedAt,
       text: m.followUpNotes
-        ? `Follow-up requested — "${m.followUpNotes.slice(0, 80)}${m.followUpNotes.length > 80 ? "…" : ""}"`
-        : `Follow-up visit requested (${m.followUpCount} total)`,
+        ? `Revisit needed — "${m.followUpNotes.slice(0, 80)}${m.followUpNotes.length > 80 ? "…" : ""}"`
+        : `Revisit needed (${m.followUpCount} total)`,
     });
   }
 
@@ -759,13 +755,13 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
           </div>
         )}
 
-        {/* Follow-up callout banner — only when status is follow_up */}
+        {/* Revisit callout banner — only when status is follow_up */}
         {isFollowUp && (
           <div style={{ margin: "16px 28px 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--warning) 8%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 30%, transparent)", display: "flex", alignItems: "flex-start", gap: 12 }}>
             <RefreshCw size={15} style={{ color: "var(--warning-on)", flexShrink: 0, marginTop: 1 }} />
             <div>
               <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--warning-on)" }}>
-                Follow-up visit requested{(model.followUpCount ?? 0) > 1 ? ` (${model.followUpCount} total)` : ""}
+                Revisit needed{(model.followUpCount ?? 0) > 1 ? ` (${model.followUpCount} total)` : ""}
               </p>
               {model.followUpNotes && (
                 <p style={{ margin: "4px 0 0", fontSize: "var(--font-sm)", color: "var(--text-secondary)", lineHeight: 1.55 }}>

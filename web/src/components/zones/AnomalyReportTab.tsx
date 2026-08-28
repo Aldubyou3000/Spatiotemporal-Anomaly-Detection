@@ -13,33 +13,33 @@ import { useTheme } from "@/context/ThemeContext";
 function healthTone(status: StationHealth["status"]): "success" | "warning" | "danger" | "neutral" {
   if (status === "suspect") return "danger";
   if (status === "watch") return "warning";
-  if (status === "normal") return "neutral";
+  if (status === "normal") return "success";
   return "neutral";
 }
 function stuckTone(status: StationStuckHealth["status"]): "success" | "warning" | "danger" | "neutral" {
   if (status === "suspect") return "danger";
   if (status === "watch") return "warning";
-  if (status === "normal") return "neutral";
+  if (status === "normal") return "success";
   return "neutral";
 }
 function humanHighReason(h: StationHealth | null): { title: string; detail: string; tip?: string } | null {
   if (!h) return null;
-  if (h.status === "insufficient_data") return { title: "Need more rain to judge", detail: `Only ${h.rain_days} rainy days so far. Not enough to judge long-term drift.`, tip: `Only ${h.rain_days} rainy days checked` };
+  if (h.status === "insufficient_data") return { title: "Not enough data yet", detail: `Only ${h.rain_days} rainy days so far — need more rain to judge.`, tip: `Only ${h.rain_days} rainy days checked` };
   const pct = h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) : 0;
-  const tip = `On ${h.rain_days} rainy days checked, this gauge averaged about ${pct}% above its neighbors.`;
-  if (h.status === "suspect") return { title: "Needs check — reads high", detail: `On rainy days it reads about ${pct}% higher than nearby gauges. Flagged days may be inflated — prioritize a site check.`, tip };
-  if (h.status === "watch") return { title: "Watch — reads a bit high", detail: `On rainy days about ${pct}% higher than nearby gauges. Flagged days may be a bit high, still need review.`, tip };
-  return { title: "No long-term drift", detail: "Sensor tracks neighbors on rainy days. Flagged days still stand out — likely real local rain, not just sensor drift, and still need review.", tip };
+  const tip = `On ${h.rain_days} rainy days checked, this sensor averaged about ${pct}% above its neighbors.`;
+  if (h.status === "suspect") return { title: "Needs attention — reads high", detail: `About ${pct}% higher than nearby stations on rainy days. Likely needs calibration — flagged days may be inflated.`, tip };
+  if (h.status === "watch") return { title: "Monitor — slightly high", detail: `A bit higher than neighbors. Keep an eye on it.`, tip };
+  return { title: "Reliable — no pattern found", detail: "Matches neighbors over time. Flagged days look like real local rain and still need review.", tip };
 }
 function humanLowReason(s: StationStuckHealth | null): { title: string; detail: string; tip?: string } | null {
   if (!s) return null;
-  if (s.status === "insufficient_data") return { title: "Need more rain to judge", detail: `Only ${s.rain_days} rainy days so far. Not enough to judge.`, tip: `Only ${s.rain_days} rainy days checked` };
+  if (s.status === "insufficient_data") return { title: "Not enough data yet", detail: `Only ${s.rain_days} rainy days so far — need more rain to judge.`, tip: `Only ${s.rain_days} rainy days checked` };
   const pct = s.zero_rate != null ? Math.round(s.zero_rate * 100) : 0;
   const streak = s.max_zero_streak ?? 0;
-  const tip = `On ${s.rain_days} rainy days, it stayed at 0 on ${pct}% of them. Longest silent run: ${streak} days.`;
-  if (s.status === "suspect") return { title: "Needs check — often silent", detail: `Stayed at 0 on about ${pct}% of rainy days while neighbors got rain. Gaps may be missed rain — check for clog.`, tip };
-  if (s.status === "watch") return { title: "Watch — sometimes silent", detail: `Stayed at 0 on about ${pct}% of rainy days. Some rain may have been missed.`, tip };
-  return { title: "No long-term drift", detail: "Sensor responds when it rains. Flagged silent days still stand out and need review, but no stuck pattern found.", tip };
+  const tip = `On ${s.rain_days} rainy days, no reading on ${pct}% of them. Longest run without reading: ${streak} days.`;
+  if (s.status === "suspect") return { title: "Needs attention — often no reading", detail: `No reading on about ${pct}% of rainy days when neighbors recorded rain. May be blocked or offline.`, tip };
+  if (s.status === "watch") return { title: "Monitor — sometimes no reading", detail: `No reading on some rainy days. Some rain may have been missed.`, tip };
+  return { title: "Reliable — no pattern found", detail: "Responds when it rains. Flagged days still stand out and need review, but no ongoing pattern found.", tip };
 }
 
 interface AnomalyReportTabProps {
@@ -51,9 +51,10 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [mode, setMode] = useState<"high" | "low">("high");
-  const [selectedId, setSelectedId] = useState<string>(
-    result.anomaly_summary[0]?.station_id ?? result.dry_stuck_summary[0]?.station_id ?? "",
-  );
+  const [selectedId, setSelectedId] = useState<string>(() => {
+    const firstHigh = result.anomaly_summary.find((s) => s.events.some((e) => !e.is_low));
+    return firstHigh?.station_id ?? result.dry_stuck_summary[0]?.station_id ?? result.anomaly_summary[0]?.station_id ?? "";
+  });
   const [compareNeighbors, setCompareNeighbors] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [filter, setFilter] = useState("");
@@ -79,7 +80,18 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
     return map;
   }, [result.flagged_data]);
 
-  const maxAnomalies = useMemo(() => Math.max(1, ...result.anomaly_summary.map((s) => s.anomaly_count)), [result.anomaly_summary]);
+  // ── High = only high (is_low=false). Backend anomaly_summary is unified (high+single-day low); we filter here so High never shows silent.
+  const highOnlySummary = useMemo(() => {
+    return result.anomaly_summary
+      .map((s) => {
+        const highEvents = s.events.filter((e) => !e.is_low);
+        return { ...s, events: highEvents, anomaly_count: highEvents.length };
+      })
+      .filter((s) => s.anomaly_count > 0)
+      .sort((a, b) => b.anomaly_count - a.anomaly_count);
+  }, [result.anomaly_summary]);
+
+  const maxAnomalies = useMemo(() => Math.max(1, ...highOnlySummary.map((s) => s.anomaly_count)), [highOnlySummary]);
   const maxDryStuck = useMemo(() => Math.max(1, ...(result.dry_stuck_summary ?? []).map((s) => s.stuck_count)), [result.dry_stuck_summary]);
 
   const healthById = useMemo(() => {
@@ -97,11 +109,11 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
   const selectedStuck = selectedId ? stuckById.get(selectedId) ?? null : null;
 
   useEffect(() => {
-    const list = mode === "high" ? result.anomaly_summary : (result.dry_stuck_summary ?? []);
+    const list = mode === "high" ? highOnlySummary : (result.dry_stuck_summary ?? []);
     if (list.length > 0 && !list.some((s) => s.station_id === selectedId)) setSelectedId(list[0].station_id);
-  }, [mode, result.anomaly_summary, result.dry_stuck_summary, selectedId]);
+  }, [mode, highOnlySummary, result.dry_stuck_summary, selectedId]);
 
-  const selectedStation = result.anomaly_summary.find((s) => s.station_id === selectedId) ?? null;
+  const selectedStation = highOnlySummary.find((s) => s.station_id === selectedId) ?? null;
   const selectedDryStation = (result.dry_stuck_summary ?? []).find((s) => s.station_id === selectedId) ?? null;
   const selectedTimeseries = selectedId ? (flaggedByStation.get(selectedId) ?? []) : [];
 
@@ -124,7 +136,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
   // Clear filter when station/mode changes
   useEffect(() => { setFilter(""); }, [selectedId, mode]);
 
-  const hasHigh = result.anomaly_summary.length > 0;
+  const hasHigh = highOnlySummary.length > 0;
   const hasLow = (result.dry_stuck_summary ?? []).length > 0;
   if (!hasHigh && !hasLow) {
     return (
@@ -148,7 +160,8 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
         date: row.date,
         rainfall: row.rainfall,
         is_anomaly: mode === "high" ? !!row.is_anomaly : false,
-        is_low_anomaly: mode === "high" ? !!(row as any).is_low_anomaly : !!row.is_dry_stuck,
+        // Silent single-day lows stay in flagged_data but are NOT drawn in High; only pattern silent (is_dry_stuck) in Silent mode.
+        is_low_anomaly: mode === "high" ? false : !!row.is_dry_stuck,
       })),
     [selectedTimeseries, mode],
   );
@@ -239,7 +252,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
           }}
         >
           <AlertTriangle size={11} strokeWidth={2.4} /> High
-          <span style={{ background: "var(--surface)", padding: "0 5px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", fontSize: 11 }}>{result.anomaly_summary.length}</span>
+          <span style={{ background: "var(--surface)", padding: "0 5px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", fontSize: 11 }}>{highOnlySummary.length}</span>
         </button>
         <button
           type="button"
@@ -256,19 +269,19 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
           <span style={{ background: "var(--surface)", padding: "0 5px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", fontSize: 11 }}>{(result.dry_stuck_summary ?? []).length}</span>
         </button>
         <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-          {mode === "high" ? `${result.summary.total_high_anomalies ?? result.summary.total_anomalies} high · ${result.summary.total_low_anomalies ?? 0} low · ${result.summary.total_anomalies} total` : `${(result.dry_stuck_summary ?? []).reduce((a, s) => a + s.stuck_count, 0)} total silent pattern events`}
+          {mode === "high" ? `${result.summary.total_high_anomalies ?? highOnlySummary.reduce((a, s) => a + s.anomaly_count, 0)} high` : `${(result.dry_stuck_summary ?? []).reduce((a, s) => a + s.stuck_count, 0)} total silent pattern events`}
         </span>
       </div>
 
       {/* Two-panel */}
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 10, minHeight: 380 }}>
         {/* Left: station list */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", maxHeight: 440, paddingRight: 2 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", maxHeight: 440, paddingRight: 2, minHeight: 0 }}>
           {mode === "high" ? (
-            result.anomaly_summary.length === 0 ? (
+            highOnlySummary.length === 0 ? (
               <div style={{ padding: "20px 14px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No high anomalies.<br /><span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>Check <b style={{ color: "var(--teal)" }}>Silent</b>.</span></div>
             ) : (
-              result.anomaly_summary.map((station) => {
+              highOnlySummary.map((station) => {
                 const selected = station.station_id === selectedId;
                 const barPct = (station.anomaly_count / maxAnomalies) * 100;
                 const h = healthById.get(station.station_id) ?? null;
@@ -289,9 +302,9 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                     </div>
                     <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--danger)" : "color-mix(in oklab, var(--danger) 50%, transparent)", borderRadius: 99 }} /></div>
                     {h && (
-                      <span title={h.status === "normal" ? `On ${h.rain_days} rainy days checked — no long-term drift. Flagged days still stand out.` : h.status === "insufficient_data" ? `${h.rain_days} rainy days checked` : `On ${h.rain_days} rainy days, this gauge reads about ${h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) + "% higher" : "high"} than neighbors.`} style={{ display: "inline-flex" }}>
+                      <span title={h.status === "normal" ? `On ${h.rain_days} rainy days checked — reliable, no ongoing pattern. Flagged days still stand out.` : h.status === "insufficient_data" ? `${h.rain_days} rainy days checked` : `On ${h.rain_days} rainy days, this sensor reads about ${h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) + "% higher" : "high"} than neighbors.`} style={{ display: "inline-flex" }}>
                         <Badge tone={healthTone(h.status)} dot={h.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{h.status === "suspect" ? "Needs check" : h.status === "watch" ? "Watch" : h.status === "insufficient_data" ? "Need more rain" : "No drift"}
+                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{h.status === "suspect" ? "Needs attention" : h.status === "watch" ? "Monitor" : h.status === "insufficient_data" ? "Not enough data" : "Reliable"}
                         </Badge>
                       </span>
                     )}
@@ -335,7 +348,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
               })
             )
           )}
-        </div>
+          </div>
 
         {/* Right: detail */}
         {activeStation ? (

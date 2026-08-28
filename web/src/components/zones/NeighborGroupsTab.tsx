@@ -18,7 +18,10 @@ export function NeighborGroupsTab({ neighbors }: NeighborGroupsTabProps) {
   }, [neighbors, query]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 24 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 24 }}>
+      <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)", lineHeight: 1.5 }}>
+        Each card shows a station and the stations it was compared with that day — the closest stations within ~50 km (Haversine distance, Zone B). This is the context the detection uses.
+      </p>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div style={{ position: "relative", width: "100%", maxWidth: 384 }}>
           <Search

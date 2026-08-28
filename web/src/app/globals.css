@@ -830,6 +830,30 @@ select:-webkit-autofill {
   box-shadow: var(--shadow-md);
 }
 
+/* ─── Stat card watermark — enlarged low-opacity outline on the right ─────── */
+:root,
+[data-theme="light"] {
+  --watermark-opacity: 0.20;
+}
+[data-theme="dark"] {
+  --watermark-opacity: 0.32;
+}
+.stat-watermark {
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  opacity: var(--watermark-opacity);
+  pointer-events: none;
+  line-height: 0;
+  display: grid;
+  place-items: center;
+}
+@media (max-width: 420px) {
+  .stat-watermark { display: none; }
+}
+
 /* ─── Leaflet overrides — match theme ───────────────────────────────── */
 .leaflet-container {
   background: var(--surface-sunken) !important;

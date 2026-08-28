@@ -24,6 +24,7 @@ import { Header } from "@/components/dashboard/Header";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
+import { AuditRowSkeleton } from "@/components/ui/Skeleton";
 import { auditApi } from "@/lib/api/audit";
 import type { AuditLogEntry, AuditFilters, AuditStatEntry } from "@/lib/api/audit";
 
@@ -54,7 +55,7 @@ const EVENT_META: Record<string, EventMeta> = {
   report_approved:        { tone: "success", label: "Report approved",     icon: CheckCircle2 },
   file_uploaded:          { tone: "neutral", label: "File uploaded",       icon: Upload },
   photo_uploaded:         { tone: "neutral", label: "Photo added",         icon: Upload },
-  zone_pipeline_run:      { tone: "accent",  label: "Pipeline run",        icon: Play },
+  zone_pipeline_run:      { tone: "accent",  label: "Process run",        icon: Play },
   system_startup:         { tone: "neutral", label: "System start",        icon: Database },
 };
 
@@ -533,9 +534,10 @@ export default function AuditPage() {
 
           {/* Rows */}
           {loading ? (
-            <div style={{ padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--border)", borderTopColor: "var(--brand)", animation: "spin 700ms linear infinite" }} />
-              <p style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", margin: 0 }}>Fetching audit records…</p>
+            <div>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <AuditRowSkeleton key={i} />
+              ))}
             </div>
           ) : error ? (
             <div style={{ padding: "48px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>

@@ -95,13 +95,15 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
         }}
         className={cn(
           "relative cursor-pointer rounded-xl border-2 border-dashed",
-          "bg-surface-alt px-6 py-10 flex flex-col items-center justify-center text-center",
+          "bg-surface-alt px-5 flex flex-col items-center justify-center text-center",
           "transition-all duration-200",
+          // Fill the Upload card when empty — original stretched grey block is now the dashed zone itself
+          !hasFiles ? "flex-1 min-h-[260px] py-8" : "py-6",
           dragOver
             ? "border-brand bg-brand-soft"
             : hasFiles
-              ? "border-success/40 bg-success-soft"
-              : "border-border-strong hover:border-brand/60 hover:bg-surface-muted",
+              ? "border-success/30 bg-success-soft"
+              : "border-border-strong hover:border-brand/50 hover:bg-surface-muted",
           disabled && "opacity-50 cursor-not-allowed",
         )}
       >
@@ -120,31 +122,31 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
         />
 
         {hasFiles ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="h-12 w-12 rounded-xl bg-success/15 grid place-items-center">
-              <FileSpreadsheet size={22} className="text-success" strokeWidth={2.2} />
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="h-10 w-10 rounded-lg bg-success/12 grid place-items-center">
+              <FileSpreadsheet size={18} className="text-success" strokeWidth={2} />
             </div>
-            <p className="text-[14px] font-medium text-text">
+            <p className="text-[13px] font-semibold text-text">
               {files.length} file{files.length !== 1 ? "s" : ""} ready
             </p>
-            <p className="text-[12px] text-text-secondary">
+            <p className="text-[11px] text-text-tertiary">
               {formatBytes(totalBytes)} total · click or drop to add more
             </p>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-12 w-12 rounded-xl bg-brand-soft grid place-items-center">
-              <UploadCloud size={22} className="text-brand" strokeWidth={2.2} />
+          <div className="flex flex-col items-center gap-2.5">
+            <div className="h-10 w-10 rounded-lg bg-brand-soft grid place-items-center">
+              <UploadCloud size={18} className="text-brand" strokeWidth={2} />
             </div>
             <div>
-              <p className="text-[14px] font-medium text-text">
+              <p className="text-[13px] font-semibold text-text">
                 Drop station CSVs here, or <span className="text-brand">browse</span>
               </p>
-              <p className="text-[12px] text-text-secondary mt-1">
+              <p className="text-[11px] text-text-secondary mt-1 leading-snug">
                 One raw file per station, or a single combined CSV
                 <span className="font-mono tabular"> (station_id, date, latitude, longitude, rainfall)</span>
               </p>
-              <p className="text-[11px] text-text-tertiary mt-1">
+              <p className="text-[10.5px] text-text-tertiary mt-1">
                 Raw HMDAS files are auto-converted &amp; merged. Hourly data is aggregated to daily. Max {MAX_TOTAL_MB}&nbsp;MB total.
               </p>
             </div>
@@ -212,7 +214,7 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
       {confirmOpen && (
         <ConfirmDialog
           title="Remove all files and reset session?"
-          message="All selected files, pipeline results, and analysis data will be cleared. This cannot be undone."
+          message="All selected files, process results, and analysis data will be cleared. This cannot be undone."
           confirmLabel="Remove all"
           isDangerous
           onConfirm={() => {

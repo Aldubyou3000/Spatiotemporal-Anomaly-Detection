@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTicketTechnicians } from "@/hooks/useTechnicians";
 import {
   Activity,
@@ -17,7 +18,9 @@ import {
   LayoutGrid,
   Loader2,
   MapPin,
+  RotateCcw,
   Table2,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useZones } from "@/context/ZonesContext";
@@ -45,42 +48,62 @@ import type { AnomalyZone, Technician, TicketPriority } from "@/types/tickets";
 import { cn } from "@/lib/cn";
 
 // ─── Info Tooltip ─────────────────────────────────────────────────────────────
-
+// Portalled + viewport-clamped so it never clips inside cards with overflow:hidden.
 function InfoTip({ text }: { text: string }) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-
+  const [pos, setPos] = useState<{ x: number; y: number; h: number } | null>(null);
   function handleMouseEnter(e: React.MouseEvent<HTMLSpanElement>) {
     const r = e.currentTarget.getBoundingClientRect();
-    setPos({ x: r.left + r.width / 2, y: r.top });
+    setPos({ x: r.left + r.width / 2, y: r.top, h: r.height });
   }
-
+  const tip = (() => {
+    if (!pos || typeof document === "undefined" || typeof window === "undefined") return null;
+    const W = 230;
+    const half = W / 2;
+    const margin = 10;
+    const minLeft = margin + half;
+    const maxLeft = window.innerWidth - margin - half;
+    const left = Math.max(minLeft, Math.min(pos.x, maxLeft));
+    const estH = 76;
+    const showBelow = pos.y < estH + 12;
+    const top = showBelow ? pos.y + pos.h + 8 : pos.y - 8;
+    const transform = showBelow ? "translate(-50%, 0)" : "translate(-50%, -100%)";
+    return createPortal(
+      <span
+        style={{
+          position: "fixed",
+          left,
+          top,
+          transform,
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--r-lg)",
+          padding: "8px 12px",
+          fontSize: "var(--font-xs)",
+          fontWeight: 400,
+          color: "var(--text)",
+          lineHeight: 1.6,
+          whiteSpace: "normal",
+          width: W,
+          maxWidth: `calc(100vw - ${margin * 2}px)`,
+          boxShadow: "var(--shadow-lg)",
+          zIndex: 9999,
+          pointerEvents: "none",
+          letterSpacing: "0.01em",
+        }}
+      >
+        {text}
+      </span>,
+      document.body,
+    );
+  })();
   return (
     <span
       style={{ display: "inline-flex", alignItems: "center" }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setPos(null)}
     >
-      <HelpCircle
-        size={13}
-        strokeWidth={2}
-        style={{ color: "var(--text-tertiary)", cursor: "help", flexShrink: 0 }}
-      />
-      {pos && (
-        <span style={{
-          position: "fixed",
-          left: pos.x,
-          top: pos.y - 8,
-          transform: "translate(-50%, -100%)",
-          background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: "var(--r-lg)", padding: "8px 12px",
-          fontSize: "var(--font-xs)", fontWeight: 400, color: "var(--text)",
-          lineHeight: 1.6, whiteSpace: "normal", width: 230,
-          boxShadow: "var(--shadow-lg)", zIndex: 9999, pointerEvents: "none",
-          letterSpacing: "0.01em",
-        }}>
-          {text}
-        </span>
-      )}
+      <HelpCircle size={13} strokeWidth={2} style={{ color: "var(--text-tertiary)", cursor: "help", flexShrink: 0 }} />
+      {tip}
     </span>
   );
 }
@@ -286,38 +309,83 @@ function CreateTicketModal({
         {/* ── Step 3: Confirm dispatch ── */}
         {step === 3 && (
           <>
-            {/* Warning banner */}
-            <div style={{ padding: "12px 14px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--warning) 8%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 30%, transparent)" }}>
-              <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--warning-on)" }}>
-                Dispatch work order?
-              </p>
-              <p style={{ margin: "4px 0 0", fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                This will appear as an active work order on the selected technician{selectedTechs.length !== 1 ? "s'" : "'s"} mobile devices immediately. Make sure all details are correct before proceeding.
-              </p>
+            {/* Warning banner — refined with icon and balanced padding */}
+            <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--warning) 8%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 24%, transparent)" }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: "var(--warning-soft)", border: "1px solid color-mix(in oklab, var(--warning) 18%, transparent)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <AlertTriangle size={13} strokeWidth={2.2} style={{ color: "var(--warning-on)" }} />
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--warning-on)", lineHeight: 1.3 }}>
+                  Dispatch work order?
+                </p>
+                <p style={{ margin: "4px 0 0", fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  This will appear as an active work order on the selected technician{selectedTechs.length !== 1 ? "s'" : "'s"} mobile devices immediately. Make sure all details are correct before proceeding.
+                </p>
+              </div>
             </div>
 
-            {/* Summary */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {/* Summary — grid layout prevents label/value overlap */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {[
-                { label: "Title", value: title.trim() },
-                { label: "Station", value: stationInput.trim() },
+                { label: "Title", value: title.trim() || "—" },
+                { label: "Station", value: stationInput.trim() || "—" },
                 { label: "Priority", value: priority.charAt(0).toUpperCase() + priority.slice(1) },
                 { label: "Zone", value: zone || "—" },
-                { label: "Technicians", value: selectedTechs.map((t) => t.full_name).join(", ") },
+                {
+                  label: selectedTechs.length === 1 ? "Technician" : "Technicians",
+                  value: selectedTechs.length ? selectedTechs.map((t) => t.full_name).join(", ") : "—",
+                },
               ].map(({ label, value }) => (
-                <div key={label} style={{ display: "flex", gap: 12, padding: "8px 12px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", border: "1px solid var(--divider)" }}>
-                  <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", width: 72, flexShrink: 0, paddingTop: 1 }}>{label}</span>
-                  <span style={{ fontSize: "var(--font-sm)", color: "var(--text)", wordBreak: "break-word" }}>{value}</span>
+                <div
+                  key={label}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "92px 1fr",
+                    gap: 12,
+                    alignItems: "start",
+                    padding: "9px 12px",
+                    borderRadius: "var(--r-md)",
+                    background: "var(--surface-sunken)",
+                    border: "1px solid var(--divider)",
+                    minWidth: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "var(--font-xs)",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: "var(--text-muted)",
+                      whiteSpace: "nowrap",
+                      lineHeight: "18px",
+                    }}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "var(--font-sm)",
+                      fontWeight: 500,
+                      color: "var(--text)",
+                      lineHeight: 1.45,
+                      minWidth: 0,
+                      overflowWrap: "anywhere",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {value}
+                  </span>
                 </div>
               ))}
             </div>
 
             {file && (
-              <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", border: `1px solid ${attachFile ? "var(--brand)" : "var(--border)"}`, background: attachFile ? "color-mix(in oklab, var(--brand) 6%, var(--surface))" : "var(--surface)", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", border: `1px solid ${attachFile ? "var(--brand)" : "var(--border)"}`, background: attachFile ? "color-mix(in oklab, var(--brand) 6%, var(--surface))" : "var(--surface)", cursor: "pointer", transition: "border-color 0.15s, background 0.15s", minWidth: 0 }}>
                 <input type="checkbox" checked={attachFile} onChange={(e) => setAttachFile(e.target.checked)} style={{ accentColor: "var(--brand)", width: 15, height: 15, flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" }}>Attach anomaly data file</p>
-                  <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name} · {Math.round(file.size / 1024)} KB</p>
+                <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                  <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)", lineHeight: 1.3 }}>Attach anomaly data file</p>
+                  <p style={{ margin: "2px 0 0", fontSize: "var(--font-xs)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name} · {Math.round(file.size / 1024)} KB</p>
                 </div>
               </label>
             )}
@@ -528,7 +596,23 @@ export default function ZonesPage() {
   const { technicians } = useTicketTechnicians();
   const [createStation, setCreateStation] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Any file-set change invalidates a previous pipeline result — keep the
+  // session coherent when files are added/removed individually after a run.
+  function handleFilesChange(next: File[]) {
+    setFiles(next);
+    if (result) {
+      setResult(null);
+      setError(null);
+      setProgress(0);
+      setActiveStage(0);
+      setFinalizing(false);
+      setConfigOpen(true);
+    }
+  }
+  const pipelineRef = useRef<HTMLDivElement | null>(null);
 
   function handleCancel() {
     if (tickerRef.current) clearInterval(tickerRef.current);
@@ -548,6 +632,17 @@ export default function ZonesPage() {
     setActiveStage(0);
     setProgress(0);
     setFinalizing(false);
+
+    // Smoothly scroll to the pipeline so the user sees progress immediately
+    requestAnimationFrame(() => {
+      const prefersReduced =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      pipelineRef.current?.scrollIntoView({
+        behavior: prefersReduced ? "auto" : "smooth",
+        block: "start",
+      });
+    });
 
     // Start the animation ticker — smooth 60fps-ish
     let p = 0;
@@ -576,7 +671,7 @@ export default function ZonesPage() {
       setConfigOpen(false);
       const anomalies = data.flagged_data.filter((r) => r.is_anomaly).length;
       const filePrefix = files.length > 1 ? `${files.length} files merged · ` : "";
-      toast.success("Pipeline complete", {
+      toast.success("Process complete", {
         description: `${filePrefix}${data.cleaned_data.length.toLocaleString()} readings cleaned · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
       });
     } catch (err) {
@@ -585,7 +680,7 @@ export default function ZonesPage() {
       const msg = err instanceof Error ? err.message : "Failed to process file.";
       setError(msg);
       setFinalizing(false);
-      toast.error("Pipeline failed", { description: msg });
+      toast.error("Process failed", { description: msg });
     } finally {
       setRunning(false);
     }
@@ -611,47 +706,63 @@ export default function ZonesPage() {
 
         {/* Run controls + upload (collapsible) */}
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)", overflow: "hidden" }}>
-          {/* Toggle header */}
-          <button
-            onClick={() => setConfigOpen(!configOpen)}
-            className="card-toggle"
-            style={{
-              padding: "12px 20px",
-              borderBottom: configOpen ? "1px solid var(--divider)" : "none",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <ChevronRight
-                size={16}
-                style={{ color: "var(--text-muted)", transition: "transform 0.2s ease", transform: configOpen ? "rotate(90deg)" : "rotate(0deg)", flexShrink: 0 }}
-              />
-              <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>
-                Pipeline configuration
-              </span>
-              {!configOpen && files.length > 0 && (
-                <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", background: "var(--surface-sunken)", padding: "1px 8px", borderRadius: "var(--r-sm)", fontFamily: "var(--font-mono)" }}>
-                  {files.length === 1 ? files[0].name : `${files.length} files`}
+          {/* Toggle header — Reset is outside the toggle so it stays reachable when collapsed */}
+          <div style={{ display: "flex", alignItems: "center", gap: 0, borderBottom: configOpen ? "1px solid var(--divider)" : "none" }}>
+            <button
+              onClick={() => setConfigOpen(!configOpen)}
+              className="card-toggle"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: "12px 20px",
+                borderBottom: "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <ChevronRight
+                  size={16}
+                  style={{ color: "var(--text-muted)", transition: "transform 0.2s ease", transform: configOpen ? "rotate(90deg)" : "rotate(0deg)", flexShrink: 0 }}
+                />
+                <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap" }}>
+                  Process configuration
                 </span>
+                {!configOpen && files.length > 0 && (
+                  <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", background: "var(--surface-sunken)", padding: "1px 8px", borderRadius: "var(--r-sm)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
+                    {files.length === 1 ? files[0].name : `${files.length} files`}
+                  </span>
+                )}
+                {!configOpen && files.length === 0 && (
+                  <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>No files selected</span>
+                )}
+              </div>
+              {result && !configOpen && (
+                <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500, flexShrink: 0 }}>Results ready</span>
               )}
-              {!configOpen && files.length === 0 && (
-                <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>No files selected</span>
-              )}
-            </div>
-            {result && !configOpen && (
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500 }}>Results ready</span>
+            </button>
+            {(files.length > 0 || result || error) && !running && (
+              <button
+                type="button"
+                onClick={() => setConfirmReset(true)}
+                className="export-btn"
+                title="Clear files and process results"
+                style={{ marginRight: 12, flexShrink: 0, height: 28, gap: 6 }}
+              >
+                <RotateCcw size={12} strokeWidth={2.2} />
+                Reset
+              </button>
             )}
-          </button>
+          </div>
 
-          {/* Collapsible body */}
+          {/* Collapsible body — equal height so the two cards read as a balanced pair; dashed zone fills the Upload card */}
           {configOpen && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--gap-card)", padding: "16px 20px 20px" }}>
-              {/* File upload */}
-              <div style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", overflow: "hidden" }}>
-                <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--divider)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--gap-card)", padding: "16px 20px 20px", alignItems: "stretch" }}>
+              {/* File upload — flex column so the dashed dropzone stretches to fill when Run side is taller */}
+              <div style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--divider)", flexShrink: 0 }}>
                   <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Upload station data</h3>
                 </div>
-                <div style={{ padding: "14px 16px" }}>
-                  <FileUpload files={files} onFilesChange={setFiles} onRemove={resetSession} disabled={running} />
+                <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                  <FileUpload className="flex-1 flex flex-col min-h-0" files={files} onFilesChange={handleFilesChange} onRemove={resetSession} disabled={running} />
                 </div>
               </div>
 
@@ -668,7 +779,7 @@ export default function ZonesPage() {
                     loading={false}
                     onClick={running ? () => setConfirmCancel(true) : handleProcess}
                   >
-                    {running ? "Stop" : "Run Pipeline"}
+                    {running ? "Stop" : "Run Process"}
                   </Button>
 
                   {/* How it works — user-facing, no backend thresholds exposed. Keeps the card from looking hollow after the slider removal, without revealing LOF/Haversine internals. */}
@@ -713,16 +824,38 @@ export default function ZonesPage() {
         </div>
 
         {/* Pipeline diagram */}
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}>
+        <div
+          ref={pipelineRef}
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)", scrollMarginTop: "calc(var(--topbar-h) + 16px)" }}
+        >
           <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--divider)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Detection pipeline</h3>
+              <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Detection process</h3>
               <InfoTip text="CSV → Zone A cleans and validates readings → Zone B groups stations by proximity → Zone C runs Local Outlier Factor to flag anomalies." />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {running && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--font-xs)", fontWeight: 500, color: finalizing ? "var(--warning-on)" : "var(--success-on)", padding: "2px 8px", borderRadius: "var(--r-full)", background: finalizing ? "var(--warning-soft)" : "var(--success-soft)", transition: "background .3s, color .3s" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: 999, background: finalizing ? "var(--warning)" : "var(--success)", animation: "live-pulse 2s ease-out infinite" }} />
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: "var(--font-xs)",
+                    fontWeight: 600,
+                    letterSpacing: "0.02em",
+                    color: finalizing ? "var(--text-secondary)" : "var(--success-on)",
+                    padding: "4px 10px",
+                    borderRadius: "var(--r-full)",
+                    background: finalizing ? "var(--surface-sunken)" : "var(--success-soft)",
+                    border: finalizing ? "1px solid var(--border)" : "1px solid transparent",
+                    transition: "all .2s ease",
+                  }}
+                >
+                  {finalizing ? (
+                    <Loader2 size={11} strokeWidth={2.5} style={{ color: "var(--text-muted)", animation: "spin 600ms linear infinite" }} />
+                  ) : (
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--success)", animation: "live-pulse 2s ease-out infinite", flexShrink: 0 }} />
+                  )}
                   {finalizing ? "Finalizing…" : "Running"}
                 </span>
               )}
@@ -750,12 +883,26 @@ export default function ZonesPage() {
 
       {confirmCancel && (
         <ConfirmDialog
-          title="Stop pipeline?"
-          message="The detection pipeline is still running. Are you sure you want to stop it?"
-          confirmLabel="Stop pipeline"
+          title="Stop process?"
+          message="The detection process is still running. Are you sure you want to stop it?"
+          confirmLabel="Stop process"
           isDangerous
           onConfirm={handleCancel}
           onCancel={() => setConfirmCancel(false)}
+        />
+      )}
+
+      {confirmReset && (
+        <ConfirmDialog
+          title="Reset process?"
+          message="All selected files and process results will be cleared. You can then start a new analysis."
+          confirmLabel="Reset process"
+          isDangerous
+          onConfirm={() => {
+            resetSession();
+            setConfirmReset(false);
+          }}
+          onCancel={() => setConfirmReset(false)}
         />
       )}
     </div>
@@ -777,10 +924,12 @@ function EmptyState() {
 
 function RunningSkeleton() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px", gap: 12, textAlign: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)" }}>
-      <Loader2 size={20} style={{ color: "var(--brand)", animation: "spin 700ms linear infinite" }} />
-      <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>Running Zone A → B → C…</p>
-      <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>Cleaning, building spatial neighbourhoods, then fitting LOF per station.</p>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 24px 24px", gap: 10, textAlign: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}>
+      <div style={{ width: 32, height: 32, borderRadius: "var(--r-md)", background: "var(--surface-sunken)", border: "1px solid var(--border)", display: "grid", placeItems: "center" }}>
+        <Loader2 size={14} style={{ color: "var(--text-muted)", animation: "spin 700ms linear infinite" }} />
+      </div>
+      <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Running Zone A → B → C…</p>
+      <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)", lineHeight: 1.5 }}>Cleaning and grouping — this stays quick for normal sized files.</p>
     </div>
   );
 }
@@ -837,9 +986,9 @@ function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTi
     { key: "longitude" as const, header: "Longitude", mono: true, align: "right" as const, width: "14%" },
     { key: "rainfall" as const, header: "Rainfall (mm)", mono: true, align: "right" as const, width: "14%" },
     {
-      key: "interpolated_flag" as const, header: "Interpolated", align: "center" as const,
+      key: "interpolated_flag" as const, header: "Gap filled", align: "center" as const,
       render: (value: unknown) => value
-        ? <Badge tone="warning">Yes</Badge>
+        ? <Badge tone="warning">Filled</Badge>
         : <span style={{ color: "var(--text-tertiary)" }}>—</span>,
     },
   ], []);
@@ -849,14 +998,14 @@ function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTi
     { key: "date" as const, header: "Date", mono: true, width: "14%" },
     { key: "rainfall" as const, header: "Rainfall (mm)", mono: true, align: "right" as const, width: "14%" },
     {
-      key: "lof_score" as const, header: "LOF Score", mono: true, align: "right" as const,
+      key: "lof_score" as const, header: "How unusual", mono: true, align: "right" as const,
       render: (v: unknown) => typeof v === "number" ? v.toFixed(3) : <span style={{ color: "var(--text-tertiary)" }}>—</span>,
     },
     {
-      key: "is_anomaly" as const, header: "Status", align: "center" as const,
+      key: "is_anomaly" as const, header: "Result", align: "center" as const,
       render: (v: unknown) => v
-        ? <Badge tone="danger" dot>Anomaly</Badge>
-        : <Badge tone="success" dot>Normal</Badge>,
+        ? <Badge tone="danger" dot>Flagged</Badge>
+        : <Badge tone="success" dot>As expected</Badge>,
     },
   ], []);
 
@@ -900,8 +1049,8 @@ function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTi
       label: "All readings",
       type: "select",
       options: [
-        { value: "true",  label: "Interpolated only" },
-        { value: "false", label: "Original only" },
+        { value: "true",  label: "Gap filled" },
+        { value: "false", label: "As recorded" },
       ],
     },
   ], []);
@@ -909,11 +1058,11 @@ function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTi
   const flaggedFilterFields = useMemo<FilterField[]>(() => [
     {
       key: "is_anomaly",
-      label: "Status",
+      label: "Result",
       type: "select",
       options: [
-        { value: "true",  label: "Anomaly" },
-        { value: "false", label: "Normal" },
+        { value: "true",  label: "Flagged" },
+        { value: "false", label: "As expected" },
       ],
     },
   ], []);

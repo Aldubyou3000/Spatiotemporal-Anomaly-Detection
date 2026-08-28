@@ -23,7 +23,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AWS QC Pipeline",
+  title: "AWS QC Process",
   description: "Spatiotemporal Anomaly Detection — Analyst Dashboard",
 };
 

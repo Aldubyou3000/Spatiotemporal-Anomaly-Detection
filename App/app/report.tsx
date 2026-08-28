@@ -290,24 +290,15 @@ export default function ReportScreen() {
             {ticket.priority ? (
               <Pill label={`${pr.label} Priority`} color={pr.color} bg={pr.bg} outline />
             ) : null}
-            {ticket.anomalyZone ? (
-              <Pill label={`Zone ${ticket.anomalyZone}`} color={palette.accent} bg={palette.accentSoft} />
-            ) : null}
+            {/* Zone hidden — matches web plain language */}
           </View>
-
-          {ticket.coordinates ? (
-            <View style={[styles.coordRow, { borderTopColor: theme.border }]}>
-              <Icon name={icons.coordinates} size={14} color={theme.textSecondary} />
-              <Text style={[styles.coordText, { color: theme.textSecondary }]}>{ticket.coordinates}</Text>
-            </View>
-          ) : null}
         </Card>
 
-        {/* ── Follow-up callout ──────────────────────────────────────── */}
+        {/* ── Revisit callout ──────────────────────────────────────── */}
         {ticket.isFollowUp && (
           <View style={{ marginBottom: spacing.md, padding: spacing.sm, borderRadius: radius.md, backgroundColor: palette.warningSoft, borderWidth: 1, borderColor: theme.status.warning + '4D' }}>
             <Text style={{ fontSize: 13, fontWeight: '700', color: theme.status.warning, marginBottom: 4 }}>
-              Follow-up visit{(ticket.followUpCount ?? 0) > 1 ? ` #${ticket.followUpCount}` : ''} — analyst instructions
+              Revisit needed{(ticket.followUpCount ?? 0) > 1 ? ` #${ticket.followUpCount}` : ''} — instructions
             </Text>
             <Text style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 18 }}>
               {ticket.followUpNotes || 'No additional instructions provided.'}

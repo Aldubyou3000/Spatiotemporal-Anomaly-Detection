@@ -15,14 +15,16 @@ const CLOUD_BASE = [
   { d: 0.92, x:  0.50, y: -0.38 },
   { d: 0.86, x:  0.96, y: -0.30 },
   // bottom row — even scallop, full width, bleeds off both sides
-  { d: 0.60, x: -0.34, y: -0.04 },
-  { d: 0.60, x: -0.02, y:  0.00 },
-  { d: 0.60, x:  0.30, y: -0.02 },
-  { d: 0.60, x:  0.62, y:  0.00 },
-  { d: 0.60, x:  0.94, y: -0.02 },
+  // eased back a touch: 0.70 and flat baseline (y -0.02) — overlap ~0.38W,
+  // soft but not as flat as 0.74
+  { d: 0.70, x: -0.34, y: -0.02 },
+  { d: 0.70, x: -0.02, y: -0.02 },
+  { d: 0.70, x:  0.30, y: -0.02 },
+  { d: 0.70, x:  0.62, y: -0.02 },
+  { d: 0.70, x:  0.94, y: -0.02 },
 ];
 
-function Cloud({ width, color, lite }: { width: number; color: string; lite: boolean }) {
+function Cloud({ width, color, lite, isDark }: { width: number; color: string; lite: boolean; isDark: boolean }) {
   const W = width;
   const H = W * 1.10;
   return (
@@ -31,9 +33,9 @@ function Cloud({ width, color, lite }: { width: number; color: string; lite: boo
         const d = W * c.d;
         return (
           // Each disc is a clipped circle (overflow:hidden + borderRadius) holding
-          // a gradient that fades to dark toward its bottom edge. Clipped to the
-          // circle, this reads as an inner shadow on every lobe — so the bumps look
-          // puffy/3D and overlapping discs cast soft shadows into one another.
+          // a gradient that fades toward its bottom edge — white (0.22) in light,
+          // dark (0.22) in dark — so the bumps look puffy and overlapping discs
+          // read correctly on each theme.
           //
           // LITE mode (reduce-motion / battery-saver / low-end) drops the gradient
           // overlay: the cloud keeps its exact silhouette + position, but each disc
@@ -55,7 +57,7 @@ function Cloud({ width, color, lite }: { width: number; color: string; lite: boo
           >
             {!lite && (
               <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.10)']}
+                colors={['transparent', isDark ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.22)']}
                 locations={[0.78, 1]}
                 style={StyleSheet.absoluteFill}
                 pointerEvents="none"
@@ -124,7 +126,7 @@ function CloudBackground({
             transform: [{ translateX: width * l.x }, { translateY: width * l.y }],
           }}
         >
-          <Cloud width={width} color={shades[i]} lite={lite} />
+          <Cloud width={width} color={shades[i]} lite={lite} isDark={isDark} />
         </View>
       ))}
     </View>

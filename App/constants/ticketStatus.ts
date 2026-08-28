@@ -36,8 +36,8 @@ export const STATUS_LABEL: Record<string, string> = {
   created: 'Assigned',
   assigned: 'Assigned',
   'in-progress': 'In Progress',
-  pending_review: 'Pending Review',
-  follow_up: 'Follow-up Required',
+  pending_review: 'Ready for Review',
+  follow_up: 'Revisit Needed',
   verified: 'Verified',
   cancelled: 'Cancelled',
 };

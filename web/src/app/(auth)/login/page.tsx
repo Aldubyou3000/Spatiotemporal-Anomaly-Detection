@@ -160,7 +160,7 @@ export default function LoginPage() {
                 textTransform: "uppercase",
               }}
             >
-              AWS QC Pipeline
+              AWS QC Process
             </div>
             <div style={{ fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>
               Analyst Console

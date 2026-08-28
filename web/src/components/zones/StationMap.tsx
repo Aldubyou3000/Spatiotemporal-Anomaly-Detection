@@ -13,14 +13,15 @@ interface StationPoint {
   longitude: number;
   anomaly_count: number;
   total_readings: number;
-  /** Same intensity that colors the Gauge Reliability badges — keeps map + card in sync. */
+  /** Same intensity that colors the Sensor Reliability badges — keeps map + card in sync. */
   gaugeStatus?: GaugeStatus;
 }
 
 interface StationMapProps {
   stations: StationPoint[];
   className?: string;
-  height?: number;
+  height?: number | string;
+  style?: React.CSSProperties;
 }
 
 const LIGHT_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -28,7 +29,7 @@ const DARK_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/
 const ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.esri.com/">Esri</a>';
 
-export function StationMap({ stations, className, height = 480 }: StationMapProps) {
+export function StationMap({ stations, className, height = 480, style }: StationMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const tilesRef = useRef<L.TileLayer | null>(null);
@@ -60,7 +61,19 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
 
     mapRef.current = map;
 
+    // Keep Leaflet in sync when the flex container resizes (map now stretches to
+    // match the right-hand stats stack). Without this, Leaflet keeps the old 0×0
+    // or 400px measurement and tiles appear clipped.
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+      ro = new ResizeObserver(() => {
+        requestAnimationFrame(() => map.invalidateSize({ animate: false }));
+      });
+      ro.observe(containerRef.current);
+    }
+
     return () => {
+      if (ro) ro.disconnect();
       map.remove();
       mapRef.current = null;
       tilesRef.current = null;
@@ -97,7 +110,7 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
     stations.forEach((station) => {
       const isAnomalous = station.anomaly_count > 0;
       // Map is anomaly-first: dot color = flagged vs typical.
-      // Gauge health stays in the popup as secondary context (dot + text), not the dot fill.
+      // Sensor reliability stays in the popup as secondary context (dot + text), not the dot fill.
       const status = (station as { gaugeStatus?: GaugeStatus }).gaugeStatus ?? null;
       const baseColor = isAnomalous ? getCssVar("--danger") || "#DC2626" : getCssVar("--success") || "#16A34A";
 
@@ -134,8 +147,8 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
         fillOpacity: isAnomalous ? 1 : 0.62,
       }).addTo(map);
 
-      const gaugeLabel = status === "suspect" ? "Gauge needs check" : status === "watch" ? "Gauge watch" : status === "consistent" ? "Gauge normal" : status === "need_more" ? "Gauge — need more rain" : "—";
-      const gaugeDesc = status === "suspect" ? "repeated bias vs neighbors" : status === "watch" ? "a bit off vs neighbors" : status === "consistent" ? "tracks neighbors" : "";
+      const gaugeLabel = status === "suspect" ? "Sensor needs attention" : status === "watch" ? "Monitor sensor" : status === "consistent" ? "Sensor reliable" : status === "need_more" ? "Not enough data" : "—";
+      const gaugeDesc = status === "suspect" ? "often much higher or often no reading vs neighbors" : status === "watch" ? "a bit off vs neighbors" : status === "consistent" ? "matches neighbors over time" : "";
       const statusHue: Record<NonNullable<GaugeStatus>, string> = {
         suspect: getCssVar("--danger") || "#DC2626",
         watch: getCssVar("--warning") || "#D97706",
@@ -195,12 +208,13 @@ export function StationMap({ stations, className, height = 480 }: StationMapProp
     }
   }, [stations]);
 
+  const isFlexible = typeof height === "string" && height.includes("%");
   return (
-    <div style={{ isolation: "isolate" }}>
+    <div style={{ isolation: "isolate", ...(isFlexible ? { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 } : undefined), ...style }}>
       <div
         ref={containerRef}
         className={className}
-        style={{ height, borderRadius: 12, overflow: "hidden" }}
+        style={{ height, ...(isFlexible ? { flex: 1, minHeight: 380 } : undefined), borderRadius: 12, overflow: "hidden" }}
       />
     </div>
   );

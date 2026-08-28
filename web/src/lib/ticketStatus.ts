@@ -10,8 +10,8 @@
  * decoration):
  *   - Each status maps to ONE distinct tone, and no two active states share a
  *     color (In Progress ≠ Pending Review).
- *   - The two states that demand analyst action — Pending Review and
- *     Follow-up Required — get the most salient warm tones (amber / red).
+ *   - The two states that demand analyst action — Ready for Review and
+ *     Revisit Needed — get the most salient warm tones (amber / red).
  *   - Closed states (Verified, Cancelled) recede: green and grey.
  *   - Priority and zone are SECONDARY signals; they are intentionally muted in
  *     list rows so a wall of colored chips doesn't drown out the status.
@@ -27,16 +27,16 @@ type BadgeTone =
 export const STATUS_LABEL: Record<TicketStatus, string> = {
   assigned: "Assigned",
   "in-progress": "In Progress",
-  pending_review: "Pending Review",
-  follow_up: "Follow-up Required",
+  pending_review: "Ready for Review",
+  follow_up: "Revisit Needed",
   verified: "Verified",
   cancelled: "Cancelled",
 };
 
 // ── Status color — one distinct tone per status ──────────────────────────────
 // info (cyan)  → work is actively happening
-// warning      → needs analyst review (action required)
-// danger       → follow-up required (action required, stronger)
+// warning      → needs analyst review (Ready for Review)
+// danger       → revisit needed (action required, stronger)
 // brand        → queued / assigned, not yet started
 // success      → done & verified
 // neutral      → cancelled / inert
@@ -84,10 +84,10 @@ const STATUS_RANK: Record<TicketStatus, number> = {
  * Statuses awaiting the analyst's review decision — drives the "Needs Review"
  * group/count on the Tickets page AND must match the sidebar badge.
  *
- * ONLY `pending_review` qualifies: a `follow_up` ticket has already been
+ * ONLY `pending_review` (Ready for Review) qualifies: a `follow_up` (Revisit Needed) ticket has already been
  * reviewed and sent back, so the ball is now in the technician's court — it is
  * not awaiting analyst action. (The sidebar badge counts `reports.pending`,
- * which is also pending_review only, so both numbers agree.)
+ * which is also Ready for Review only, so both numbers agree.)
  *
  * Note: `follow_up` still sorts near the top via STATUS_RANK so it stays
  * visible — it just isn't counted as "needs YOUR review".
