@@ -1,4 +1,21 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const DIRECT_BASE = BASE_URL; // Render direct — bypasses Vercel 30s proxy timeout for large uploads
+
+// Direct Bearer token for zones upload (bypasses Vercel proxy). Stored after login.
+let _directToken: string | null = null;
+if (typeof window !== "undefined") {
+  _directToken = sessionStorage.getItem("direct_access_token");
+}
+export function setDirectToken(token: string | null) {
+  _directToken = token;
+  if (typeof window !== "undefined") {
+    if (token) sessionStorage.setItem("direct_access_token", token);
+    else sessionStorage.removeItem("direct_access_token");
+  }
+}
+export function getDirectToken(): string | null {
+  return _directToken;
+}
 
 // On the Vercel deployment, call the API same-origin ("/api/...") — next.config.ts
 // rewrites proxy it to Render. Cookies become first-party on vercel.app, so Chrome
@@ -138,4 +155,19 @@ export const apiClient = {
   /** Upload multipart/form-data — browser sets Content-Type with boundary. */
   upload: <T>(path: string, formData: FormData, options: RequestOptions = {}) =>
     request<T>(path, { ...options, method: "POST", body: formData }, options.params),
+
+  /** Direct upload to Render — bypasses Vercel proxy (avoids 30s timeout for 4-file LOF). */
+  uploadDirect: async <T>(path: string, formData: FormData): Promise<T> => {
+    const token = getDirectToken();
+    const url = new URL(path, DIRECT_BASE).toString();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    // CSRF not needed for Bearer auth
+    const res = await fetch(url, { method: "POST", body: formData, headers, credentials: "omit" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ detail: "Request failed" }));
+      throw new Error(body?.detail ?? body?.message ?? "Request failed");
+    }
+    return res.json() as Promise<T>;
+  },
 };

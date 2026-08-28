@@ -196,7 +196,8 @@ def login_endpoint(request: Request, body: LoginRequest, response: Response):
 
     _set_auth_cookies(response, result["access_token"], result["refresh_token"], request)
     logger.info("[auth] web login: user_id=%s ip=%s", result["user"].get("id"), _client_ip(request))
-    return {"user": result["user"]}
+    # Return tokens as well for direct-to-Render uploads (bypass Vercel 30s proxy timeout for 4-file LOF).
+    return {"user": result["user"], "access_token": result["access_token"], "refresh_token": result["refresh_token"]}
 
 
 @router.post("/refresh")

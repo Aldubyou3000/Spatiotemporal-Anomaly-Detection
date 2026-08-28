@@ -139,7 +139,48 @@ def get_mobile_user(authorization: str | None = Header(default=None)) -> dict:
     return _verify_and_load_profile(token)
 
 
+def get_current_user_or_bearer(
+    request: Request,
+    access_token: str | None = Cookie(default=None),
+    session_fp: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """Accept either web cookie auth or Bearer token (for direct zones upload bypassing Vercel proxy)."""
+    # Try Bearer first if present (direct upload from Vercel bypass)
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            token = authorization.removeprefix("Bearer ").strip()
+            return _verify_and_load_profile(token)
+        except HTTPException:
+            pass  # fall through to cookie
+    # Fall back to cookie auth
+    if not access_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    profile = _verify_and_load_profile(access_token)
+    if not verify_session_fingerprint(
+        session_fp,
+        _client_ip(request),
+        _client_ua(request),
+        settings.csrf_secret,
+        user_id=profile.get("id", ""),
+    ):
+        from ..services.audit_service import audit as _audit
+        _audit.session_hijack_attempt(
+            user_id=str(profile["id"]),
+            ip=_client_ip(request),
+            user_agent=_client_ua(request),
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session invalid — please log in again")
+    return profile
+
+
 def require_analyst(user: dict = Depends(get_current_user)) -> dict:
+    if user.get("role") != "analyst":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Analyst access required")
+    return user
+
+
+def require_analyst_or_bearer(user: dict = Depends(get_current_user_or_bearer)) -> dict:
     if user.get("role") != "analyst":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Analyst access required")
     return user

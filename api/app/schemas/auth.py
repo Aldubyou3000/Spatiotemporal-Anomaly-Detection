@@ -16,3 +16,5 @@ class UserProfile(BaseModel):
 
 class LoginResponse(BaseModel):
     user: UserProfile
+    access_token: str | None = None
+    refresh_token: str | None = None

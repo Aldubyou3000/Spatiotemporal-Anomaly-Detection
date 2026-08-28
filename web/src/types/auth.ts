@@ -13,4 +13,6 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   user: UserProfile;
+  access_token?: string;
+  refresh_token?: string;
 }

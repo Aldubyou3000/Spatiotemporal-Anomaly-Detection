@@ -1,12 +1,18 @@
-import { apiClient } from "./client";
+import { apiClient, setDirectToken } from "./client";
 import type { LoginRequest, LoginResponse, UserProfile } from "@/types/auth";
 
 export const authApi = {
-  login: (body: LoginRequest) =>
-    apiClient.post<LoginResponse>("/api/auth/login", body),
+  login: async (body: LoginRequest): Promise<LoginResponse> => {
+    const res = await apiClient.post<LoginResponse>("/api/auth/login", body);
+    if (res.access_token) setDirectToken(res.access_token);
+    return res;
+  },
 
-  logout: () =>
-    apiClient.post<{ ok: boolean }>("/api/auth/logout"),
+  logout: async () => {
+    const res = await apiClient.post<{ ok: boolean }>("/api/auth/logout");
+    setDirectToken(null);
+    return res;
+  },
 
   me: () =>
     apiClient.get<UserProfile>("/api/auth/me"),
