@@ -5,16 +5,17 @@ Root-level deploy/config surface: how the three processes are launched, what env
 ## Launch
 - `README.md` "Quick Start" / "Team Setup" is the canonical runbook. Three terminals, started **API → Web → App**:
   - API: `cd api && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` — **one worker, no `--workers`** (in-process SSE broker — see [api-realtime.md](./api-realtime.md))
-  - Web: `cd web && npm run dev` (`next dev --turbopack`)
+  - Web: `cd web && npm run dev` (`next dev --turbopack`) — in prod, `web/next.config.ts:45` rewrites `/api/*` → `https://spatiotemporal-api.onrender.com` (first-party cookies on `vercel.app`)
   - App: `cd App && npm start` (Expo)
 - Optional 4th terminal: `ngrok http 8000` for mobile Google OAuth (HTTPS callback required). Guide at `docs/NGROK_GOOGLE_SIGNIN_GUIDE.md`.
+- Deployed: Vercel Hobby `web` + Render Free `api` (see overview). 4-file pipeline direct-bypasses Vercel via `Bearer` to avoid 30s edge timeout.
 
 ## Environment files
 | File | Holds | Owner |
 |------|-------|-------|
-| `api/.env` | All secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `JWT_SECRET`, `JWT_ALGORITHM`, token lifetimes, `ALLOWED_ORIGINS`, `DEV_MODE`, `CSRF_SECRET`, `COOKIE_SECURE`, `COOKIE_SAMESITE`, `GOOGLE_OAUTH_ENABLED`, `OAUTH_REDIRECT_BASE`, `MOBILE_OAUTH_REDIRECT_BASE`, `WEB_APP_URL`, lockout params | Server only — never sent to browser |
-| `web/.env.local` | `NEXT_PUBLIC_API_URL` only | Next.js |
-| `App/.env` | `EXPO_PUBLIC_API_URL` (PC LAN IP, not localhost) | Expo |
+| `api/.env` | All secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `JWT_SECRET`, `JWT_ALGORITHM`, token lifetimes, `ALLOWED_ORIGINS`, `DEV_MODE`, `CSRF_SECRET`, `COOKIE_SECURE`, `COOKIE_SAMESITE` (`lax` via proxy, `none`+`Partitioned` for direct), `GOOGLE_OAUTH_ENABLED`, `OAUTH_REDIRECT_BASE` (`https://spatiotemporal-anomaly-detection.vercel.app` via proxy), `MOBILE_OAUTH_REDIRECT_BASE`, `WEB_APP_URL`, lockout params | Server only — never sent to browser |
+| `web/.env.local` | `NEXT_PUBLIC_API_URL` (bake drives `next.config.ts:45` rewrite destination) + `NEXT_PUBLIC_GOOGLE_OAUTH` flag; `NEXT_PUBLIC_CARTO_KEY` not needed — tiles are OSM/Esri free | Next.js |
+| `App/.env` | `EXPO_PUBLIC_API_URL` (PC LAN IP, not localhost; prod `https://spatiotemporal-api.onrender.com` for direct zones `Bearer`) | Expo |
 
 `DEV_MODE=true` widens CORS to all `localhost`/`192.168.x.x` origins. `settings.assert_production_safe()` (see [api-core.md](./api-core.md)) refuses to boot when `DEV_MODE=false` if any config is still dev-grade: default/short `CSRF_SECRET`, `COOKIE_SECURE=false`, localhost/LAN in `ALLOWED_ORIGINS`, `WEB_APP_URL` on `http://` while OAuth is enabled.
 

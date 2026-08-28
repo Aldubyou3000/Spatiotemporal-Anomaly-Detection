@@ -71,3 +71,7 @@ These have no inbound *code* references because they are entry points themselves
 ### `prototypes/` directory (referenced but absent)
 **What**: Documentation described `prototypes/` as the "reference only" source of truth for zone algorithms.
 **Resolved**: Acknowledged as gone. `api/app/zones/` is now the canonical source of truth. All docs updated to reflect this (2026-08-21).
+
+### `App/components/GoogleIcon.tsx`, `web/src/components/ui/Select.tsx`
+**What**: Added in `bf810a8` / `19527f3` push. `GoogleIcon` used by `web/src/app/(auth)/login/page.tsx` (inline SVG now extracted), `Select` used by `web/src/app/(dashboard)/zones/page.tsx` and tickets pages.
+**Resolved**: No longer orphans — now referenced inbound from dashboard pages. Remove from orphans watchlist.

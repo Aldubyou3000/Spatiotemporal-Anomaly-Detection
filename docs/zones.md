@@ -85,33 +85,32 @@ For each station, calculates the **Haversine distance** (great-circle distance i
 ## Zone C — Anomaly Detection (LOF)
 
 **File:** `api/app/zones/zone_c.py`
-**Entry point:** `zone_c_lof_anomaly_detection(cleaned_data, neighbors, contamination=0.05, n_neighbors=15)`
+**Entry point:** `zone_c_lof_anomaly_detection(cleaned_data, neighbors, n_neighbors=3)`
 
-Detects rainfall anomalies using **Local Outlier Factor (LOF)** applied within each station's geographic neighborhood. This ensures anomaly scoring is relative to local weather patterns, not the global dataset.
+Detects rainfall anomalies using **per-day, within-group Local Outlier Factor** — each calendar day is scored inside its 4-station local neighborhood (station + 3 Haversine neighbors), not globally. Deployed `ANOMALY_THRESHOLD=2.0` (`zone_c.py:35`, was 1.5 — stricter, extreme-only), `MIN_STATIONS_PER_DAY=4:30`, `MIN_ANOMALY_RAINFALL_MM=10.0:43`.
 
 ### What it does
 
-For each station:
-1. Assembles a **local context** of data rows from that station + all its Zone B neighbors.
-2. Scales the `rainfall` feature globally with `RobustScaler` (resistant to outliers).
-3. Fits an LOF model on the local context subset.
-4. Assigns LOF scores and `is_anomaly` flags back to that station's own rows.
-5. Repeats for all stations (each station gets its own LOF model).
+For each station, for each day:
+1. Assembles that **day’s** rows for the station + its Zone B neighbors (`k=3` → group ≤4).
+2. If `n_today < 4` skip (need quorum); adds `1e-3` jitter to break ties.
+3. Fits `LocalOutlierFactor(n_neighbors=min(2, n_neighbors))` on that day’s `rainfall` values.
+4. Flags `is_anomaly` if `score <= -2.0` **and** the value is the high outlier on that day and `>=10 mm`.
+5. Also flags `is_low_anomaly` for silent vs wet-neighbor days. Repeats for all stations/days.
 
 ### Why spatial context matters
-A heavy rainfall day at a coastal station is normal; the same reading at an inland station surrounded by dry neighbors is anomalous. Using geographic neighbors as context captures this distinction.
+A heavy rainfall day at a coastal station is normal; the same reading at an inland station surrounded by dry neighbors is anomalous. Using geographic neighbors per-day captures this distinction.
 
 ### Parameters
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `cleaned_data` | — | DataFrame from Zone A (no NaN rainfall) |
 | `neighbors` | — | Neighbor dict from Zone B (required) |
-| `contamination` | `0.05` | Expected fraction of anomalies (5%) |
-| `n_neighbors` | `15` | LOF neighborhood size; automatically reduced if local context is smaller |
+| `n_neighbors` | `3` (clamped to `2` inside) | LOF neighborhood size; auto-reduced if group smaller |
 
 ### Edge cases
-- If a station's local context has fewer than 2 data points, it is skipped (no score assigned).
-- If local context is smaller than `n_neighbors`, `effective_n_neighbors` is clamped to `len(context) - 1`, minimum 1.
+- If a day’s group has `<4` stations, it is skipped (no score — `1`-station uploads never flag, by design).
+- `effective_n_neighbors = min(n_neighbors, 2)`; `score` kept in `lof_score`, `NaN` if skipped.
 
 ### Output
 ```python

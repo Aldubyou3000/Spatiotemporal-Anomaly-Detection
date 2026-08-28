@@ -34,10 +34,11 @@ AuthProvider → ZonesProvider → SWRConfig → RealtimeProvider → ToastProvi
 
 ## Middleware (`web/src/middleware.ts`)
 Cookie-based route guard invoked by Next.js by file location (no inbound code import):
+- `/api/*` **skipped entirely** (`pathname.startsWith("/api/") → NextResponse.next()`) — API is proxied via `next.config.ts:45` rewrites; FastAPI does auth/CSRF itself (`get_current_user`, `_require_csrf`). Skipping avoids the stale redirect→405 that broke login.
 - `PUBLIC_PATHS = ["/login"]` — always allowed.
-- No `access_token` cookie → redirect to `/login`.
-- CSRF double-submit check for mutating methods (`POST`/`PATCH`/`DELETE`/`PUT`) on `/api/*` paths — except `/api/auth/login` and `/api/mobile/auth/login` (no prior session). Header `X-CSRF-Token` must equal `csrf_token` cookie.
-- Note: only applies to same-origin API routes proxied through Next.js; direct-to-backend calls (`:8000`) are validated by FastAPI's `_require_csrf` instead.
+- No `access_token` cookie → redirect to `/login` (pages only).
+
+Note: in deployed Vercel `vercel.app/api/*` is same-origin (first-party) so `Lax` cookies are sent; direct `onrender.com` fallback for zones 4-file uses `Bearer`.
 
 ## Depends on
 - `context/AuthContext.tsx`, `context/ZonesContext.tsx`

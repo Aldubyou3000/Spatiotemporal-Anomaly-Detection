@@ -73,21 +73,24 @@ Same path, but: Bearer token auth (`get_mobile_user`), routes under `/api/mobile
 
 | Surface | Token transport | Storage | Auth dependency | Fingerprint |
 |---------|----------------|---------|-----------------|-------------|
-| Web | httpOnly cookies (access 30m / refresh 7d) + CSRF double-submit | Browser cookie jar | `get_current_user` / `require_analyst` | HMAC(UA) in opaque cookie, rotated on login/refresh |
+| Web | httpOnly cookies (access 30m / refresh 7d) + CSRF double-submit — `SameSite=Lax` first-party via `vercel.app/api/*` rewrite proxy (`next.config.ts`); `Partitioned` added when `SameSite=None` for direct cross-site fallback | Browser cookie jar (`vercel.app` first-party) | `get_current_user` / `require_analyst` (and `get_current_user_or_bearer` / `require_analyst_or_bearer` for `/api/zones/process` which also accepts `Bearer` for direct Render upload) | HMAC(UA) in opaque cookie, rotated on login/refresh |
 | Mobile | `Authorization: Bearer <token>` | `SecureStore` (native) / `localStorage` (web) | `get_mobile_user` / `require_technician_mobile` | none (IP excluded by design — cellular handoff) |
 
-Google OAuth runs a **server-side PKCE** flow for both, with `state` carried in the URL **path** (not query — Supabase allowlist glob limitation). Mobile OAuth requires an HTTPS-reachable API (ngrok in dev) and a real dev/prod build (Expo Go can't register the `spatiotemporal://` deep link).
+Web `POST /api/auth/login` now returns `access_token` in JSON as well as cookies; web stores it in `sessionStorage` as `direct_access_token` for the zones 4-file direct bypass (`web/src/lib/api/client.ts` + `zones.ts`). Google OAuth runs a **server-side PKCE** flow for both, with `state` carried in the URL **path** (not query — Supabase allowlist glob limitation). Mobile OAuth requires an HTTPS-reachable API (ngrok in dev) and a real dev/prod build (Expo Go can't register the `spatiotemporal://` deep link).
+
+Deployed: `web` on Vercel Hobby (`https://spatiotemporal-anomaly-detection.vercel.app`) proxied `/api/*` → `api` on Render Free (`https://spatiotemporal-api.onrender.com`, one worker, `512 MB/0.1 CPU`, sleeps 15m). `NEXT_PUBLIC_API_URL` bake drives the rewrite destination; `middleware.ts` skips `/api/*` (pages only). 4-file LOF (2.1 MB, 100k rows, `ANOMALY_THRESHOLD=2.0`) bypasses the Vercel 30s edge timeout by going direct to Render with `Bearer`.
 
 ---
 
 ## Key invariants
 
-- **Zone algorithms (`zone_a/b/c.py`) are frozen** — the canonical source of truth is `api/app/zones/`. No other copy exists. Do not modify.
+- **Zone algorithms (`zone_a/b/c.py`) are frozen** — the canonical source of truth is `api/app/zones/`. No other copy exists. Do not modify (threshold `ANOMALY_THRESHOLD` in `zone_c.py:35` is 2.0 in current deployed tuning — was 1.5).
 - **Expo v55.0.26 is pinned** — do not upgrade to v56+.
-- **API runs one worker** — see Real-time design contract.
+- **API runs one worker** — see Real-time design contract. Render Free sleeps 15m (50s cold start); Vercel rewrites timeout ~30s for proxied `POST /api/zones/process` — 4-file pipeline uses direct `Bearer` bypass.
 - **Ticket lifecycle**: `assigned → in-progress → pending_review → verified`; analyst can branch to `follow_up` (from `pending_review`) or `cancelled` (from `assigned`). Enforced in API + mobile app; canonical labels/colors in `web/src/lib/ticketStatus.ts`.
-- **CSV upload max**: 20 MB.
+- **CSV upload max**: 20 MB (`routers/zones.py:24`). Vercel body cap 4.5 MB applies only when proxied; 4-file 2.1 MB fits but times out via proxy — use direct path.
 - **Rate limits**: 120/min global, 10/min `/api/auth/login`, 30/min `/api/auth/refresh`.
+- **Map tiles**: `StationMap.tsx:26-27` now `tile.openstreetmap.org` (light) + `server.arcgisonline.com/.../World_Dark_Gray_Base` (dark) — free, no API key (was `basemaps.cartocdn.com` Voyager which now watermarks without `?key=`).
 
 ---
 

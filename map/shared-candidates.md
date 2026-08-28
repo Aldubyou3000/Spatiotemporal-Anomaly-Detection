@@ -51,6 +51,19 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 
 ---
 
+### 5. Vercel same-origin `apiBase()` helper
+**Appears in**:
+- `web/src/lib/api/client.ts:7` `apiBase()` / `DIRECT_BASE` + `setDirectToken`/`getDirectToken`
+- `web/src/hooks/useRealtimeSync.ts:7` same `apiBase()` copy
+- `web/src/lib/api/tickets.ts:88`, `web/src/lib/api/audit.ts:85` inline `vercel.app ? window.location.origin : BASE_URL`
+- `web/src/app/(auth)/login/page.tsx:11` same inline `apiBase()`
+
+**Problem**: 5 copies of `hostname.endsWith("vercel.app") ? window.location.origin : BASE_URL`. Drift already (client has `DIRECT_BASE`+token store, others inline). If the proxy host changes (e.g., `vercel.app` → custom domain) all 5 must be updated.
+
+**Extraction**: `web/src/lib/apiBase.ts` → `export function apiBase(): string` + `export function directBase(): string` + token helpers. All 5 import from there.
+
+---
+
 ## Resolved
 
 (none yet — entries move here when extracted)

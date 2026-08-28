@@ -7,7 +7,7 @@ Cross-cutting infrastructure shared by every router and service: config, auth gu
 | File | Purpose |
 |------|---------|
 | `config.py` | `Settings` (Pydantic BaseSettings) → `settings` singleton. Env vars, derived OAuth callback URLs, `allowed_origins_list`, and **`assert_production_safe()`** — the fail-closed startup guard. |
-| `dependencies.py` | FastAPI `Depends()` callables: `get_supabase()` (thread-safe singleton), `get_current_user` (cookie + fingerprint), `get_mobile_user` (Bearer), `require_analyst`, `require_technician_mobile`. Also `_client_ip` / `_client_ua` — **the canonical IP extractor**; never re-inline `X-Forwarded-For` parsing in a router. |
+| `dependencies.py` | FastAPI `Depends()` callables: `get_supabase()` (thread-safe singleton), `get_current_user` (cookie + fingerprint), `get_mobile_user` (Bearer), `get_current_user_or_bearer` / `require_analyst_or_bearer` (cookie **or** `Bearer` — for `/api/zones/process` direct bypass), `require_analyst`, `require_technician_mobile`. Also `_client_ip` / `_client_ua` — **the canonical IP extractor**; never re-inline `X-Forwarded-For` parsing in a router. |
 | `security.py` | `verify_supabase_token()` (HS256 + ES256/RS256 via JWKS, audience-verified), `make_session_fingerprint` / `verify_session_fingerprint` (HMAC of User-Agent only — IP intentionally excluded for mobile handoff). |
 | `lockout.py` | In-process brute-force tracker: 5 failed attempts / 5 min window → 15-min lockout. Thread-safe in-memory store; Redis is the documented prod swap. |
 | `errors.py` | `friendly_db_error()` — maps Postgres SQLSTATE / constraint names to user-safe messages, never leaks raw DB text. |
@@ -28,6 +28,7 @@ Cross-cutting infrastructure shared by every router and service: config, auth gu
 - `get_supabase()` returns a module-level singleton guarded by a lock — never replace it during operation; the client reconnects internally.
 - `_verify_and_load_profile()` is shared by cookie and Bearer paths → identical verification regardless of transport. Disabled accounts (`is_active=false`) are rejected here (403).
 - Session fingerprint is **UA-only by design**. Changing it to include IP would break mobile sessions on every cellular handoff.
+- Cookies: `config.py:14-15` `COOKIE_SAMESITE=lax` (first-party via Vercel rewrite) vs `none` (direct cross-site) + `COOKIE_SECURE` + `Partitioned` flag in `routers/auth.py:67` (`partitioned = samesite == "none"`). Deployed Vercel is `lax` first-party; direct zones bypass uses `Bearer` so no cookie needed there.
 
 ## Open questions / debt
 - `lockout.py` state is in-memory → lost on every restart and not shared across workers (though the one-worker constraint limits the impact). Documented prod path is Redis.

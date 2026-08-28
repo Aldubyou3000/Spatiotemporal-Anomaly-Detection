@@ -17,7 +17,7 @@ The analyst-facing feature pages and their component building blocks. Pages comp
 | `ui/` | `Badge`, `Button`, `Card`, `ConfirmDialog`, `Input`, `Modal`, `Skeleton`, `Stat`, `Tabs`, `ThemeToggle`, `Toast` | Generic primitives — props-only, no API calls. All destructive/consequential actions must go through `ConfirmDialog`. Currently guarded: logout, ticket status advance, technician reassign, report approval. |
 | `dashboard/` | `Sidebar`, `Header`, `PageTransition` | Shell chrome. Sidebar nav uses `.nav-item` utility class with `data-active` for brand highlight. |
 | `providers/` | `RealtimeProvider` | See [web-realtime.md](./web-realtime.md). |
-| `zones/` | `FileUpload`, `OverviewTab`, `StationMap`, `StationChart`, `DataTable`, `NeighborGroupsTab`, `AnomalyReportTab`, `DateComparisonChart` | Pipeline result visualizations. `leaflet`/`react-leaflet` for the map; `recharts` for charts; `papaparse` for client-side CSV preview. |
+| `zones/` | `FileUpload`, `OverviewTab`, `StationMap` (free `tile.openstreetmap.org` light + `Esri World_Dark_Gray_Base` dark, no key; flagged `10px` red + dual halo `20/14px` vs typical `5px` dim, `station-label--flagged` red tint, `bringToFront()`), `StationChart`, `DataTable`, `NeighborGroupsTab`, `AnomalyReportTab`, `DateComparisonChart` | Pipeline result visualizations. `leaflet`/`react-leaflet` for the map; `recharts` for charts; `papaparse` for client-side CSV preview. |
 | `tickets/` | `TicketDetailBody` (**shared by tickets + reports pages**), `TicketActionDock` (collapsible bottom panel: assignment + review slot), `ReviewPanel` (approve/follow-up, mounted inside the dock), `TechnicianWorkloadBadge` | The most coupled component group. Portal-dropdown pattern lives here. |
 
 ## Depends on
