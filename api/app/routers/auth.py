@@ -140,13 +140,36 @@ def _login_redirect(error: str | None = None) -> RedirectResponse:
     return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
+def _web_oauth_callback_url(request: Request) -> str:
+    """Derive web callback from the request Host so it is first-party.
+    When proxied via Vercel the Host is vercel.app (via X-Forwarded-Host/Host),
+    so the callback becomes https://vercel.app/api/auth/oauth/google/callback
+    and Chrome never sees the onrender.com bounce → no Safe Browsing interstitial.
+    Falls back to settings.oauth_google_callback_url for direct hits."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    if host:
+        # Trust the edge’s Host/X-Forwarded-Proto when present (Vercel/Render).
+        # Strip any port for the callback; Supabase allowlist is on the bare host.
+        bare_host = host.split(",")[0].strip().split(":")[0]
+        # Only trust vercel.app (PSL-isolated) or localhost for web; otherwise fall back
+        # to the configured base to avoid Host-header poisoning on shared onrender.com.
+        if bare_host.endswith("vercel.app") or bare_host in ("localhost", "127.0.0.1"):
+            forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+            # Use the full forwarded host (preserves vercel.app) with https
+            full_host = forwarded_host.split(",")[0].strip()
+            return f"{proto}://{full_host}/api/auth/oauth/google/callback"
+    return settings.oauth_google_callback_url
+
+
 @router.get("/oauth/google/start")
 @limiter.limit("10/minute")
 def oauth_google_start(request: Request):
     if not settings.google_oauth_enabled:
         return _login_redirect("oauth_disabled")
     try:
-        data = oauth_start("google")
+        callback_url = _web_oauth_callback_url(request)
+        data = oauth_start("google", callback_url=callback_url)
     except Exception:
         logger.exception("[auth] oauth start failed")
         return _login_redirect("oauth_unavailable")
@@ -168,9 +191,11 @@ def oauth_google_callback(
         return _login_redirect("oauth_cancelled")
 
     try:
+        callback_url = _web_oauth_callback_url(request)
         result = oauth_complete(
             code, state,
             client_ip=_client_ip(request), user_agent=_client_ua(request),
+            callback_url=callback_url,
         )
     except ValueError:
         return _login_redirect("oauth_denied")

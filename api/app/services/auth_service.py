@@ -450,11 +450,11 @@ def _oauth_exchange_and_gate(code: str, state: str, *, required_role: str,
 
 
 def oauth_complete(code: str, state: str, client_ip: str = "unknown",
-                   user_agent: str = "") -> dict:
+                   user_agent: str = "", callback_url: str | None = None) -> dict:
     """Web (analyst) completion — returns {access_token, refresh_token, user}."""
     result, _ = _oauth_exchange_and_gate(
         code, state, required_role="analyst",
-        callback_url=settings.oauth_google_callback_url, platform="web",
+        callback_url=callback_url or settings.oauth_google_callback_url, platform="web",
         client_ip=client_ip, user_agent=user_agent,
     )
     return result
