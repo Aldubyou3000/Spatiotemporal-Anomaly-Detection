@@ -45,6 +45,14 @@ async def _event_stream(request: Request):
                 # EventSource) to keep the connection open through proxies.
                 yield ": ping\n\n"
                 continue
+            except StopAsyncIteration:
+                # Generator exhausted (client closed / broker shutdown)
+                break
+            except RuntimeError as exc:
+                # Python 3.7+ converts StopAsyncIteration inside async gen to RuntimeError
+                if isinstance(exc.__cause__, StopAsyncIteration) or "StopAsyncIteration" in str(exc):
+                    break
+                raise
             if event.get("_close"):
                 break
             yield f"data: {json.dumps(event)}\n\n"

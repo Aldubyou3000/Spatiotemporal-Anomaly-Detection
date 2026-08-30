@@ -47,6 +47,12 @@ async def _mobile_event_stream(request: Request):
             except asyncio.TimeoutError:
                 yield ": ping\n\n"
                 continue
+            except StopAsyncIteration:
+                break
+            except RuntimeError as exc:
+                if isinstance(exc.__cause__, StopAsyncIteration) or "StopAsyncIteration" in str(exc):
+                    break
+                raise
             if event.get("_close"):
                 break
             projected = events_service.project_for_mobile(event)
