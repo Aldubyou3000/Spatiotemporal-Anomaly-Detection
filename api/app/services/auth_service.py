@@ -583,15 +583,19 @@ def oauth_complete(code: str, state: str, client_ip: str = "unknown",
 
 
 def oauth_complete_mobile(code: str, state: str, client_ip: str = "unknown",
-                          user_agent: str = "") -> tuple[dict, str | None]:
+                          user_agent: str = "",
+                          callback_url: str | None = None) -> tuple[dict, str | None]:
     """Mobile (technician) completion — returns
     ({access_token, refresh_token, user}, return_url). The router redirects the
     browser to `return_url#access_token=…&refresh_token=…` so the app picks up
-    the tokens via its deep-link scheme.
+    the tokens via its deep-link scheme. `callback_url` must mirror what /start
+    sent to Supabase (host-derived) — falling back to the static settings URL
+    only when the router didn't provide one.
     """
     return _oauth_exchange_and_gate(
         code, state, required_role="technician",
-        callback_url=settings.mobile_oauth_callback_url, platform="mobile",
+        callback_url=callback_url or settings.mobile_oauth_callback_url,
+        platform="mobile",
         client_ip=client_ip, user_agent=user_agent,
     )
 

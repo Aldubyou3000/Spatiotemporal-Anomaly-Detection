@@ -236,6 +236,7 @@ def mobile_oauth_callback(
     try:
         result, return_url = oauth_complete_mobile(
             code, state, client_ip=client_ip, user_agent=user_agent,
+            callback_url=_mobile_oauth_callback_url(request),
         )
         logger.info("[oauth] mobile success ip=%s state=%s return_url=%s", client_ip, state[:8] if state else "none", (return_url or "")[:32])
     except OAuthGateError as exc:
