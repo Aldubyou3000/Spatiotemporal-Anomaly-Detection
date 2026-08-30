@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -11,7 +11,10 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withSequence,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,6 +45,18 @@ const SCREEN_W = Dimensions.get('window').width;
 const PHOTO_GAP = spacing.xxs; // 4
 const MOSAIC_TILE = (SCREEN_W - spacing.md * 2 - spacing.md * 2 - PHOTO_GAP) / 2;
 const HISTORY_THUMB = 64;
+
+function ShimmerBox({ width, height, style }: { width: number | `${number}%`; height: number; style?: object }) {
+  const theme = useTheme();
+  const opacity = useSharedValue(0.4);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    opacity.value = withRepeat(withSequence(withTiming(0.9, { duration: 800 }), withTiming(0.4, { duration: 800 })), -1, false);
+  }, []);
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const baseColor = theme.isDark ? theme.surfaceAlt : theme.borderStrong;
+  return <Animated.View style={[{ width, height, borderRadius: 6, backgroundColor: baseColor }, animStyle, style]} />;
+}
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -487,9 +502,9 @@ export default function TicketDetailContent({
   // 30-min retention). First open of a ticket fetches once; every reopen is
   // instant from cache with a silent background revalidate. Photos depend on
   // the resolved report id, so that query chains off `activeReport`.
-  const { data: activeReport = null, isLoading: reportLoading } = useTicketReport(dbId);
-  const { data: attachments = [] }   = useTicketAttachments(dbId);
-  const { data: activePhotos = [] }  = useReportPhotos(activeReport?.id ?? null);
+  const { data: activeReport = null, isLoading: reportLoading, isError: reportIsError, error: reportError, refetch: refetchReport } = useTicketReport(dbId) as ReturnType<typeof useTicketReport> & { isError: boolean; error: unknown; refetch: () => void };
+  const { data: attachments = [], isLoading: attachmentsLoading, isError: attachmentsIsError, error: attachmentsError, refetch: refetchAttachments } = useTicketAttachments(dbId) as ReturnType<typeof useTicketAttachments> & { isError: boolean; error: unknown; refetch: () => void };
+  const { data: activePhotos = [], isLoading: photosLoading }  = useReportPhotos(activeReport?.id ?? null);
 
   const statusKey = ticket.dbStatus ?? 'assigned';
   const isHistory = ['pending_review', 'verified', 'cancelled'].includes(statusKey);
@@ -575,17 +590,83 @@ export default function TicketDetailContent({
         </Panel>
       )}
 
-      {/* Loading — only on the genuine first fetch (no cache yet); a cached
-          reopen revalidates silently and never shows this. */}
-      {reportLoading && !activeReport && (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" color={theme.textMuted} />
-          <Text style={[styles.loadingText, { color: theme.textMuted }]}>Loading report…</Text>
-        </View>
+      {/* Loading skeletons — sized to final panels so no jump when data arrives.
+           Background revalidation (stale-while-revalidate) never shows these. */}
+      {reportLoading && !activeReport && !reportIsError && (
+        <Panel>
+          <ShimmerBox width={140} height={12} style={{ marginBottom: 12 }} />
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            <ShimmerBox width={110} height={24} style={{ borderRadius: 999 }} />
+            <ShimmerBox width={90} height={24} style={{ borderRadius: 999 }} />
+          </View>
+          <ShimmerBox width="100%" height={14} style={{ marginBottom: 6 }} />
+          <ShimmerBox width="92%" height={14} style={{ marginBottom: 6 }} />
+          <ShimmerBox width="78%" height={14} style={{ marginBottom: 12 }} />
+          <View style={{ flexDirection: 'row', gap: 4 }}>
+            <ShimmerBox width={MOSAIC_TILE} height={MOSAIC_TILE} style={{ borderRadius: 8 }} />
+            <ShimmerBox width={MOSAIC_TILE} height={MOSAIC_TILE} style={{ borderRadius: 8 }} />
+          </View>
+        </Panel>
+      )}
+      {photosLoading && activeReport && !hasFindings && (
+        <Panel>
+          <ShimmerBox width={80} height={12} style={{ marginBottom: 10 }} />
+          <View style={{ flexDirection: 'row', gap: 4 }}>
+            <ShimmerBox width={MOSAIC_TILE} height={MOSAIC_TILE} style={{ borderRadius: 8 }} />
+            <ShimmerBox width={MOSAIC_TILE} height={MOSAIC_TILE} style={{ borderRadius: 8 }} />
+          </View>
+        </Panel>
+      )}
+      {attachmentsLoading && (
+        <Panel style={styles.panelFlush}>
+          <View style={styles.panelFlushLabel}>
+            <PanelLabel>Attachments</PanelLabel>
+          </View>
+          <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 }}>
+            <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+              <ShimmerBox width={36} height={36} style={{ borderRadius: 8 }} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <ShimmerBox width={160} height={12} />
+                <ShimmerBox width={60} height={10} />
+              </View>
+            </View>
+          </View>
+        </Panel>
+      )}
+      {reportIsError && (
+        <Panel>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Icon name={icons.errorFill} size={14} color={palette.danger} />
+            <Text style={{ color: palette.danger, fontSize: 13, fontWeight: '600' }}>Failed to load report</Text>
+          </View>
+          <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 10 }}>
+            {(reportError as Error)?.message ?? 'Check your connection and try again.'}
+          </Text>
+          <Pressable onPress={() => (refetchReport as () => void)?.()} style={({ pressed }) => [{ alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border, backgroundColor: theme.surfaceAlt, opacity: pressed ? 0.7 : 1 }]}>
+            <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13 }}>Retry</Text>
+          </Pressable>
+        </Panel>
+      )}
+      {attachmentsIsError && (
+        <Panel style={styles.panelFlush}>
+          <View style={styles.panelFlushLabel}>
+            <PanelLabel>Attachments</PanelLabel>
+          </View>
+          <View style={{ padding: spacing.md }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Icon name={icons.errorFill} size={14} color={palette.danger} />
+              <Text style={{ color: palette.danger, fontSize: 13, fontWeight: '600' }}>Failed to load attachments</Text>
+            </View>
+            <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 10 }}>{(attachmentsError as Error)?.message ?? 'Check your connection.'}</Text>
+            <Pressable onPress={() => (refetchAttachments as () => void)?.()} style={({ pressed }) => [{ alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border, backgroundColor: theme.surfaceAlt, opacity: pressed ? 0.7 : 1 }]}>
+              <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13 }}>Retry</Text>
+            </Pressable>
+          </View>
+        </Panel>
       )}
 
       {/* ── Panel E · Active inspection findings ───────────────────────────── */}
-      {hasFindings && activeReport && (
+      {hasFindings && activeReport && !reportIsError && (
         <Panel>
           <PanelLabel>
             {findingsRoundNum > 1
@@ -597,7 +678,7 @@ export default function TicketDetailContent({
       )}
 
       {/* ── Panel F · Standalone photos when no other findings content ─────── */}
-      {!hasFindings && activePhotos.length > 0 && (
+      {!hasFindings && activePhotos.length > 0 && !reportIsError && (
         <Panel>
           <PanelLabel>Photos</PanelLabel>
           <PhotoMosaic photos={activePhotos} onOpen={onOpenPhoto} />

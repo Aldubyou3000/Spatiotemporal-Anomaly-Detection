@@ -245,8 +245,6 @@ class AuditService:
             AuditEvent.SYSTEM_STARTUP,
             AuditEvent.SESSION_REFRESH,
             AuditEvent.ZONE_PIPELINE_RUN,
-            AuditEvent.ACCOUNT_DISABLED,
-            AuditEvent.ACCOUNT_ENABLED,
             AuditEvent.SESSION_HIJACK,
         }
         if event in ignored_events:

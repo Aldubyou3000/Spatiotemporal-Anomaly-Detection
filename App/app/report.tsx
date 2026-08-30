@@ -21,6 +21,7 @@ import BottomSheet from '@/components/BottomSheet';
 import Button from '@/components/Button';
 import ConfirmSheet from '@/components/ConfirmSheet';
 import SuccessSheet from '@/components/SuccessSheet';
+import TicketDetailSkeleton from '@/components/TicketDetailSkeleton';
 import Card from '@/components/Card';
 import Pill from '@/components/Pill';
 import Icon, { type IconName } from '@/components/Icon';
@@ -29,7 +30,8 @@ import { Text } from '@/components/Themed';
 import { icons } from '@/constants/icons';
 import { elevation, palette, radius, spacing, typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
-import { useTicketDetail } from '@/hooks/useTickets';
+import { useQueryClient } from '@tanstack/react-query';
+import { ACTIVITY_KEY, TICKET_LIST_KEY, useTicketDetail } from '@/hooks/useTickets';
 import {
   fetchInspectionPhotos,
   MaintenanceTicket,
@@ -113,13 +115,19 @@ function ToggleGroup<T extends string | boolean>({
 export default function ReportScreen() {
   const router  = useRouter();
   const theme   = useTheme();
+  const qc      = useQueryClient();
   const params  = useLocalSearchParams();
   const ticketId = (params.id ?? params.ticketId) as string | undefined;
 
   // Seed from TicketDetailSheet — renders ticket context instantly.
-  const seed: MaintenanceTicket | null = params.seed
-    ? JSON.parse(params.seed as string) as MaintenanceTicket
-    : null;
+  let seed: MaintenanceTicket | null = null;
+  if (params.seed) {
+    try {
+      seed = JSON.parse(params.seed as string) as MaintenanceTicket;
+    } catch {
+      seed = null;
+    }
+  }
   const { data: ticket, isLoading: loading, isError } = useTicketDetail(ticketId ?? null, seed);
 
   const [notes, setNotes]                     = useState('');
@@ -200,6 +208,10 @@ export default function ReportScreen() {
         correctiveAction.trim() || null,
         issueResolved,
       );
+      // Optimistic invalidation — SSE may be missed (background/web), so ensure list/activity refresh now.
+      qc.invalidateQueries({ queryKey: TICKET_LIST_KEY });
+      qc.invalidateQueries({ queryKey: ACTIVITY_KEY });
+      qc.invalidateQueries({ queryKey: ['/api/mobile/reports'] });
       if (toUpload.length === 0) {
         setShowSuccessSheet(true);
         return;
@@ -298,10 +310,9 @@ export default function ReportScreen() {
   // ── Loading / error states ─────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.surfaceAlt }]}>
-        <ActivityIndicator color={palette.brand} />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading ticket…</Text>
-      </View>
+      <AppScrollView style={{ flex: 1, backgroundColor: theme.surfaceAlt }} contentContainerStyle={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
+        <TicketDetailSkeleton />
+      </AppScrollView>
     );
   }
   if (!ticket) {

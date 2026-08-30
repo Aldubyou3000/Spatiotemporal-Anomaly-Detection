@@ -48,28 +48,41 @@ export function useTicketDetail(id: string | null) {
 }
 
 export function useTicketReport(ticketId: string | null) {
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading, isValidating, mutate } = useSWR(
     ticketId ? [`/api/tickets/${ticketId}/report`] : null,
     () => ticketsApi.report(ticketId!),
+    { dedupingInterval: 30_000, revalidateOnFocus: false },
   );
   return {
     // `report` stays the active round so the approval flow (report.id) is unchanged.
     report: data?.current ?? null,
     priorRounds: data?.history ?? [], // archived rounds, oldest-first
     isLoading,
+    isValidating,
     error: error as Error | undefined,
+    refresh: mutate,
   };
 }
 
 export function useTicketAttachments(ticketId: string | null) {
-  const { data, isLoading } = useSWR(
+  const { data, error, isLoading, isValidating, mutate } = useSWR(
     ticketId ? [`/api/tickets/${ticketId}/attachments`] : null,
     () => ticketsApi.attachments(ticketId!),
-    { revalidateOnFocus: false },
+    { dedupingInterval: 30_000, revalidateOnFocus: false },
   );
-  return { attachments: (data ?? []) as TicketAttachment[], isLoading };
+  return { attachments: (data ?? []) as TicketAttachment[], isLoading, isValidating, error: error as Error | undefined, refresh: mutate };
 }
 
 export function invalidateTicketLists() {
-  return globalMutate((key: unknown) => Array.isArray(key) && key[0] === "/api/tickets");
+  // Prefix match — covers list ["/api/tickets",{…}], detail ["/api/tickets/<id>"],
+  // report/attachments, and technicians summary.
+  return globalMutate((key: unknown) => Array.isArray(key) && typeof key[0] === "string" && (key[0] as string).startsWith("/api/tickets"));
+}
+
+export function invalidateReports() {
+  return globalMutate((key: unknown) => Array.isArray(key) && typeof key[0] === "string" && (key[0] as string).startsWith("/api/reports"));
+}
+
+export function invalidateTechnicians() {
+  return globalMutate((key: unknown) => Array.isArray(key) && typeof key[0] === "string" && ((key[0] as string).startsWith("/api/technicians") || (key[0] as string).startsWith("/api/tickets/technicians")));
 }

@@ -26,6 +26,7 @@ import ConfirmSheet from '@/components/ConfirmSheet';
 import Icon from '@/components/Icon';
 import { Text } from '@/components/Themed';
 import TicketDetailContent from '@/components/TicketDetailContent';
+import TicketDetailSkeleton from '@/components/TicketDetailSkeleton';
 import PhotoGallery from '@/components/PhotoGallery';
 import { icons } from '@/constants/icons';
 import { palette, radius, spacing } from '@/constants/theme';
@@ -161,9 +162,14 @@ export default function TicketPage() {
 
   // Seed from the card that opened this page — renders instantly while the
   // full detail (with reports/photos) loads in the background.
-  const seed: MaintenanceTicket | null = params.seed
-    ? JSON.parse(params.seed as string) as MaintenanceTicket
-    : null;
+  let seed: MaintenanceTicket | null = null;
+  if (params.seed) {
+    try {
+      seed = JSON.parse(params.seed as string) as MaintenanceTicket;
+    } catch {
+      seed = null;
+    }
+  }
 
   const { data: ticket, isLoading: loading, isError } = useTicketDetail(id ?? null, seed);
 
@@ -246,9 +252,9 @@ export default function TicketPage() {
         />
 
         {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={palette.brand} size="large" />
-          </View>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <TicketDetailSkeleton />
+          </ScrollView>
         ) : !ticket ? (
           <View style={styles.center}>
             <Icon name={icons.error} size={32} color={theme.textTertiary} />

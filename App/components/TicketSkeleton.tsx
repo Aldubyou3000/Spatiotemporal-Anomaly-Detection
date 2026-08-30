@@ -48,7 +48,7 @@ function ShimmerBox({
   );
 }
 
-// ─── Skeleton card ───────────────────────────────────────────────────────────
+// ─── Skeleton card — mirrors TicketCard (avatar 48 + title + ghost row + meta) ──
 function SkeletonCard() {
   const theme = useTheme();
 
@@ -56,28 +56,26 @@ function SkeletonCard() {
     <View
       style={[
         styles.card,
-        { backgroundColor: theme.surface, borderColor: theme.border },
+        { backgroundColor: theme.surface, shadowColor: theme.shadow },
       ]}
     >
-      {/* Status + priority row */}
-      <View style={styles.topRow}>
-        <ShimmerBox width={88} height={22} style={{ borderRadius: radius.pill }} />
-        <ShimmerBox width={64} height={22} style={{ borderRadius: radius.pill }} />
+      <View style={styles.cardInner}>
+        {/* Header: avatar + title + ghost indicator */}
+        <View style={styles.cardHead}>
+          <ShimmerBox width={48} height={48} style={{ borderRadius: 24 }} />
+          <View style={styles.cardHeadText}>
+            <ShimmerBox width="84%" height={16} style={{ marginBottom: 6 }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <ShimmerBox width={7} height={7} style={{ borderRadius: 3.5 }} />
+              <ShimmerBox width={64} height={12} />
+              <ShimmerBox width={10} height={12} style={{ opacity: 0.3 }} />
+              <ShimmerBox width={54} height={12} />
+            </View>
+          </View>
+        </View>
+        {/* Muted metadata line */}
+        <ShimmerBox width="68%" height={12} />
       </View>
-      {/* Title */}
-      <ShimmerBox width="68%" height={16} style={{ marginBottom: spacing.xs }} />
-      {/* Description lines */}
-      <ShimmerBox width="100%" height={12} style={{ marginBottom: 6 }} />
-      <ShimmerBox width="56%" height={12} style={{ marginBottom: spacing.md }} />
-      {/* Meta chips */}
-      <View style={styles.metaRow}>
-        <ShimmerBox width={60} height={10} />
-        <ShimmerBox width={72} height={10} />
-      </View>
-      {/* Divider */}
-      <View style={[styles.divider, { backgroundColor: theme.border }]} />
-      {/* Action button */}
-      <ShimmerBox width="100%" height={40} style={{ borderRadius: radius.sm + 2 }} />
     </View>
   );
 }
@@ -96,22 +94,25 @@ export default function TicketSkeleton({ count = 3 }: { count?: number }) {
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
-    padding: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.sm + 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  topRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
-  },
-  metaRow: {
-    flexDirection: 'row',
+  cardInner: {
+    padding: spacing.md + 2,
     gap: spacing.sm,
-    marginBottom: spacing.sm,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginBottom: spacing.sm,
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm + 2,
+  },
+  cardHeadText: {
+    flex: 1,
+    gap: 4,
   },
 });

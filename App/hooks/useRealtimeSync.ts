@@ -32,8 +32,30 @@ export function useRealtimeSync({ enabled, onNudge }: Options): void {
   onNudgeRef.current = onNudge;
 
   useEffect(() => {
-    // Web: no header-capable EventSource; rely on focus/AppState refetch.
-    if (!enabled || Platform.OS === 'web') return;
+    if (!enabled) return;
+
+    // Web: EventSource cannot send Authorization header without URL leak — poll instead.
+    if (Platform.OS === 'web') {
+      const interval = setInterval(() => onNudgeRef.current(), 30_000);
+      const onVisibility = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          onNudgeRef.current();
+        }
+      };
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', onVisibility);
+      }
+      // Also nudge on window focus
+      const onFocus = () => onNudgeRef.current();
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', onFocus);
+      }
+      return () => {
+        clearInterval(interval);
+        if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+        if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus);
+      };
+    }
 
     let es: RNEventSource | null = null;
     let cancelled = false;

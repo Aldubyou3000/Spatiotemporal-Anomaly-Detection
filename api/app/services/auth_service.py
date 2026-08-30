@@ -1,7 +1,9 @@
+import json
 import logging
 import secrets
 import threading
 import time
+from pathlib import Path
 
 from supabase import ClientOptions, create_client
 from supabase_auth.errors import AuthApiError
@@ -11,6 +13,9 @@ from ..core.lockout import lockout
 from .audit_service import audit
 
 logger = logging.getLogger("auth.service")
+
+# File fallback for --reload dev (survives worker restart when DB migration not yet applied)
+_OAUTH_STATE_FILE = Path(__file__).resolve().parents[2] / ".oauth_states.json"
 
 # In-process store for the OAuth PKCE round-trip: state -> (code_verifier, expiry).
 # The `state` value travels in the URL (it always survives the Google→Supabase→API
@@ -22,10 +27,61 @@ logger = logging.getLogger("auth.service")
 _OAUTH_STATE_TTL = 600   # 10 minutes to complete consent
 _OAUTH_STATE_MAX = 1000  # hard ceiling — drop oldest beyond this (abuse guard)
 # state -> (code_verifier, return_url, expiry). return_url is None for the web
-# flow (cookies) and the app deep-link (e.g. "spatiotemporal://oauth-callback")
+# flow (cookies) and the app deep-link (e.g. "awscout://oauth-callback")
 # for the mobile flow, so the callback knows where to bounce the browser.
 _oauth_states: dict[str, tuple[str, str | None, float]] = {}
 _oauth_states_lock = threading.Lock()
+
+def _file_state_put(state: str, code_verifier: str, return_url: str | None, expiry: float) -> None:
+    """Persist one state to disk so --reload doesn't lose it (pre-DB fallback)."""
+    try:
+        with _oauth_states_lock:
+            data: dict = {}
+            if _OAUTH_STATE_FILE.exists():
+                try:
+                    data = json.loads(_OAUTH_STATE_FILE.read_text(encoding="utf-8"))
+                except Exception:
+                    data = {}
+            # GC expired
+            now = time.monotonic()
+            data = {k: v for k, v in data.items() if isinstance(v, list) and len(v) == 3 and v[2] > now}
+            data[state] = [code_verifier, return_url, expiry]
+            # Hard ceiling
+            while len(data) > _OAUTH_STATE_MAX:
+                data.pop(next(iter(data)))
+            _OAUTH_STATE_FILE.write_text(json.dumps(data), encoding="utf-8")
+    except Exception:
+        pass
+
+def _file_state_pop(state: str) -> tuple[str, str | None] | None:
+    """Try to pop state from disk (single-use)."""
+    try:
+        with _oauth_states_lock:
+            if not _OAUTH_STATE_FILE.exists():
+                return None
+            try:
+                data = json.loads(_OAUTH_STATE_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+            entry = data.pop(state, None)
+            if entry is None:
+                return None
+            # Write back without the popped entry
+            try:
+                _OAUTH_STATE_FILE.write_text(json.dumps(data), encoding="utf-8")
+            except Exception:
+                pass
+            if not isinstance(entry, list) or len(entry) != 3:
+                return None
+            verifier, return_url, expiry = entry
+            if not isinstance(verifier, str):
+                return None
+            if expiry <= time.monotonic():
+                return None
+            return verifier, return_url
+    except Exception:
+        return None
+    return None
 
 
 # ── OAuth state replay hardening ────────────────────────────────────────────
@@ -84,6 +140,36 @@ _state_fails = _StateFailStore()
 
 def _oauth_state_put(state: str, code_verifier: str, return_url: str | None = None) -> None:
     now = time.monotonic()
+    now_ts = time.time()
+    expires_at = now_ts + _OAUTH_STATE_TTL
+    # Try DB-backed store first (survives --reload restarts). Falls back to
+    # in-memory if the migration hasn't been applied yet.
+    try:
+        from datetime import datetime, timezone
+        sb = _service_client()
+        # Opportunistic GC of expired rows (best-effort, ignore errors)
+        try:
+            sb.table("oauth_states").delete().lt("expires_at", datetime.fromtimestamp(now_ts, tz=timezone.utc).isoformat()).execute()
+        except Exception:
+            pass
+        sb.table("oauth_states").insert({
+            "state": state,
+            "code_verifier": code_verifier,
+            "return_url": return_url,
+            "expires_at": datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat(),
+        }).execute()
+        return
+    except Exception as e:
+        # Table missing or DB error — fall back to memory (log at debug, not warning)
+        err_msg = str(e).lower()
+        if "does not exist" not in err_msg and "not found" not in err_msg:
+            logger.debug("[auth] oauth_states DB put fallback to memory: %s", e)
+
+    # File fallback for --reload (survives process restart even before DB migration)
+    try:
+        _file_state_put(state, code_verifier, return_url, now + _OAUTH_STATE_TTL)
+    except Exception:
+        pass
     with _oauth_states_lock:
         # Opportunistic GC of expired entries so the dict can't grow unbounded.
         expired = [s for s, (_, _, exp) in _oauth_states.items() if exp <= now]
@@ -104,6 +190,42 @@ def _oauth_state_pop(state: str, client_ip: str = "unknown") -> tuple[str, str |
         logger.warning("[auth] OAuth state lookup blocked by cooldown: ip=%s", client_ip)
         return None
     now = time.monotonic()
+    # Try DB first
+    try:
+        from datetime import datetime, timezone
+        sb = _service_client()
+        res = sb.table("oauth_states").select("code_verifier, return_url, expires_at").eq("state", state).limit(1).execute()
+        rows = res.data or []
+        if rows:
+            row = rows[0]
+            # Single-use: delete immediately
+            try:
+                sb.table("oauth_states").delete().eq("state", state).execute()
+            except Exception:
+                pass
+            exp_str = row.get("expires_at")
+            try:
+                exp_ts = datetime.fromisoformat(str(exp_str).replace("Z", "+00:00")).timestamp() if exp_str else 0
+            except Exception:
+                exp_ts = 0
+            if exp_ts and exp_ts <= time.time():
+                _state_fails.record_failure(client_ip)
+                return None
+            _state_fails.record_success(client_ip)
+            return row.get("code_verifier"), row.get("return_url")
+        # Not in DB — fall through to memory (may be pre-migration or in-memory-only entry)
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "does not exist" not in err_msg and "not found" not in err_msg:
+            logger.debug("[auth] oauth_states DB pop fallback to memory: %s", e)
+        # Fall through to memory lookup
+
+    # File fallback (survives --reload when DB migration not yet applied)
+    file_entry = _file_state_pop(state)
+    if file_entry is not None:
+        _state_fails.record_success(client_ip)
+        return file_entry
+
     with _oauth_states_lock:
         entry = _oauth_states.pop(state, None)
     if not entry:
@@ -310,7 +432,7 @@ def mobile_login(credential: str, password: str, client_ip: str = "unknown", use
 # left behind. Role is never taken from Google; it comes from the `profiles` table.
 #
 #   * Web   → callback = oauth_google_callback_url,  required_role="analyst",   return_url=None (cookies)
-#   * Mobile→ callback = mobile_oauth_callback_url,  required_role="technician",return_url="spatiotemporal://…"
+#   * Mobile→ callback = mobile_oauth_callback_url,  required_role="technician",return_url="awscout://…"
 
 
 def oauth_start(provider: str = "google", *, callback_url: str | None = None,

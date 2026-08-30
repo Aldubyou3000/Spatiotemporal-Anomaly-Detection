@@ -98,9 +98,69 @@ export class ApiError extends Error {
   }
 }
 
-let isRefreshing = false;
+export const DEFAULT_TIMEOUT_MS = 20_000;
+export const HEAVY_TIMEOUT_MS = 30_000;
 
-async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+function isAbortError(err: unknown): boolean {
+  return (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError')
+    || (err instanceof Error && (err.name === 'AbortError' || /aborted/i.test(err.message)));
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<Response> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: outerSignal, ...rest } = init as RequestInit & { timeoutMs?: number };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  if (outerSignal) {
+    if (outerSignal.aborted) controller.abort();
+    else outerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  try {
+    return await fetch(input, { ...rest, signal: controller.signal } as RequestInit);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Promise queue so concurrent 401s coalesce to one refresh (matches web's _refreshPromise)
+let _refreshPromise: Promise<boolean> | null = null;
+
+async function _doRefresh(): Promise<boolean> {
+  const refresh = await getRefreshToken();
+  if (!refresh) return false;
+  try {
+    const res = await fetchWithTimeout(`${API_URL}/api/mobile/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refresh }),
+      timeoutMs: 10_000,
+    });
+    if (!res.ok) {
+      await clearTokens();
+      return false;
+    }
+    const data = await res.json();
+    await saveTokens(data.access_token, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    _refreshPromise = null;
+  }
+}
+
+function _refresh(): Promise<boolean> {
+  if (!_refreshPromise) _refreshPromise = _doRefresh();
+  return _refreshPromise;
+}
+
+export async function tryRefresh(): Promise<boolean> {
+  return _refresh();
+}
+
+async function request<T>(path: string, init: RequestInit & { timeoutMs?: number } = {}, retry = true): Promise<T> {
   const token = await getAccessToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -108,17 +168,20 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(`${API_URL}${path}`, { ...init, headers, timeoutMs: (init as { timeoutMs?: number }).timeoutMs ?? DEFAULT_TIMEOUT_MS } as RequestInit & { timeoutMs?: number });
+  } catch (err: unknown) {
+    if (isAbortError(err)) throw new Error('Request timed out — server may be waking up (Render cold start), please try again.');
+    throw err instanceof Error ? err : new Error('Network error — check your connection.');
+  }
 
-  if (res.status === 401 && retry && !isRefreshing) {
-    isRefreshing = true;
-    try {
-      const refreshed = await tryRefresh();
-      isRefreshing = false;
-      if (refreshed) return request<T>(path, init, false);
-    } catch {
-      isRefreshing = false;
-    }
+  // Only skip refresh for the refresh/login endpoints themselves — /me and all
+  // data endpoints must attempt a refresh on 401 (was incorrectly skipping all /auth/*).
+  const isAuthRefreshOrLogin = path === '/api/mobile/auth/refresh' || path === '/api/mobile/auth/login' || path.startsWith('/api/mobile/auth/oauth/');
+  if (res.status === 401 && retry && !isAuthRefreshOrLogin) {
+    const refreshed = await _refresh();
+    if (refreshed) return request<T>(path, init, false);
     throw new Error('Session expired. Please sign in again.');
   }
 
@@ -135,27 +198,6 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   return res.json() as Promise<T>;
 }
 
-export async function tryRefresh(): Promise<boolean> {
-  const refresh = await getRefreshToken();
-  if (!refresh) return false;
-  try {
-    const res = await fetch(`${API_URL}/api/mobile/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refresh }),
-    });
-    if (!res.ok) {
-      await clearTokens();
-      return false;
-    }
-    const data = await res.json();
-    await saveTokens(data.access_token, data.refresh_token);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export interface UserProfile {
@@ -170,11 +212,18 @@ export interface UserProfile {
 }
 
 export async function apiLogin(credential: string, password: string): Promise<UserProfile> {
-  const data = await fetch(`${API_URL}/api/mobile/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ credential, password }),
-  });
+  let data: Response;
+  try {
+    data = await fetchWithTimeout(`${API_URL}/api/mobile/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential, password }),
+      timeoutMs: 30_000,
+    });
+  } catch (err: unknown) {
+    if (isAbortError(err)) throw new Error('Login timed out — server is waking up, please try again in a moment.');
+    throw err instanceof Error ? err : new Error('Network error — check your connection.');
+  }
   if (!data.ok) {
     let detail = 'Login failed. Check your credentials.';
     try { detail = (await data.json())?.detail ?? detail; } catch { /* ignore */ }
@@ -199,12 +248,12 @@ export class OAuthCancelled extends Error {
  *
  * Opens the backend /start URL in the system browser; the backend drives the
  * Google + Supabase exchange and redirects back to our app scheme
- * (spatiotemporal://oauth-callback) with tokens in the URL fragment. We parse
+ * (awscout://oauth-callback) with tokens in the URL fragment. We parse
  * them, store them in SecureStore (same as password login), and load the
  * profile. Throws OAuthCancelled if the user backs out, or Error with a friendly
  * message if the backend rejected the account (e.g. not an authorised technician).
  */
-/** Parse the `spatiotemporal://oauth-callback#...` URL the backend redirects to,
+/** Parse the `awscout://oauth-callback#...` URL the backend redirects to,
  *  storing tokens + loading the profile. Shared by both the browser-result path
  *  and the deep-link-listener path. Returns the profile or throws a friendly error. */
 async function _consumeOAuthCallbackUrl(url: string): Promise<UserProfile> {
@@ -241,7 +290,7 @@ export async function apiLoginWithGoogle(): Promise<UserProfile> {
   const returnUrl = Linking.createURL('oauth-callback');
   const startUrl = `${API_URL}/api/mobile/auth/oauth/google/start?return_url=${encodeURIComponent(returnUrl)}`;
 
-  // RACE two ways of capturing the spatiotemporal:// return, because Android's
+  // RACE two ways of capturing the awscout:// return, because Android's
   // openAuthSessionAsync has a documented bug where it sometimes never resolves
   // on a server 302→custom-scheme redirect (the in-app browser doesn't fire the
   // deep link). A standalone Linking 'url' listener catches the deep link even
@@ -249,7 +298,7 @@ export async function apiLoginWithGoogle(): Promise<UserProfile> {
   let resolved = false;
   const callbackPromise = new Promise<string>((resolve) => {
     const sub = Linking.addEventListener('url', ({ url }) => {
-      if (url.startsWith(returnUrl) || url.startsWith('spatiotemporal://oauth-callback')) {
+      if (url.startsWith(returnUrl) || url.startsWith('awscout://oauth-callback')) {
         resolved = true;
         sub.remove();
         // Make sure the in-app browser tab is dismissed once we have the deep link.
@@ -467,10 +516,37 @@ export async function downloadTicketPdf(dbTicketId: string, fileName: string): P
   const token = await getAccessToken();
   if (!token) throw new Error('Not authenticated');
 
-  const res = await fetch(`${API_URL}/api/mobile/tickets/${dbTicketId}/pdf`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(`${API_URL}/api/mobile/tickets/${dbTicketId}/pdf`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+      timeoutMs: 30_000,
+    });
+  } catch (err: unknown) {
+    if (isAbortError(err)) throw new Error('PDF request timed out — try again.');
+    throw err instanceof Error ? err : new Error('Network error');
+  }
+
+  // Refresh once on 401 then retry
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      const newToken = await getAccessToken();
+      if (newToken) {
+        try {
+          res = await fetchWithTimeout(`${API_URL}/api/mobile/tickets/${dbTicketId}/pdf`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${newToken}` },
+            timeoutMs: 30_000,
+          });
+        } catch (err: unknown) {
+          if (isAbortError(err)) throw new Error('PDF request timed out — try again.');
+          throw err instanceof Error ? err : new Error('Network error');
+        }
+      }
+    }
+  }
 
   if (!res.ok) {
     let detail = 'PDF download failed';
@@ -572,8 +648,11 @@ export async function fetchReportForTicket(ticketId: string): Promise<TicketRepo
     return await request<TicketReportSummary | null>(
       `/api/mobile/tickets/${ticketId}/report-id`,
     );
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    // Transient or auth failure — let React Query retry / surface error instead of hiding as "no report"
+    if (err instanceof ApiError && err.status === 204) return null;
+    throw err;
   }
 }
 
@@ -589,8 +668,9 @@ export interface TicketAttachment {
 export async function fetchTicketAttachments(ticketId: string): Promise<TicketAttachment[]> {
   try {
     return await request<TicketAttachment[]>(`/api/mobile/tickets/${ticketId}/attachments`);
-  } catch {
-    return [];
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 404) return [];
+    throw err;
   }
 }
 
@@ -599,8 +679,9 @@ export async function fetchInspectionPhotos(
 ): Promise<{ id: string; photo_url: string }[]> {
   try {
     return await request<{ id: string; photo_url: string }[]>(`/api/mobile/reports/${reportId}/photos`);
-  } catch {
-    return [];
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 404) return [];
+    throw err;
   }
 }
 
@@ -653,12 +734,19 @@ export async function uploadInspectionPhoto(
     formData.append('photo', { uri: uploadUri, name: fileName, type: normalizedMime } as any);
   }
 
-  const doFetch = async (authToken: string) =>
-    fetch(`${API_URL}/api/mobile/reports/${reportId}/photos`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authToken}` },
-      body: formData,
-    });
+  const doFetch = async (authToken: string) => {
+    try {
+      return await fetchWithTimeout(`${API_URL}/api/mobile/reports/${reportId}/photos`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+        body: formData,
+        timeoutMs: HEAVY_TIMEOUT_MS,
+      });
+    } catch (err: unknown) {
+      if (isAbortError(err)) throw new Error('Photo upload timed out — check your connection.');
+      throw err instanceof Error ? err : new Error('Network error');
+    }
+  };
 
   let res = await doFetch(token);
 

@@ -72,6 +72,7 @@ const RESOURCE_MATCHERS: Record<RealtimeSignal["resource"], KeyMatcher> = {
 export function useRealtimeSync(): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   const auditTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshingRef = useRef(false);
 
   useEffect(() => {
     const es = new EventSource(`${apiBase()}/api/events`, { withCredentials: true });
@@ -79,10 +80,21 @@ export function useRealtimeSync(): { connected: boolean } {
     es.onopen = () => setConnected(true);
 
     es.onerror = () => {
-      // EventSource auto-reconnects (honoring the server's retry interval). We
-      // surface no intrusive UI; if the session expired, normal apiClient calls
-      // refresh the cookies and the next reconnect succeeds. Just reflect state.
       setConnected(false);
+      // If the SSE dropped due to an expired session, proactively refresh cookies
+      // so the browser's auto-reconnect (retry: 5000) succeeds without waiting
+      // for a user-initiated API call.
+      if (!refreshingRef.current) {
+        refreshingRef.current = true;
+        const csrfMatch = typeof document !== "undefined" ? document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/) : null;
+        const csrfTok = csrfMatch ? decodeURIComponent(csrfMatch[1]) : "";
+        const hdr: Record<string, string> | undefined = csrfTok ? { "X-CSRF-Token": csrfTok } : undefined;
+        fetch(new URL("/api/auth/refresh", apiBase()).toString(), {
+          method: "POST",
+          credentials: "include",
+          ...(hdr ? { headers: hdr } : {}),
+        }).finally(() => { refreshingRef.current = false; });
+      }
     };
 
     es.onmessage = (e: MessageEvent) => {

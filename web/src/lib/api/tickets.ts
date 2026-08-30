@@ -84,12 +84,36 @@ export const ticketsApi = {
   report: (id: string) =>
     apiClient.get<TicketReportHistory>(`/api/tickets/${id}/report`),
 
-  downloadPdf: async (id: string, filename: string) => {
+  downloadPdf: async (id: string, filename: string, opts: { signal?: AbortSignal } = {}) => {
     const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const base = typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app") ? window.location.origin : BASE_URL;
     const url = `${base}/api/tickets/${id}/pdf`;
-    const res = await fetch(url, { credentials: "include" });
-    if (!res.ok) throw new Error("Failed to generate PDF");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+    if (opts.signal) opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    let res: Response;
+    try {
+      res = await fetch(url, { credentials: "include", signal: controller.signal });
+    } catch (e: unknown) {
+      const isAbort = e instanceof DOMException && e.name === "AbortError" || (e instanceof Error && e.name === "AbortError");
+      if (isAbort) throw new Error("PDF request timed out — try again.");
+      throw e instanceof Error ? e : new Error("Network error");
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!res.ok) {
+      let detail = "Failed to generate PDF";
+      try { detail = (await res.json())?.detail ?? detail; } catch {}
+      // Retry once on 401 via apiClient refresh — fetch here doesn't auto-refresh
+      if (res.status === 401) {
+        try {
+          const { apiClient } = await import("./client");
+          // Trigger refresh via a lightweight auth call
+          await fetch(new URL("/api/auth/refresh", base).toString(), { method: "POST", credentials: "include" });
+        } catch {}
+      }
+      throw new Error(detail);
+    }
     const blob = await res.blob();
     const href = URL.createObjectURL(blob);
     const a = document.createElement("a");

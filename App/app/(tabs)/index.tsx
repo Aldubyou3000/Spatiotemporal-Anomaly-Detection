@@ -32,6 +32,7 @@ import StatusIcon from '@/components/StatusIcon';
 import { Text } from '@/components/Themed';
 import TicketDetailSheet from '@/components/TicketDetailSheet';
 import TicketSkeleton from '@/components/TicketSkeleton';
+import ErrorView from '@/components/ErrorView';
 import { easeOut, spring } from '@/constants/Motion';
 import { icons, type IconName } from '@/constants/icons';
 import { elevation, palette, radius, spacing, typography } from '@/constants/theme';
@@ -39,6 +40,8 @@ import { type TourTargetKey } from '@/constants/tourSteps';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useTheme } from '@/hooks/useTheme';
 import { useTicketList } from '@/hooks/useTickets';
+import { useOnline } from '@/hooks/useOnline';
+import OfflineBanner from '@/components/OfflineBanner';
 import { navTargetRef } from '@/lib/tourTargets';
 import { readTutorialSeen, writeTutorialSeen } from '@/lib/tutorialSeen';
 import { MaintenanceTicket } from '@/services/api';
@@ -358,6 +361,7 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const tabBarFootprint = useTabBarFootprint();
   const reducedMotion = useReducedMotion();
+  const online = useOnline();
   const { width: screenW } = useWindowDimensions();
   const [segment, setSegment]           = useState<Segment>('active');
   const [activeTab, setActiveTab]       = useState<TicketTab>('assigned');
@@ -373,8 +377,15 @@ export default function DashboardScreen() {
   const helpRef    = useRef<View>(null);
   const tourStarted = useRef(false);
 
-  const { data: ticketsData, isLoading, isValidating, forceRefresh } = useTicketList();
+  const ticketQuery = useTicketList();
+  const ticketsData = (ticketQuery as { data: typeof ticketQuery.data }).data;
+  const isLoading = ticketQuery.isLoading;
+  const isValidating = (ticketQuery as { isValidating: boolean }).isValidating;
+  const forceRefresh = (ticketQuery as { forceRefresh: () => void }).forceRefresh;
+  const isListError = (ticketQuery as { isError?: boolean }).isError;
+  const listError = (ticketQuery as { error?: unknown }).error as Error | null | undefined;
   const tickets = ticketsData ?? [];
+  const listErrorMessage = listError instanceof Error ? listError.message : listError ? String(listError) : undefined;
 
   // No focus refetch — persisted cache (PersistQueryClientProvider, maxAge
   // 7d) + staleTime 30s + live SSE (useRealtimeSync → invalidate) already keep
@@ -546,12 +557,13 @@ export default function DashboardScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.isDark ? '#191C23' : '#F2F4F7' }]}>
+      {!online && <OfflineBanner />}
       {/* Layered brand cloud at the top (decorative). Status-bar tint is set
-          imperatively in the useFocusEffect above. */}
+           imperatively in the useFocusEffect above. */}
       <CloudBackground width={screenW} isDark={theme.isDark} offsetY={-screenW * 0.11} lite={reducedMotion} />
 
       {/* ── Pinned header controls ────────────────────────────────────────── */}
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={[styles.topBar, { paddingTop: (online ? insets.top + spacing.sm : spacing.sm) }]}>
         <View ref={searchRef} collapsable={false} style={[styles.searchBox, { backgroundColor: theme.surface, borderColor: searchFocused ? palette.brand : theme.border }]}>
           <Ionicons name="search" size={22} color={searchFocused ? palette.brand : theme.textMuted} />
           <TextInput
@@ -675,6 +687,8 @@ export default function DashboardScreen() {
         ListEmptyComponent={
           isLoading ? (
             <TicketSkeleton count={3} />
+          ) : isListError ? (
+            <ErrorView message={listErrorMessage ?? 'Check your connection and try again.'} onRetry={forceRefresh} />
           ) : (
             renderEmpty()
           )

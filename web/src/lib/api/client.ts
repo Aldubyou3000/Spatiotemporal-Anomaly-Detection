@@ -34,6 +34,10 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
+// Timeout defaults — 20s normal (Render cold start), 45s heavy (zones).
+export const DEFAULT_TIMEOUT_MS = 20_000;
+export const HEAVY_TIMEOUT_MS = 45_000;
+
 function getCsrfToken(): string {
   if (typeof document === "undefined") return "";
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
@@ -47,6 +51,31 @@ function withCsrf(method: string, headers: HeadersInit): HeadersInit {
   return { ...headers as Record<string, string>, "X-CSRF-Token": token };
 }
 
+function isAbortError(err: unknown): boolean {
+  return (typeof DOMException !== "undefined" && err instanceof DOMException && err.name === "AbortError")
+    || (err instanceof Error && (err.name === "AbortError" || err.message.includes("aborted")));
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit & { timeoutMs?: number; signal?: AbortSignal | null } = {},
+): Promise<Response> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: outerSignal, ...rest } = init as RequestInit & { timeoutMs?: number; signal?: AbortSignal | null };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let signal: AbortSignal = controller.signal as AbortSignal;
+  if (outerSignal) {
+    if (outerSignal.aborted) controller.abort();
+    else outerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    signal = controller.signal as AbortSignal;
+  }
+  try {
+    return await fetch(input, { ...rest, signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // Single in-flight refresh promise shared across all concurrent requests.
 // When multiple requests get a 401 simultaneously, only one refresh call is
 // made; all callers await the same promise and retry with the rotated cookies.
@@ -54,10 +83,11 @@ let _refreshPromise: Promise<boolean> | null = null;
 
 async function _doRefresh(): Promise<boolean> {
   try {
-    const res = await fetch(new URL("/api/auth/refresh", apiBase()).toString(), {
+    const res = await fetchWithTimeout(new URL("/api/auth/refresh", apiBase()).toString(), {
       method: "POST",
       credentials: "include",
       headers: withCsrf("POST", {}),
+      timeoutMs: 10_000,
     });
     return res.ok;
   } catch {
@@ -74,7 +104,7 @@ function _refresh(): Promise<boolean> {
   return _refreshPromise;
 }
 
-async function request<T>(path: string, init: RequestInit, params?: RequestOptions["params"]): Promise<T> {
+async function request<T>(path: string, init: RequestInit & { timeoutMs?: number; signal?: AbortSignal | null }, params?: RequestOptions["params"]): Promise<T> {
   const url = new URL(path, apiBase());
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -86,18 +116,30 @@ async function request<T>(path: string, init: RequestInit, params?: RequestOptio
   const headers = withCsrf(method, init.headers ?? {});
   const enrichedInit = { ...init, headers, credentials: "include" as RequestCredentials };
 
-  const res = await fetch(url.toString(), enrichedInit);
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url.toString(), enrichedInit as RequestInit & { timeoutMs?: number });
+  } catch (err: unknown) {
+    if (isAbortError(err)) throw new Error("Request timed out — server may be waking up (Render cold start), please try again.");
+    throw err instanceof Error ? err : new Error("Network error — check your connection.");
+  }
 
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
     const refreshed = await _refresh();
     if (refreshed) {
       // Re-read CSRF after rotation (the refresh endpoint rotated it)
       const retryHeaders = withCsrf(method, init.headers ?? {});
-      const retryRes = await fetch(url.toString(), {
-        ...init,
-        headers: retryHeaders,
-        credentials: "include",
-      });
+      let retryRes: Response;
+      try {
+        retryRes = await fetchWithTimeout(url.toString(), {
+          ...init,
+          headers: retryHeaders,
+          credentials: "include",
+        } as RequestInit & { timeoutMs?: number });
+      } catch (err: unknown) {
+        if (isAbortError(err)) throw new Error("Request timed out — server may be waking up (Render cold start), please try again.");
+        throw err instanceof Error ? err : new Error("Network error — check your connection.");
+      }
       if (!retryRes.ok) {
         const body = await retryRes.json().catch(() => ({ detail: "Request failed" }));
         throw new Error(body?.detail ?? body?.message ?? "Request failed");
@@ -122,10 +164,10 @@ function withJson(headers?: HeadersInit): HeadersInit {
 }
 
 export const apiClient = {
-  get: <T>(path: string, options: RequestOptions = {}) =>
-    request<T>(path, { ...options, method: "GET", headers: withJson(options.headers) }, options.params),
+  get: <T>(path: string, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null } = {}) =>
+    request<T>(path, { ...options, method: "GET", headers: withJson(options.headers) } as RequestInit & { timeoutMs?: number }, options.params),
 
-  post: <T>(path: string, body?: unknown, options: RequestOptions = {}) =>
+  post: <T>(path: string, body?: unknown, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null } = {}) =>
     request<T>(
       path,
       {
@@ -133,11 +175,11 @@ export const apiClient = {
         method: "POST",
         headers: withJson(options.headers),
         body: body !== undefined ? JSON.stringify(body) : undefined,
-      },
+      } as RequestInit & { timeoutMs?: number },
       options.params,
     ),
 
-  patch: <T>(path: string, body?: unknown, options: RequestOptions = {}) =>
+  patch: <T>(path: string, body?: unknown, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null } = {}) =>
     request<T>(
       path,
       {
@@ -145,25 +187,31 @@ export const apiClient = {
         method: "PATCH",
         headers: withJson(options.headers),
         body: body !== undefined ? JSON.stringify(body) : undefined,
-      },
+      } as RequestInit & { timeoutMs?: number },
       options.params,
     ),
 
-  delete: <T>(path: string, options: RequestOptions = {}) =>
-    request<T>(path, { ...options, method: "DELETE", headers: withJson(options.headers) }, options.params),
+  delete: <T>(path: string, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null } = {}) =>
+    request<T>(path, { ...options, method: "DELETE", headers: withJson(options.headers) } as RequestInit & { timeoutMs?: number }, options.params),
 
   /** Upload multipart/form-data — browser sets Content-Type with boundary. */
-  upload: <T>(path: string, formData: FormData, options: RequestOptions = {}) =>
-    request<T>(path, { ...options, method: "POST", body: formData }, options.params),
+  upload: <T>(path: string, formData: FormData, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null } = {}) =>
+    request<T>(path, { ...options, method: "POST", body: formData, timeoutMs: HEAVY_TIMEOUT_MS } as RequestInit & { timeoutMs?: number }, options.params),
 
   /** Direct upload to Render — bypasses Vercel proxy (avoids 30s timeout for 4-file LOF). */
-  uploadDirect: async <T>(path: string, formData: FormData): Promise<T> => {
+  uploadDirect: async <T>(path: string, formData: FormData, opts: { timeoutMs?: number; signal?: AbortSignal | null } = {}): Promise<T> => {
     const token = getDirectToken();
     const url = new URL(path, DIRECT_BASE).toString();
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     // CSRF not needed for Bearer auth
-    const res = await fetch(url, { method: "POST", body: formData, headers, credentials: "omit" });
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(url, { method: "POST", body: formData, headers, credentials: "omit", timeoutMs: opts.timeoutMs ?? HEAVY_TIMEOUT_MS, signal: opts.signal });
+    } catch (err: unknown) {
+      if (isAbortError(err)) throw new Error("Request timed out — check your connection and try again.");
+      throw err instanceof Error ? err : new Error("Network error — check your connection.");
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({ detail: "Request failed" }));
       throw new Error(body?.detail ?? body?.message ?? "Request failed");

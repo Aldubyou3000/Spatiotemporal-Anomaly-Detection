@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useTicketList, useTicketDetail, useTicketReport, useTicketAttachments, invalidateTicketLists } from "@/hooks/useTickets";
+import { useTicketList, useTicketDetail, useTicketReport, useTicketAttachments, invalidateTicketLists, invalidateReports } from "@/hooks/useTickets";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -77,8 +77,8 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
   const [approvalError, setApprovalError]   = useState("");
   // Follow-up is confirmed via dialog; its args are staged here until confirmed.
   const [pendingFollowUp, setPendingFollowUp] = useState<{ notes: string; reassign: { addIds: string[]; removeIds: string[] } } | null>(null);
-  const { report, priorRounds } = useTicketReport(ticket.id);
-  const { attachments } = useTicketAttachments(ticket.id);
+  const { report, priorRounds, error: reportError, refresh: refreshReport } = useTicketReport(ticket.id);
+  const { attachments, error: attachmentsError, refresh: refreshAttachments } = useTicketAttachments(ticket.id);
 
   async function handleDownloadPdf() {
     setDownloading(true);
@@ -99,7 +99,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       const updated = await ticketsApi.cancelTicket(ticket.id, cancelFinal);
       updateCache(updated);
       onUpdated(updated);
-      await invalidateTicketLists();
+      await Promise.all([invalidateTicketLists(), invalidateReports()]);
       setCancelOpen(false); setCancelReason(""); setCancelPreset(null);
       toast.success(`TKT-${ticket.ticket_number} cancelled`, { description: "The ticket has been closed as cancelled." });
     } catch (err) {
@@ -118,7 +118,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       const updated = await ticketsApi.get(ticket.id);
       updateCache(updated);
       onUpdated(updated);
-      await invalidateTicketLists();
+      await Promise.all([invalidateTicketLists(), invalidateReports()]);
       toast.success(`TKT-${ticket.ticket_number} verified`, { description: "Report approved and the ticket is now closed as verified." });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Approval failed.";
@@ -144,7 +144,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       const updated = await ticketsApi.get(ticket.id);
       updateCache(updated);
       onUpdated(updated);
-      await invalidateTicketLists();
+      await Promise.all([invalidateTicketLists(), invalidateReports()]);
       toast.success(`Follow-up requested for TKT-${ticket.ticket_number}`, { description: "The ticket was sent back to the field team for a re-visit." });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Follow-up request failed.";
@@ -211,6 +211,9 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
   };
 
   const isTerminal = TERMINAL.has(ticket.status);
+
+  const subResourceError = reportError || attachmentsError;
+  const subResourceErrorMessage = reportError?.message ?? attachmentsError?.message ?? null;
 
   // ── Analyst review surface — rendered inside the dock drawer when pending_review.
   //    Explicit approve-vs-follow-up decision selector; the note + action button
@@ -315,6 +318,19 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
       key={ticket.id}
       style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}
     >
+      {subResourceError && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", background: "color-mix(in oklab, var(--danger) 8%, var(--surface))", borderBottom: "1px solid color-mix(in oklab, var(--danger) 18%, transparent)", fontSize: "var(--font-xs)", color: "var(--danger)" }}>
+          <AlertTriangle size={12} />
+          <span style={{ flex: 1, minWidth: 0 }}>{reportError ? "Failed to load report" : "Failed to load attachments"}{subResourceErrorMessage ? ` — ${subResourceErrorMessage}` : ""}</span>
+          <button
+            type="button"
+            onClick={() => { if (reportError) refreshReport(); if (attachmentsError) refreshAttachments(); }}
+            style={{ flexShrink: 0, height: 22, padding: "0 8px", borderRadius: "var(--r-md)", border: "1px solid color-mix(in oklab, var(--danger) 24%, transparent)", background: "var(--surface)", color: "var(--danger)", fontSize: "var(--font-xs)", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <TicketDetailBody model={model} footer={footer} />
       {confirmApprove && (
         <ConfirmDialog

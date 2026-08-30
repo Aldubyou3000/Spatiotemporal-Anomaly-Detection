@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Spatiotemporal",
-    "slug": "spatiotemporal",
+    "name": "AWScout",
+    "slug": "awscout",
     "owner": "aldubyou3000",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "spatiotemporal",
+    "scheme": "awscout",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash-icon.png",
@@ -17,7 +17,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.aldubyou3000.spatiotemporal",
+      "package": "com.aldubyou3000.awscout",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

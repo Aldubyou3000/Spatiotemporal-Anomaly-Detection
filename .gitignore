@@ -28,3 +28,6 @@ Thumbs.db
 
 # Claude Code runtime
 .claude/scheduled_tasks.lock
+
+# OAuth state file fallback (survives --reload, not for commit)
+api/.oauth_states.json

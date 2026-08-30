@@ -255,7 +255,7 @@ function LoginScreen() {
           <View style={[styles.brandIcon, { backgroundColor: palette.brand }]}>
             <Icon name={icons.brandMark} size={28} color={palette.white} />
           </View>
-          <Text style={styles.brandName}>SpatioTemporal</Text>
+          <Text style={styles.brandName}>AWScout</Text>
           <Text style={styles.brandSub}>Field Technician Portal</Text>
         </Animated.View>
 

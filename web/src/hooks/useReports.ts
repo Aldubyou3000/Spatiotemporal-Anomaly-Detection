@@ -8,7 +8,7 @@ export function useReports() {
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     ["/api/reports"],
     () => reportsApi.list(),
-    { keepPreviousData: true },
+    { keepPreviousData: true, dedupingInterval: 30_000 },
   );
   return {
     pending: data?.pending ?? [],

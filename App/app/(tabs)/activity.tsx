@@ -23,6 +23,8 @@ import Icon from '@/components/Icon';
 import StatusIcon from '@/components/StatusIcon';
 import TicketDetailSheet from '@/components/TicketDetailSheet';
 import DateRangePopover, { type AnchorRect } from '@/components/DateRangePopover';
+import ErrorView from '@/components/ErrorView';
+import ActivitySkeleton from '@/components/ActivitySkeleton';
 import { type DateRange } from '@/components/RangeCalendar';
 import { activityMeta, isWithin24h, relativeTime } from '@/constants/activityEvents';
 import { icons } from '@/constants/icons';
@@ -31,6 +33,8 @@ import { useActivitySeenAt } from '@/hooks/useActivitySeen';
 import { useTheme } from '@/hooks/useTheme';
 import { useQueryClient } from '@tanstack/react-query';
 import { useActivityFeed, ticketDetailKey } from '@/hooks/useTickets';
+import { useOnline } from '@/hooks/useOnline';
+import OfflineBanner from '@/components/OfflineBanner';
 import { markActivitySeen } from '@/lib/activitySeen';
 import {
   ActivityItem,
@@ -154,13 +158,21 @@ export default function ActivityScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const tabBarFootprint = useTabBarFootprint();
+  const online = useOnline();
 
   // Neutral screen background for the scrolling feed — rows sit on this so the
   // grey text stays legible (the header above is a solid brand band).
   const screenBg = theme.isDark ? '#191C23' : '#F2F4F7';
 
   const qc = useQueryClient();
-  const { data: itemsData, isLoading: loading, isValidating, forceRefresh } = useActivityFeed();
+  const activityQuery = useActivityFeed();
+  const itemsData = (activityQuery as { data: typeof activityQuery.data }).data;
+  const loading = activityQuery.isLoading;
+  const isValidating = (activityQuery as { isValidating: boolean }).isValidating;
+  const forceRefresh = (activityQuery as { forceRefresh: () => void }).forceRefresh;
+  const isActivityError = (activityQuery as { isError?: boolean }).isError;
+  const activityError = (activityQuery as { error?: unknown }).error as Error | null | undefined;
+  const activityErrorMessage = activityError instanceof Error ? activityError.message : activityError ? String(activityError) : undefined;
   const items = itemsData ?? [];
 
   const [opening, setOpening]           = useState<string | null>(null);
@@ -294,9 +306,10 @@ export default function ActivityScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: screenBg }]}>
+      {!online && <OfflineBanner />}
       {/* Pinned header — neutral surface; the brand accent lives on the search
-          bar itself, not the header background. */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm, backgroundColor: screenBg }]}>
+           bar itself, not the header background. */}
+      <View style={[styles.header, { paddingTop: (online ? insets.top + spacing.sm : spacing.sm), backgroundColor: screenBg }]}>
         {/* Filters — search pill + calendar icon button on one row. */}
         <View style={styles.filterBlock}>
           <View style={[styles.searchBox, { backgroundColor: theme.surface, borderColor: searchFocused ? palette.brand : theme.border }]}>
@@ -374,9 +387,9 @@ export default function ActivityScreen() {
         }
         ListEmptyComponent={
           loading ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={palette.brand} />
-            </View>
+            <ActivitySkeleton count={5} />
+          ) : isActivityError ? (
+            <ErrorView message={activityErrorMessage ?? 'Check your connection and try again.'} onRetry={forceRefresh} />
           ) : isEmpty ? (
             <View style={styles.empty}>
               <View style={[styles.emptyIconWrap, { backgroundColor: theme.surfaceMuted }]}>

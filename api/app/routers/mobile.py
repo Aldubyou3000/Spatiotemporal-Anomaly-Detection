@@ -133,22 +133,22 @@ def mobile_me(request: Request, user: dict = Depends(require_technician_mobile))
 # (2) returns tokens to the app's deep-link scheme in the URL fragment instead of
 # setting cookies. The app opens /start in the system browser; Supabase/Google
 # redirect back to /callback; /callback bounces the browser to
-# spatiotemporal://oauth-callback#access_token=…&refresh_token=… which the app
+# awscout://oauth-callback#access_token=…&refresh_token=… which the app
 # catches via expo-web-browser. The `return_url` is held server-side keyed by
 # state, so it never travels to Google.
 
 # The deep-link scheme the app registers (App/app.json "scheme"), used as the
 # fallback when we have no recoverable return_url to bounce an error to.
-_APP_SCHEME_PREFIX = "spatiotemporal://"
+_APP_SCHEME_PREFIX = "awscout://"
 
 # Allowed return_url schemes/hosts. `Linking.createURL()` resolves differently per
 # runtime, so we must accept all of the app's legitimate forms while still
 # rejecting arbitrary external redirects (open-redirect protection):
-#   * spatiotemporal://      built APK / dev client (production scheme)
+#   * awscout:// , spatiotemporal://  built APK / dev client (old + new scheme)
 #   * exp:// , exps://       Expo Go / dev client
 #   * http://<loopback-or-LAN>[:port]/...   Expo web + LAN dev only
 # A public http(s) host (e.g. https://evil.com) is never allowed.
-_ALLOWED_NATIVE_SCHEMES = ("spatiotemporal://", "exp://", "exps://")
+_ALLOWED_NATIVE_SCHEMES = ("awscout://", "spatiotemporal://", "exp://", "exps://")
 
 
 def _is_allowed_return_url(url: str) -> bool:
@@ -182,6 +182,12 @@ def _mobile_oauth_callback_url(request: Request) -> str:
         # Behind cloudflared/ngrok, X-Forwarded-Proto is https even though the
         # internal hop to uvicorn is http. Trust it; default to request scheme.
         scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+        # Plain-http request (LAN dev box, no tunnel) cannot complete OAuth —
+        # Chrome blocks the http redirect back. Fall back to the configured
+        # HTTPS base (MOBILE_OAUTH_REDIRECT_BASE / ngrok) so the flow survives
+        # even when the app points at the LAN IP.
+        if scheme == "http":
+            return settings.mobile_oauth_callback_url
         return f"{scheme}://{host}/api/mobile/auth/oauth/google/callback"
     return settings.mobile_oauth_callback_url
 
@@ -231,11 +237,13 @@ def mobile_oauth_callback(
         result, return_url = oauth_complete_mobile(
             code, state, client_ip=client_ip, user_agent=user_agent,
         )
+        logger.info("[oauth] mobile success ip=%s state=%s return_url=%s", client_ip, state[:8] if state else "none", (return_url or "")[:32])
     except OAuthGateError as exc:
         # Deep-link the error back to the app using the return_url the gate
         # carried (correct scheme for whatever runtime the app is on). Only when
         # the state lookup itself failed is return_url None — then fall back to
         # the production scheme as a best effort.
+        logger.warning("[oauth] mobile gate failed ip=%s state=%s reason=%s", client_ip, state[:8] if state else "none", exc)
         if exc.return_url:
             return _mobile_oauth_error(exc.return_url, "oauth_denied")
         return _mobile_oauth_terminal_error("oauth_denied")

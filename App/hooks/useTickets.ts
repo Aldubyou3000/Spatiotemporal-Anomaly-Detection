@@ -48,7 +48,7 @@ export function useTicketDetail(
   initialData?: MaintenanceTicket | null,
 ) {
   const q = useQuery<MaintenanceTicket | null>({
-    queryKey: dbId ? ticketDetailKey(dbId) : ['noop'],
+    queryKey: dbId ? ticketDetailKey(dbId) : ['noop', 'ticket-detail', dbId ?? 'null'],
     queryFn: () => getTicketById(dbId!),
     staleTime: 60_000,
     enabled: !!dbId,
@@ -99,7 +99,7 @@ export function useActivityFeed() {
 
 export function useTicketReport(dbId: string | null) {
   return useQuery({
-    queryKey: dbId ? ticketReportKey(dbId) : ['noop'],
+    queryKey: dbId ? ticketReportKey(dbId) : ['noop', 'ticket-report', dbId ?? 'null'],
     queryFn: () => fetchReportForTicket(dbId!),
     enabled: !!dbId,
     staleTime: 60_000,
@@ -109,7 +109,7 @@ export function useTicketReport(dbId: string | null) {
 
 export function useTicketAttachments(dbId: string | null) {
   return useQuery({
-    queryKey: dbId ? ticketAttachmentsKey(dbId) : ['noop'],
+    queryKey: dbId ? ticketAttachmentsKey(dbId) : ['noop', 'ticket-attachments', dbId ?? 'null'],
     queryFn: () => fetchTicketAttachments(dbId!),
     enabled: !!dbId,
     staleTime: 60_000,
@@ -119,7 +119,7 @@ export function useTicketAttachments(dbId: string | null) {
 
 export function useReportPhotos(reportId: string | null) {
   return useQuery({
-    queryKey: reportId ? reportPhotosKey(reportId) : ['noop'],
+    queryKey: reportId ? reportPhotosKey(reportId) : ['noop', 'report-photos', reportId ?? 'null'],
     queryFn: () => fetchInspectionPhotos(reportId!),
     enabled: !!reportId,
     staleTime: 60_000,
