@@ -310,6 +310,7 @@ def _sign_inspection_photos(sb, rows: list[dict]) -> dict[str, list[dict]]:
 
     Returns a map of report_id -> [{id, photo_url}] with fresh signed URLs.
     Avoids an N+1 query when a ticket has multiple inspection rounds.
+    Uses single batch create_signed_urls call for all photos (not per-row).
     """
     report_ids = [r["id"] for r in rows]
     if not report_ids:
@@ -324,15 +325,30 @@ def _sign_inspection_photos(sb, rows: list[dict]) -> dict[str, list[dict]]:
     )
 
     bucket = "inspection-photos"
-    grouped: dict[str, list[dict]] = {rid: [] for rid in report_ids}
-    for p in (photo_res.data or []):
-        stored = p["photo_url"]
+    photo_rows = photo_res.data or []
+    # Collect all storage paths for single batch signing
+    from .mobile import _signed_urls_batch
+
+    storage_paths: list[str] = []
+    row_paths: dict[str, str] = {}
+    for p in photo_rows:
+        stored = p["photo_url"] or ""
         if stored.startswith("http"):
             marker = f"/{bucket}/"
             storage_path = stored.split(marker)[1].split("?")[0] if marker in stored else None
         else:
             storage_path = stored or None
-        fresh_url = _signed_url(sb, bucket, storage_path, 3600) if storage_path else None
+        if storage_path:
+            storage_paths.append(storage_path)
+            row_paths[p["id"]] = storage_path
+
+    signed = _signed_urls_batch(sb, bucket, storage_paths, 3600) if storage_paths else {}
+
+    grouped: dict[str, list[dict]] = {rid: [] for rid in report_ids}
+    for p in photo_rows:
+        stored = p["photo_url"] or ""
+        path = row_paths.get(p["id"])
+        fresh_url = signed.get(path, "") if path else ""
         grouped.setdefault(p["report_id"], []).append(
             {"id": p["id"], "photo_url": fresh_url or stored}
         )

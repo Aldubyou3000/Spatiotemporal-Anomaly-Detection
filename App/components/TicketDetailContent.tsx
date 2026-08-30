@@ -140,25 +140,31 @@ function DetailRow({ icon, label, value, last }: {
   );
 }
 
-// ─── Photo mosaic — fixed 2×2 grid, +N overlay on the 4th tile (Panel F) ──────
+// ─── Photo mosaic — up to 5 photos, theme-matched grid (Panel F) ─────────
+// 1–4 photos: uniform 2-column grid. 5 photos: 2×2 + 1 full-width banner at
+// the bottom so the odd one out doesn't look orphaned. >5: shows first 5 with
+// +N overlay (defensive; backend caps at 5).
 function PhotoMosaic({ photos, onOpen }: {
   photos: ReportPhoto[];
   onOpen: (photos: ReportPhoto[], index: number) => void;
 }) {
   const theme = useTheme();
-  const shown = photos.slice(0, 4);
-  const overflow = photos.length - 4;
+  const MAX_VISIBLE = 5;
+  const shown = photos.slice(0, MAX_VISIBLE);
+  const overflow = photos.length - MAX_VISIBLE;
 
   return (
     <View style={styles.mosaic}>
       {shown.map((p, i) => {
-        const isLastWithOverflow = i === 3 && overflow > 0;
+        const isLastWithOverflow = i === MAX_VISIBLE - 1 && overflow > 0;
+        const isFifthFullWidth = photos.length === 5 && i === 4;
         return (
           <Pressable
             key={p.id ?? i}
             onPress={() => onOpen(photos, i)}
             style={({ pressed }) => [
               styles.mosaicTile,
+              isFifthFullWidth && styles.mosaicTileFull,
               { backgroundColor: theme.surfaceAlt, opacity: pressed ? 0.85 : 1 },
             ]}
           >
@@ -771,6 +777,11 @@ const styles = StyleSheet.create({
     height: MOSAIC_TILE,
     borderRadius: radius.sm,
     overflow: 'hidden',
+  },
+  // 5th photo full-width banner — 2 tiles + gap, keeps same height for rhythm
+  mosaicTileFull: {
+    width: MOSAIC_TILE * 2 + PHOTO_GAP,
+    height: MOSAIC_TILE,
   },
   mosaicImg: { width: '100%', height: '100%' },
   mosaicOverflow: {

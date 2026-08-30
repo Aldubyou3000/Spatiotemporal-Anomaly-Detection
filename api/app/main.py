@@ -31,7 +31,7 @@ limiter = Limiter(key_func=_rate_limit_key, default_limits=["120/minute"])
 # this raises if the config still carries insecure dev defaults.
 settings.assert_production_safe()
 
-app = FastAPI(title="Spatiotemporal Anomaly Detection API", version="1.0.0")
+app = FastAPI(title="AWS Sentinel API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

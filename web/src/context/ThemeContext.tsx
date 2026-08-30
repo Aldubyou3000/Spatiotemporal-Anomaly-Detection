@@ -10,14 +10,16 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
-const STORAGE_KEY = "aws-qc-theme";
+const STORAGE_KEY = "aws-sentinel-theme";
+const LEGACY_STORAGE_KEY = "aws-qc-theme";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
-    const stored = (typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY)) as Theme | null;
+    const stored = (typeof window !== "undefined"
+      && (localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY))) as Theme | null;
     if (stored === "light" || stored === "dark") {
       setThemeState(stored);
     }

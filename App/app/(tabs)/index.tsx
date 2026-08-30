@@ -60,7 +60,7 @@ const TAB_LABEL: Record<TicketTab, string> = {
   assigned:      'Assigned',
   'in-progress': 'In Progress',
   submitted:     'Ready for Review',
-  follow_up:     'Revisit Needed',
+  follow_up:     'Revisit',
   closed:        'Closed',
 };
 
@@ -275,7 +275,7 @@ const TicketCard = memo(function TicketCard({
   const isClosed = status === 'verified' || status === 'cancelled';
   const titleColor = isClosed ? theme.textMuted : theme.text;
 
-  // Muted metadata line: station · TKT-N · time (zone & revisit count removed — status chip already shows Revisit Needed).
+  // Muted metadata line: station · TKT-N · time (zone & revisit count removed — status chip already shows Revisit).
   const meta = [
     ticket.stationId,
     `TKT-${ticket.ticketNumber}`,

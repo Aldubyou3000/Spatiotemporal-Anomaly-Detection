@@ -23,8 +23,8 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AWS QC Process",
-  description: "Spatiotemporal Anomaly Detection — Analyst Dashboard",
+  title: "AWS Sentinel — Anomaly Detector",
+  description: "AWS Sentinel — Spatiotemporal Anomaly Detection",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               (function () {
                 var root = document.documentElement;
                 try {
-                  var stored = localStorage.getItem('aws-qc-theme');
+                  var stored = localStorage.getItem('aws-sentinel-theme') || localStorage.getItem('aws-qc-theme');
                   var theme = stored === 'dark' || stored === 'light' ? stored : 'light';
                   root.setAttribute('data-theme', theme);
                 } catch (e) {

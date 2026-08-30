@@ -4,8 +4,10 @@ All routes here require a valid technician JWT in the Authorization header.
 The mobile app stores this token in Expo SecureStore, never in localStorage.
 """
 
+import hashlib
 import ipaddress
 import logging
+import uuid
 from datetime import datetime, timezone
 from io import BytesIO
 from urllib.parse import urlparse
@@ -760,26 +762,97 @@ async def mobile_upload_photo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
     _assert_ticket_membership(sb, report["ticket_id"], user["id"])
 
-    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/heic"}
-    content_type = photo.content_type or "image/jpeg"
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/jpg"}
+    raw_ct = (photo.content_type or "image/jpeg").split(";")[0].strip().lower()
+    # Normalize non-standard aliases (Samsung reports image/jpg)
+    if raw_ct == "image/jpg":
+        raw_ct = "image/jpeg"
+    content_type = raw_ct
     if content_type not in allowed_types:
+        logger.warning("[mobile] rejected content_type=%r filename=%r size=%s", photo.content_type, photo.filename, photo.size)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only JPEG, PNG, WebP, and HEIC images are accepted")
 
     MAX_SIZE = 10 * 1024 * 1024  # 10 MB
     if photo.size is not None and photo.size > MAX_SIZE:
+        logger.warning("[mobile] rejected size header %s >10MB ct=%r", photo.size, content_type)
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Photo must be under 10 MB")
     data = await photo.read(MAX_SIZE + 1)
     if len(data) > MAX_SIZE:
+        logger.warning("[mobile] rejected body len %s >10MB ct=%r", len(data), content_type)
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Photo must be under 10 MB")
 
-    ext = content_type.split("/")[1].split(";")[0]
-    ts = int(datetime.now(timezone.utc).timestamp() * 1000)
-    path = f"{report_id}/{ts}.{ext}"
+    # Content hash for idempotency - same bytes retry does not consume slot
+    content_hash = hashlib.sha256(data).hexdigest()
+    # Check for duplicate content already stored for this report (idempotent retry)
+    try:
+        # Use content_hash column if migration applied, otherwise fall back to no dedup
+        dup_res = sb.table("inspection_photos").select("id, photo_url").eq("report_id", report_id).eq("content_hash", content_hash).limit(1).execute()
+        if dup_res.data:
+            existing = dup_res.data[0]
+            logger.info("[mobile] duplicate photo dedup hit report=%s hash=%s", report_id, content_hash[:12])
+            signed = _signed_url(sb, "inspection-photos", existing["photo_url"], 3600)
+            return {"photo_url": signed or existing["photo_url"], "path": existing["photo_url"], "dedup": True}
+    except Exception as exc:
+        # Column may not exist yet (migration not applied) - log and proceed without dedup
+        if "content_hash" in str(exc).lower() or "column" in str(exc).lower():
+            logger.warning("[mobile] content_hash column missing, skipping dedup: %s", exc)
+        else:
+            logger.warning("[mobile] dup check failed: %s", exc)
 
-    sb.storage.from_("inspection-photos").upload(path, data, {"content-type": content_type, "upsert": "true"})
+    # Enforce 5-photo limit per report (matches mobile MAX_PHOTOS) - count distinct rows
+    try:
+        count_res = sb.table("inspection_photos").select("id").eq("report_id", report_id).execute()
+        current_count = len(count_res.data or [])
+        if current_count >= 5:
+            # Include remaining info for client reconciliation
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Maximum of 5 photos per report reached ({current_count}/5 already stored)")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("[mobile] photo count check failed (proceeding): %s", exc)
+
+    ext = content_type.split("/")[1].split(";")[0].strip().lower() or "jpg"
+    # Normalize heif -> heic extension for storage consistency
+    if ext == "heif":
+        ext = "heic"
+    path = f"{report_id}/{uuid.uuid4()}.{ext}"
+
+    try:
+        sb.storage.from_("inspection-photos").upload(path, data, {"content-type": content_type, "upsert": "false"})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "duplicate" in msg or "already exists" in msg or "upsert" in msg:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Photo already exists. Please try again.")
+        logger.error("[mobile] photo storage upload failed: %s ct=%r size=%s", exc, content_type, len(data))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload photo. Please try again.")
 
     # Store the storage path (not a signed URL) so we can always generate fresh URLs on fetch
-    sb.table("inspection_photos").insert({"report_id": report_id, "photo_url": path}).execute()
+    # Include content_hash for future dedup if column exists
+    try:
+        row = {"report_id": report_id, "photo_url": path, "content_hash": content_hash}
+        sb.table("inspection_photos").insert(row).execute()
+    except Exception as exc:
+        # If content_hash column missing, retry without it
+        if "content_hash" in str(exc).lower():
+            try:
+                sb.table("inspection_photos").insert({"report_id": report_id, "photo_url": path}).execute()
+            except Exception as exc2:
+                try:
+                    sb.storage.from_("inspection-photos").remove([path])
+                except Exception:
+                    pass
+                logger.error("[mobile] photo DB insert failed (retry without hash): %s", exc2)
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save photo. Please try again.")
+        else:
+            # Cleanup orphan storage object if DB insert failed
+            try:
+                sb.storage.from_("inspection-photos").remove([path])
+            except Exception:
+                pass
+            logger.error("[mobile] photo DB insert failed: %s", exc)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save photo. Please try again.")
 
     signed_url = _signed_url(sb, "inspection-photos", path, 3600)
 

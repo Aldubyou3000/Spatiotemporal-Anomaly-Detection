@@ -20,6 +20,8 @@ import { useTechnicianProfiles, useTicketTechnicians } from "@/hooks/useTechnici
 import { byWorkload } from "@/lib/technicianWorkload";
 import { ticketsApi } from "@/lib/api/tickets";
 import { invalidateTicketLists } from "@/hooks/useTickets";
+import { ReasonPicker } from "@/components/tickets/ReasonPicker";
+import { ASSIGNMENT_REASONS, REMOVAL_REASONS } from "@/lib/ticketReasons";
 import type { Technician, TicketDetail } from "@/types/tickets";
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
@@ -107,6 +109,7 @@ export function TicketActionDock({
   // A staged add/remove awaiting a typed reason before it commits.
   const [pending, setPending] = useState<{ kind: "add" | "remove"; id: string; name: string } | null>(null);
   const [reason, setReason]   = useState("");
+  const [preset, setPreset]   = useState<string | null>(null);
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
 
@@ -119,16 +122,17 @@ export function TicketActionDock({
   const isVerified  = ticket.status === "verified";
 
   function openPrompt(next: { kind: "add" | "remove"; id: string; name: string }) {
-    setError(""); setReason(""); setAddOpen(false); setPending(next);
+    setError(""); setReason(""); setPreset(null); setAddOpen(false); setPending(next);
   }
   function closePrompt() {
-    setPending(null); setReason("");
+    setPending(null); setReason(""); setPreset(null);
   }
 
+  const finalReason = preset && preset !== "Other" ? preset : reason.trim();
   // Commit the staged add/remove with the required reason.
   async function commitPending() {
-    if (!pending || !reason.trim() || saving) return;
-    const r = reason.trim();
+    if (!pending || !finalReason || saving) return;
+    const r = finalReason;
     setSaving(true); setError("");
     try {
       const updated = pending.kind === "add"
@@ -160,11 +164,13 @@ export function TicketActionDock({
       <div
         style={{
           flexShrink: 0, position: "relative",
-          background: "var(--surface)",
-          borderTop: "1px solid var(--divider)",
+          background: open ? "var(--surface)" : "var(--surface-alt)",
+          borderTop: open ? "1px solid var(--divider)" : "1px solid var(--border-strong)",
           boxShadow: needsReview
             ? "inset 0 2px 0 color-mix(in oklab, var(--brand) 55%, transparent)"
-            : "none",
+            : !open
+              ? "0 -2px 8px rgba(16,24,40,0.04)"
+              : "none",
         }}
       >
         {/* One-shot ping overlay — plays once on mount (ticket selection), then disappears */}
@@ -174,6 +180,7 @@ export function TicketActionDock({
           type="button"
           onClick={() => setOpen((x) => !x)}
           aria-expanded={open}
+          aria-controls="ticket-action-drawer"
           aria-label={open ? "Collapse actions panel" : "Expand actions panel"}
           className="dock-strip"
           style={{
@@ -183,18 +190,27 @@ export function TicketActionDock({
             fontFamily: "inherit", textAlign: "left",
             transition: "background var(--duration-fast) var(--ease-std)",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-sunken)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = open ? "var(--surface-sunken)" : "color-mix(in oklab, var(--surface-alt) 80%, var(--surface-sunken))"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         >
-          {/* Collapse arrow — bobs while collapsed, rotates 180° when open */}
-          <span style={{ display: "flex", justifyContent: "center", paddingTop: 5, paddingBottom: 3 }}>
-            <ChevronDown
-              size={24}
-              strokeWidth={2.8}
-              className="dock-arrow"
-              data-collapsed={!open}
-              style={{ transform: open ? "rotate(180deg)" : "none" }}
-            />
+          {/* Single enclosed chevron — subtle but scannable, rotates with state */}
+          <span style={{ display: "flex", justifyContent: "center", paddingTop: 6, paddingBottom: 4 }}>
+            <span
+              style={{
+                width: 22, height: 22, borderRadius: "var(--r-full)",
+                border: "1px solid var(--border)", background: "var(--surface)",
+                display: "grid", placeItems: "center", flexShrink: 0,
+                boxShadow: "var(--shadow-xs)",
+              }}
+            >
+              <ChevronDown
+                size={12}
+                strokeWidth={2.6}
+                className="dock-arrow"
+                data-collapsed={!open}
+                style={{ transform: open ? "rotate(180deg)" : "none" }}
+              />
+            </span>
           </span>
 
           {/* Main row — vertically centered */}
@@ -258,16 +274,17 @@ export function TicketActionDock({
               </span>
             )}
 
-            {/* Expand/collapse pill */}
+            {/* Expand/collapse pill — subtle lift when collapsed so purpose scans */}
             <span
               style={{
                 display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
-                height: 26, padding: "0 8px 0 10px", borderRadius: "var(--r-full)",
+                height: 28, padding: "0 9px 0 11px", borderRadius: "var(--r-full)",
                 border: "1px solid var(--border)",
                 background: needsReview && !open ? "var(--brand-soft)" : "var(--surface)",
                 color: needsReview && !open ? "var(--brand)" : "var(--text-secondary)",
                 fontSize: "var(--font-xs)", fontWeight: 600,
-                transition: "background var(--duration-fast), color var(--duration-fast)",
+                boxShadow: !open ? "var(--shadow-xs)" : "none",
+                transition: "background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast)",
               }}
             >
               {open ? "Hide" : needsReview ? "Review" : "Manage"}
@@ -284,7 +301,7 @@ export function TicketActionDock({
 
         {/* ── Expandable drawer ── */}
         {open && (
-          <div className="animate-fade-in" style={{ borderTop: "1px solid var(--divider)" }}>
+          <div id="ticket-action-drawer" className="animate-fade-in" style={{ borderTop: "1px solid var(--divider)" }}>
 
             {/* Analyst review (owned by page) — only when pending_review.
                 In that state reassignment lives inside the review's follow-up branch,
@@ -428,28 +445,75 @@ export function TicketActionDock({
                     </button>
                   </div>
                   <div style={{ padding: "10px 12px 12px" }}>
+                    <ReasonPicker
+                      reasons={pending.kind === "remove" ? REMOVAL_REASONS : ASSIGNMENT_REASONS}
+                      selected={preset}
+                      variant={pending.kind === "remove" ? "danger" : "brand"}
+                      onSelect={(v) => {
+                        if (v === "Other") {
+                          setPreset("Other");
+                          if (preset && preset !== "Other") setReason("");
+                        } else {
+                          setPreset(v);
+                          setReason(v);
+                        }
+                      }}
+                    />
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                       <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>
                         Reason <span style={{ color: "var(--danger)" }}>*</span>
                       </span>
                       <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                        {reason.trim() ? `${reason.trim().length} chars` : "required"}
+                        {finalReason ? `${finalReason.length} chars` : "required"}
                       </span>
                     </div>
                     <textarea
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      placeholder={pending.kind === "remove"
-                        ? `Why is ${pending.name.split(" ")[0]} being taken off this ticket?`
-                        : `Why is ${pending.name.split(" ")[0]} being assigned?`}
+                      value={preset && preset !== "Other" ? preset : reason}
+                      onChange={(e) => {
+                        if (preset !== "Other") return; // locked — only Other is editable
+                        setReason(e.target.value);
+                      }}
+                      placeholder={preset === "Other"
+                        ? (pending.kind === "remove"
+                            ? `Type custom reason for removing ${pending.name.split(" ")[0]}…`
+                            : `Type custom reason for assigning ${pending.name.split(" ")[0]}…`)
+                        : preset && preset !== "Other"
+                          ? preset
+                          : "Select a reason above…"}
                       rows={2}
-                      disabled={saving}
-                      autoFocus
+                      disabled={saving || preset !== "Other"}
+                      readOnly={preset !== "Other"}
+                      autoFocus={preset === "Other"}
                       onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") commitPending(); }}
-                      style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", outline: "none", resize: "none", background: "var(--surface-sunken)", color: "var(--text)", fontSize: "var(--font-sm)", fontFamily: "inherit", lineHeight: 1.5, boxSizing: "border-box", opacity: saving ? 0.6 : 1 }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = pending.kind === "remove" ? "var(--danger)" : "var(--brand)"; }}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: "var(--r-sm)",
+                        border: "1px solid var(--border)",
+                        outline: "none",
+                        resize: "none",
+                        background: preset && preset !== "Other" ? "var(--surface)" : "var(--surface-sunken)",
+                        color: "var(--text)",
+                        fontSize: "var(--font-sm)",
+                        fontFamily: "inherit",
+                        lineHeight: 1.5,
+                        boxSizing: "border-box",
+                        opacity: saving || preset !== "Other" ? 0.9 : 1,
+                        cursor: preset !== "Other" ? "default" : "text",
+                      }}
+                      onFocus={(e) => { if (preset === "Other") e.currentTarget.style.borderColor = pending.kind === "remove" ? "var(--danger)" : "var(--brand)"; }}
                       onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
                     />
+                    {preset && preset !== "Other" && (
+                      <p style={{ margin: "6px 0 0", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+                        Selected: “{preset}” — tap <span style={{ fontWeight: 600 }}>Other</span> to type a custom reason.
+                      </p>
+                    )}
+                    {preset === "Other" && !reason.trim() && (
+                      <p style={{ margin: "6px 0 0", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+                        Type your custom reason above.
+                      </p>
+                    )}
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
                       <Button variant="secondary" size="sm" onClick={closePrompt} disabled={saving}>
                         Cancel
@@ -459,7 +523,7 @@ export function TicketActionDock({
                         size="sm"
                         onClick={commitPending}
                         loading={saving}
-                        disabled={saving || !reason.trim()}
+                        disabled={saving || !finalReason}
                         style={{ gap: 6 }}
                       >
                         {pending.kind === "remove"

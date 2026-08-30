@@ -24,6 +24,8 @@ import { TicketRowSkeleton, DetailSkeleton } from "@/components/ui/Skeleton";
 import { TicketDetailBody, type DetailModel, type DetailAssignee } from "@/components/tickets/TicketDetailBody";
 import { TicketActionDock } from "@/components/tickets/TicketActionDock";
 import { ReviewPanel } from "@/components/tickets/ReviewPanel";
+import { ReasonPicker } from "@/components/tickets/ReasonPicker";
+import { CANCELLATION_REASONS } from "@/lib/ticketReasons";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { ticketsApi } from "@/lib/api/tickets";
@@ -65,6 +67,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
   const [downloading, setDownloading]   = useState(false);
   const [cancelOpen, setCancelOpen]     = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelPreset, setCancelPreset] = useState<string | null>(null);
   const [cancelling, setCancelling]     = useState(false);
   const [cancelError, setCancelError]   = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -87,16 +90,17 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
     } finally { setDownloading(false); }
   }
 
+  const cancelFinal = cancelPreset && cancelPreset !== "Other" ? cancelPreset : cancelReason.trim();
   async function handleCancel() {
-    if (!cancelReason.trim()) return;
+    if (!cancelFinal) return;
     setConfirmCancel(false);
     setCancelling(true); setCancelError("");
     try {
-      const updated = await ticketsApi.cancelTicket(ticket.id, cancelReason.trim());
+      const updated = await ticketsApi.cancelTicket(ticket.id, cancelFinal);
       updateCache(updated);
       onUpdated(updated);
       await invalidateTicketLists();
-      setCancelOpen(false); setCancelReason("");
+      setCancelOpen(false); setCancelReason(""); setCancelPreset(null);
       toast.success(`TKT-${ticket.ticket_number} cancelled`, { description: "The ticket has been closed as cancelled." });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to cancel ticket.";
@@ -235,19 +239,65 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
         </button>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <textarea
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            placeholder="Reason for cancellation (required)…"
-            rows={2}
-            style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "var(--surface-sunken)", color: "var(--text)", fontSize: "var(--font-sm)", fontFamily: "inherit", resize: "none", outline: "none", boxSizing: "border-box" }}
+          <ReasonPicker
+            reasons={CANCELLATION_REASONS}
+            selected={cancelPreset}
+            variant="danger"
+            onSelect={(v) => {
+              if (v === "Other") {
+                setCancelPreset("Other");
+                // keep existing text so analyst can edit; clear if it was a preset
+                if (cancelPreset && cancelPreset !== "Other") setCancelReason("");
+              } else {
+                setCancelPreset(v);
+                setCancelReason(v);
+              }
+            }}
           />
+          <textarea
+            value={cancelPreset && cancelPreset !== "Other" ? cancelPreset : cancelReason}
+            onChange={(e) => {
+              // Only editable when "Other" is selected — presets are locked
+              if (cancelPreset !== "Other") return;
+              setCancelReason(e.target.value);
+            }}
+            placeholder={cancelPreset === "Other" ? "Type custom reason (required)…" : cancelPreset && cancelPreset !== "Other" ? cancelPreset : "Select a reason above…"}
+            rows={2}
+            readOnly={cancelPreset !== "Other"}
+            disabled={cancelPreset !== "Other"}
+            autoFocus={cancelPreset === "Other"}
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--border)",
+              background: cancelPreset && cancelPreset !== "Other" ? "var(--surface)" : "var(--surface-sunken)",
+              color: "var(--text)",
+              fontSize: "var(--font-sm)",
+              fontFamily: "inherit",
+              resize: "none",
+              outline: "none",
+              boxSizing: "border-box",
+              opacity: cancelPreset !== "Other" ? 0.9 : 1,
+              cursor: cancelPreset !== "Other" ? "default" : "text",
+            }}
+          />
+          {cancelPreset && cancelPreset !== "Other" && (
+            <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+              Will send: “{cancelPreset}” — tap <span style={{ fontWeight: 600 }}>Other</span> to type a custom reason.
+            </p>
+          )}
+          {cancelPreset === "Other" && !cancelReason.trim() && (
+            <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+              Type your custom reason above.
+            </p>
+          )}
           {cancelError && <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--danger)" }}>{cancelError}</p>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={() => { setCancelOpen(false); setCancelReason(""); setCancelError(""); }} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "transparent", fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-muted)", cursor: "pointer", fontFamily: "inherit" }}>
+            <button type="button" onClick={() => { setCancelOpen(false); setCancelReason(""); setCancelPreset(null); setCancelError(""); }} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "transparent", fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-muted)", cursor: "pointer", fontFamily: "inherit" }}>
               Back
             </button>
-            <button type="button" onClick={() => { if (cancelReason.trim()) setConfirmCancel(true); }} disabled={!cancelReason.trim() || cancelling} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--danger)", fontSize: "var(--font-xs)", fontWeight: 600, color: "#fff", cursor: cancelReason.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", opacity: cancelReason.trim() ? 1 : 0.5 }}>
+            <button type="button" onClick={() => { if (cancelFinal) setConfirmCancel(true); }} disabled={!cancelFinal || cancelling} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--danger)", fontSize: "var(--font-xs)", fontWeight: 600, color: "#fff", cursor: cancelFinal ? "pointer" : "not-allowed", fontFamily: "inherit", opacity: cancelFinal ? 1 : 0.5 }}>
               {cancelling ? "Cancelling…" : "Confirm Cancel"}
             </button>
           </div>

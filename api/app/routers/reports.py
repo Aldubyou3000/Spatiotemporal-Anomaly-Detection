@@ -61,18 +61,28 @@ def get_report_photos_endpoint(
     rows = res.data or []
 
     bucket = "inspection-photos"
+    marker = f"/{bucket}/"
+    # Batch sign all photos in one call
+    from .mobile import _signed_urls_batch
+
+    row_paths: dict[str, str] = {}
+    for row in rows:
+        stored = row.get("photo_url") or ""
+        if stored.startswith("http"):
+            path = stored.split(marker)[1].split("?")[0] if marker in stored else None
+        else:
+            path = stored or None
+        if path:
+            row_paths[row["id"]] = path
+
+    signed = _signed_urls_batch(sb, bucket, list(row_paths.values()), 3600) if row_paths else {}
+
     result = []
     for row in rows:
-        stored = row["photo_url"]
-        if stored.startswith("http"):
-            marker = f"/{bucket}/"
-            storage_path = stored.split(marker)[1].split("?")[0] if marker in stored else None
-        else:
-            storage_path = stored or None
-        if storage_path:
-            fresh = _signed_url(sb, bucket, storage_path, 3600)
-            if fresh:
-                row = {**row, "photo_url": fresh}
+        path = row_paths.get(row["id"])
+        fresh = signed.get(path, "") if path else ""
+        if fresh:
+            row = {**row, "photo_url": fresh}
         result.append(row)
     return result
 

@@ -609,35 +609,78 @@ export async function uploadInspectionPhoto(
   photoUri: string,
   mimeType = 'image/jpeg',
 ): Promise<string> {
-  const token = await getAccessToken();
+  let token = await getAccessToken();
   if (!token) throw new Error('Not authenticated');
 
-  const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'jpg';
+  // Normalize mime (Samsung reports image/jpg)
+  let normalizedMime = (mimeType || 'image/jpeg').split(';')[0].trim().toLowerCase();
+  if (normalizedMime === 'image/jpg') normalizedMime = 'image/jpeg';
+
+  const ext = normalizedMime.split('/')[1]?.split(';')[0]?.trim().toLowerCase() ?? 'jpg';
   const fileName = `photo.${ext}`;
+
+  // On native, ensure content:// URIs are copied to cache as file:// for reliable upload
+  let uploadUri = photoUri;
+  if (Platform.OS !== 'web' && photoUri.startsWith('content://')) {
+    try {
+      const dest = `${FileSystem.cacheDirectory}upload_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      await FileSystem.copyAsync({ from: photoUri, to: dest });
+      uploadUri = dest;
+    } catch {
+      // Fall back to original uri - fetch will surface the error with detail
+    }
+  }
+
   const formData = new FormData();
 
   if (Platform.OS === 'web') {
-    // Web: fetch the object/blob URL to get a real Blob
-    const blob = await fetch(photoUri).then((r) => r.blob());
+    const blob = await fetch(uploadUri).then((r) => r.blob());
+    // Pre-check size client-side (10MB)
+    if (blob.size > 10 * 1024 * 1024) {
+      throw new Error('Photo must be under 10 MB');
+    }
     formData.append('photo', blob, fileName);
   } else {
-    // Native Android/iOS: React Native's fetch handles file:// URIs natively —
-    // no FileSystem read needed, and avoids content:// permission errors on Android
-    formData.append('photo', { uri: photoUri, name: fileName, type: mimeType } as any);
+    // Check size via FileSystem if possible
+    try {
+      const info = await FileSystem.getInfoAsync(uploadUri);
+      if (info.exists && (info as any).size && (info as any).size > 10 * 1024 * 1024) {
+        throw new Error('Photo must be under 10 MB');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('10 MB')) throw e;
+    }
+    formData.append('photo', { uri: uploadUri, name: fileName, type: normalizedMime } as any);
   }
 
-  const res = await fetch(`${API_URL}/api/mobile/reports/${reportId}/photos`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  });
+  const doFetch = async (authToken: string) =>
+    fetch(`${API_URL}/api/mobile/reports/${reportId}/photos`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: formData,
+    });
+
+  let res = await doFetch(token);
+
+  // Token refresh on 401 (raw fetch has no auto-refresh like request())
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      token = (await getAccessToken()) ?? token;
+      res = await doFetch(token);
+    }
+  }
 
   if (!res.ok) {
-    let detail = 'Photo upload failed';
+    let detail = `Photo upload failed (${res.status})`;
     try { detail = (await res.json())?.detail ?? detail; } catch { /* ignore */ }
     throw new Error(detail);
   }
 
   const data = await res.json();
+  // Cleanup temp copied file
+  if (uploadUri !== photoUri && Platform.OS !== 'web') {
+    try { await FileSystem.deleteAsync(uploadUri, { idempotent: true }); } catch {}
+  }
   return data.photo_url as string;
 }

@@ -31,6 +31,7 @@ import { elevation, palette, radius, spacing, typography } from '@/constants/the
 import { useTheme } from '@/hooks/useTheme';
 import { useTicketDetail } from '@/hooks/useTickets';
 import {
+  fetchInspectionPhotos,
   MaintenanceTicket,
   submitInspectionReport,
   uploadInspectionPhoto,
@@ -52,6 +53,7 @@ const PHOTO_GAP = spacing.xs; // 8
 const PHOTO_TILE = Math.floor(
   (Dimensions.get('window').width - spacing.md * 2 - spacing.md * 2 - PHOTO_GAP * (PHOTO_COLS - 1)) / PHOTO_COLS,
 );
+const PHOTO_TILE_FULL = PHOTO_TILE * 2 + PHOTO_GAP;
 
 interface PhotoEntry { uri: string; mime: string }
 
@@ -156,7 +158,7 @@ export default function ReportScreen() {
   const launchGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     // 'limited' = Android 13+ partial photo access — still lets us pick photos.
-    if (status !== 'granted' && status !== 'limited') {
+    if (status !== 'granted' && (status as string) !== 'limited') {
       Alert.alert(
         'Gallery access required',
         'Please allow photo library access in your device settings.',
@@ -172,12 +174,21 @@ export default function ReportScreen() {
       quality: 0.8,
     });
     if (!r.canceled) {
-      r.assets.forEach((a) => addPhoto(a.uri, a.mimeType ?? 'image/jpeg'));
+      const picked: PhotoEntry[] = r.assets.map((a) => ({ uri: a.uri, mime: a.mimeType ?? 'image/jpeg' }));
+      // Single batch update — avoids stale closure / queue ordering issues when
+      // adding multiple photos at once; guarantees all 5 are staged.
+      setPhotos((prev) => [...prev, ...picked].slice(0, MAX_PHOTOS));
+      if (r.assets.length < picked.length) {
+        // Defensive: picker returned more than remaining (should not happen)
+        Alert.alert('Photo limit', `Only ${MAX_PHOTOS} photos allowed. Extra photos were ignored.`);
+      }
     }
   };
 
   const doSubmit = async () => {
     if (!ticket) return;
+    // Snapshot staged photos at submit time to avoid stale closure if user edits during upload
+    const toUpload = [...photos];
     setNotesError('');
     setSubmitting(true);
     try {
@@ -189,15 +200,84 @@ export default function ReportScreen() {
         correctiveAction.trim() || null,
         issueResolved,
       );
-      let failed = 0;
-      for (const p of photos) {
-        try { await uploadInspectionPhoto(reportId, p.uri, p.mime); } catch { failed++; }
+      if (toUpload.length === 0) {
+        setShowSuccessSheet(true);
+        return;
       }
-      if (failed > 0) {
+      // Reconcile with server count - report may already have photos from prior partial attempt
+      // (idempotent report reuse). This prevents Maximum 5 error on full resubmit.
+      let serverCount = 0;
+      try {
+        const existing = await fetchInspectionPhotos(reportId);
+        serverCount = existing.length;
+      } catch {}
+      const remaining = MAX_PHOTOS - serverCount;
+      if (remaining <= 0) {
+        // Already full - treat as success (photos already stored)
+        setShowSuccessSheet(true);
+        return;
+      }
+      // If staged exceeds remaining, we still attempt all; backend hash dedup will handle
+      // duplicates without consuming slots, but warn user
+      // Upload all photos — collect per-photo errors so the user sees exactly
+      // which one failed and why, instead of a silent count.
+      const failures: { index: number; message: string }[] = [];
+      for (let i = 0; i < toUpload.length; i++) {
+        const p = toUpload[i];
+        try {
+          await uploadInspectionPhoto(reportId, p.uri, p.mime);
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : 'Upload failed';
+          failures.push({ index: i, message });
+        }
+      }
+      if (failures.length > 0) {
+        const successCount = toUpload.length - failures.length;
+        const detail = failures.map((f) => `Photo ${f.index + 1}: ${f.message}`).join('\n');
         Alert.alert(
-          'Some photos failed to upload',
-          `${failed} of ${photos.length} photo${photos.length > 1 ? 's' : ''} could not be uploaded. The report was saved — please check your connection and try again.`,
+          successCount === 0 ? 'Photos failed to upload' : 'Some photos failed to upload',
+          successCount === 0
+            ? `None of the ${toUpload.length} photos could be uploaded.\n\n${detail}\n\nThe report was saved — you can try uploading the photos again.`
+            : `${successCount} of ${toUpload.length} photos uploaded. ${failures.length} failed:\n\n${detail}\n\nThe report was saved. The failed photos can be retried.`,
+          [
+            {
+              text: failures.length === toUpload.length ? 'OK' : 'Continue anyway',
+              style: failures.length === toUpload.length ? 'default' : 'cancel',
+              onPress: () => setShowSuccessSheet(true),
+            },
+            ...(successCount === 0
+              ? []
+              : [
+                  {
+                    text: 'Retry failed',
+                    onPress: async () => {
+                      // Retry only the photos that failed, in order, using snapshot
+                      setSubmitting(true);
+                      const retryFailures: { index: number; message: string }[] = [];
+                      for (const f of failures) {
+                        const p = toUpload[f.index];
+                        try {
+                          await uploadInspectionPhoto(reportId, p.uri, p.mime);
+                        } catch (e: unknown) {
+                          retryFailures.push({ index: f.index, message: e instanceof Error ? e.message : 'Upload failed' });
+                        }
+                      }
+                      setSubmitting(false);
+                      if (retryFailures.length === 0) {
+                        setShowSuccessSheet(true);
+                      } else {
+                        const still = retryFailures.map((f) => `Photo ${f.index + 1}: ${f.message}`).join('\n');
+                        Alert.alert('Retry incomplete', `${retryFailures.length} photo(s) still failed:\n\n${still}`, [
+                          { text: 'OK', onPress: () => setShowSuccessSheet(true) },
+                        ]);
+                      }
+                    },
+                  } as const,
+                ]),
+          ],
         );
+        // Do not auto-show success — let user choose retry vs continue.
+        return;
       }
       setShowSuccessSheet(true);
     } catch (err: unknown) {
@@ -210,6 +290,7 @@ export default function ReportScreen() {
 
   const handleSubmit = () => {
     if (!ticket) return;
+    if (submitting) return;
     if (!notes.trim()) { setNotesError('Field observations are required.'); return; }
     setShowConfirmSubmit(true);
   };
@@ -403,20 +484,24 @@ export default function ReportScreen() {
           </Text>
 
           {/* Uniform square grid: each photo is a square; the Add-Photo trigger
-              is the final square tile in the sequence (until MAX is reached). */}
+              is the final square tile in the sequence (until MAX is reached).
+              5 photos: last tile spans full width to avoid orphaned single. */}
           <View style={styles.photoGrid}>
-            {photos.map((p, i) => (
-              <View key={i} style={styles.photoTile}>
-                <Image source={{ uri: p.uri }} style={styles.photoImg} resizeMode="cover" />
-                <Pressable
-                  onPress={() => removePhoto(i)}
-                  style={({ pressed }) => [styles.thumbRemove, { opacity: pressed ? 0.7 : 1 }]}
-                  hitSlop={8}
-                >
-                  <Icon name={icons.close} size={13} color={palette.white} />
-                </Pressable>
-              </View>
-            ))}
+            {photos.map((p, i) => {
+              const isFifthFullWidth = photos.length === MAX_PHOTOS && i === MAX_PHOTOS - 1;
+              return (
+                <View key={i} style={[styles.photoTile, isFifthFullWidth && styles.photoTileFull]}>
+                  <Image source={{ uri: p.uri }} style={styles.photoImg} resizeMode="cover" />
+                  <Pressable
+                    onPress={() => removePhoto(i)}
+                    style={({ pressed }) => [styles.thumbRemove, { opacity: pressed ? 0.7 : 1 }]}
+                    hitSlop={8}
+                  >
+                    <Icon name={icons.close} size={13} color={palette.white} />
+                  </Pressable>
+                </View>
+              );
+            })}
 
             {photos.length < MAX_PHOTOS && (
               <Pressable
@@ -472,7 +557,7 @@ export default function ReportScreen() {
         }
         confirmLabel="Submit"
         cancelLabel="Go back"
-        onConfirm={() => { setShowConfirmSubmit(false); doSubmit(); }}
+        onConfirm={async () => { setShowConfirmSubmit(false); await new Promise((r) => setTimeout(r, 300)); doSubmit(); }}
         onCancel={() => setShowConfirmSubmit(false)}
       />
 
@@ -665,6 +750,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: 'hidden',
     position: 'relative',
+  },
+  photoTileFull: {
+    width: PHOTO_TILE_FULL,
+    height: PHOTO_TILE,
   },
   photoImg: { width: '100%', height: '100%' },
   // Inline Add tile — soft brand-blue square, centered camera, no text wrapper.

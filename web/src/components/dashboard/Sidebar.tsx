@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Activity, Layers,
+  Activity,
   PanelLeftClose, PanelLeftOpen, ShieldCheck, Ticket, Users,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
+import { SentinelMark } from "@/components/ui/SentinelMark";
 
 interface NavItem {
   href: string;
@@ -83,7 +84,7 @@ export function Sidebar() {
     { href: "/audit",       label: "Audit Log",   icon: ShieldCheck },
   ];
 
-  const W = collapsed ? 52 : 220;
+  const W = collapsed ? 52 : 248;
 
   // Shared icon button style for collapsed state
   function iconBtn(active = false): React.CSSProperties {
@@ -115,17 +116,19 @@ export function Sidebar() {
         /* ── Collapsed layout ── */
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", padding: "12px 0", gap: 2 }}>
 
-          {/* Brand icon */}
-          <div style={{
-            width: 32, height: 32, borderRadius: "var(--r-lg)", flexShrink: 0,
-            background: "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)",
-            display: "grid", placeItems: "center",
-            color: "var(--brand-fg)",
-            boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18)",
-            marginBottom: 10,
-          }}>
-            <Layers size={16} />
-          </div>
+          {/* Brand icon — Sentinel shield-radar */}
+          <NavTooltip label="AWS Sentinel — Anomaly Detector">
+            <div style={{
+              width: 32, height: 32, borderRadius: "var(--r-lg)", flexShrink: 0,
+              background: "linear-gradient(135deg, var(--brand) 0%, #6BA8F0 100%)",
+              display: "grid", placeItems: "center",
+              color: "var(--brand-fg)",
+              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.22)",
+              marginBottom: 10,
+            }}>
+              <SentinelMark size={18} />
+            </div>
+          </NavTooltip>
 
           {/* Expand toggle — TOP, right under brand */}
           <NavTooltip label="Expand sidebar">
@@ -180,29 +183,43 @@ export function Sidebar() {
         /* ── Expanded layout ── */
         <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "16px 12px", gap: 4 }}>
 
-          {/* Brand row */}
+          {/* Brand row — 2-line lockup: AWS SENTINEL / Anomaly Detector */}
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
-            padding: "4px 8px 14px",
+            padding: "6px 6px 14px 6px",
             borderBottom: "1px solid var(--divider)",
-            marginBottom: 6,
+            marginBottom: 8,
+            minWidth: 0,
           }}>
             <div style={{
-              width: 30, height: 30, borderRadius: "var(--r-lg)", flexShrink: 0,
-              background: "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)",
+              width: 32, height: 32, borderRadius: "var(--r-lg)", flexShrink: 0,
+              background: "linear-gradient(135deg, var(--brand) 0%, #6BA8F0 100%)",
               display: "grid", placeItems: "center",
               color: "var(--brand-fg)",
-              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18)",
+              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.22)",
             }}>
-              <Layers size={15} />
+              <SentinelMark size={18} />
             </div>
-            <span style={{ flex: 1, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap" }}>
-              Analyst Console
-            </span>
+            <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", gap: 1, lineHeight: 1.1 }}>
+              <div style={{
+                fontSize: "10.5px", fontWeight: 700, letterSpacing: "0.09em",
+                color: "var(--text-muted)", textTransform: "uppercase",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>
+                AWS Sentinel
+              </div>
+              <div style={{
+                fontSize: "13.5px", fontWeight: 650, letterSpacing: "-0.01em",
+                color: "var(--text)", whiteSpace: "nowrap",
+                overflow: "hidden", textOverflow: "ellipsis",
+              }}>
+                Anomaly Detector
+              </div>
+            </div>
             <button
               onClick={() => setCollapsed(true)}
               aria-label="Collapse sidebar"
-              style={{ ...iconBtn(), width: 28, height: 28, flexShrink: 0 }}
+              style={{ ...iconBtn(), width: 28, height: 28, flexShrink: 0, marginLeft: 2 }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
             >

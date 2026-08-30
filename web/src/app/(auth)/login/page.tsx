@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, Eye, EyeOff, Layers, Lock, Mail, Moon, Sun } from "lucide-react";
+import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, Moon, Sun } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
 import { useTheme } from "@/context/ThemeContext";
+import { SentinelMark } from "@/components/ui/SentinelMark";
 
 const LOGIN_TIMEOUT_MS = 60_000;
 
@@ -141,14 +142,14 @@ export default function LoginPage() {
               width: 32,
               height: 32,
               borderRadius: "var(--r-lg)",
-              background: "linear-gradient(135deg, var(--brand) 0%, #5B9FE8 100%)",
+              background: "linear-gradient(135deg, var(--brand) 0%, #6BA8F0 100%)",
               display: "grid",
               placeItems: "center",
               color: "var(--brand-fg)",
-              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18)",
+              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.22)",
             }}
           >
-            <Layers size={16} />
+            <SentinelMark size={18} />
           </div>
           <div style={{ lineHeight: 1.15 }}>
             <div
@@ -160,10 +161,10 @@ export default function LoginPage() {
                 textTransform: "uppercase",
               }}
             >
-              AWS QC Process
+              AWS Sentinel
             </div>
             <div style={{ fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>
-              Analyst Console
+              Anomaly Detector
             </div>
           </div>
         </div>

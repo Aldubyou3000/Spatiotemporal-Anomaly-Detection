@@ -1,12 +1,12 @@
 """
 Zone A: Data Cleaning & Interpolation with Aggressive Exclusion Policy
 
-This module implements strict data quality control for the AWS Quality Control Pipeline.
+This module implements strict data quality control for the AWS Sentinel Pipeline.
 It validates input, removes problematic data, and performs minimal interpolation
 (single-hour gaps only, before downmapping) while maintaining full data integrity
 and audit trails.
 
-Author: AWS QC Pipeline Team
+Author: AWS Sentinel Team
 Version: 2.0.0
 """
 
