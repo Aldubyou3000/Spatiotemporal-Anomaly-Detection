@@ -133,7 +133,10 @@ async function _doRefresh(): Promise<boolean> {
   try {
     const res = await fetchWithTimeout(`${API_URL}/api/mobile/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'any',
+      },
       body: JSON.stringify({ refresh_token: refresh }),
       timeoutMs: 10_000,
     });
@@ -164,6 +167,9 @@ async function request<T>(path: string, init: RequestInit & { timeoutMs?: number
   const token = await getAccessToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // Tunnel providers (ngrok/cloudflared) return an HTML interstitial without
+    // this header; native + web both need it so /api/mobile/auth/me doesn't die.
+    'ngrok-skip-browser-warning': 'any',
     ...(init.headers as Record<string, string>),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -216,7 +222,10 @@ export async function apiLogin(credential: string, password: string): Promise<Us
   try {
     data = await fetchWithTimeout(`${API_URL}/api/mobile/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'any',
+      },
       body: JSON.stringify({ credential, password }),
       timeoutMs: 30_000,
     });
