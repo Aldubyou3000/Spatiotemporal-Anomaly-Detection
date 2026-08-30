@@ -322,9 +322,21 @@ export async function apiLoginWithGoogle(): Promise<UserProfile> {
     return new Promise<string>(() => {});
   });
 
+  // Guard against a background tab: if the user puts the app in the background
+  // mid-flow, WebBrowser can resolve `dismiss`/`lock` in odd shapes and the
+  // Linking listener never fires → previously hung this promise forever. 90s
+  // is plenty for a Google account pick; when it expires we surface a clear
+  // error instead of spinning.
+  const timeoutPromise = new Promise<string>((_, reject) =>
+    setTimeout(
+      () => reject(new Error('Google sign-in timed out. Close the browser and try again.')),
+      90_000,
+    ),
+  );
+
   let callbackUrl: string;
   try {
-    callbackUrl = await Promise.race([callbackPromise, browserPromise]);
+    callbackUrl = await Promise.race([callbackPromise, browserPromise, timeoutPromise]);
   } finally {
     resolved = true;
   }
