@@ -34,9 +34,9 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
-// Timeout defaults — 20s normal, 45s heavy (zones), 10s for refresh. Render free-tier cold start is 40-60s so login uses 60s.
+// Timeout defaults — 20s normal, 90s heavy (zones 4-file LOF + cold start), 10s for refresh. Render free-tier cold start is 40-60s so login uses 60s.
 export const DEFAULT_TIMEOUT_MS = 20_000;
-export const HEAVY_TIMEOUT_MS = 45_000;
+export const HEAVY_TIMEOUT_MS = 90_000;
 
 function getCsrfToken(): string {
   if (typeof document === "undefined") return "";
@@ -121,12 +121,12 @@ async function request<T>(path: string, init: RequestInit & { timeoutMs?: number
     res = await fetchWithTimeout(url.toString(), enrichedInit as RequestInit & { timeoutMs?: number });
   } catch (err: unknown) {
     if (isAbortError(err)) {
-      // One automatic retry for cold-start — Render can take 40-60s to wake, Vercel proxy times out at ~30s.
-      // Second try is usually instant (instance now warm).
-      const isLogin = path.includes("/api/auth/login");
-      if (isLogin && typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app") && (init.timeoutMs ?? DEFAULT_TIMEOUT_MS) >= 30_000) {
+      // Auto-retry once for cold-start — Render free wakes 40-60s, Vercel proxy caps ~30s.
+      // Second hit is warm. Applies to login (60s) and zones heavy (90s).
+      const isColdStartPath = path.includes("/api/auth/login") || path.includes("/api/zones/process") || path.includes("/api/auth/refresh");
+      if (isColdStartPath && typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app") && (init.timeoutMs ?? DEFAULT_TIMEOUT_MS) >= 30_000) {
         try {
-          await new Promise((r) => setTimeout(r, 1200));
+          await new Promise((r) => setTimeout(r, 1500));
           res = await fetchWithTimeout(url.toString(), enrichedInit as RequestInit & { timeoutMs?: number });
         } catch (err2: unknown) {
           if (isAbortError(err2)) throw new Error("Request timed out — server is waking up (Render cold start). Please wait 10s and try again.");

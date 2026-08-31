@@ -260,11 +260,40 @@ class _DictStorage:
 
 
 def _service_client():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+    import httpx
+    # Longer timeouts — Render <-> Supabase can be 10-20s under load; default 10s trips ReadTimeout (see Render log 01:40:26 refresh_session httpx.ReadTimeout)
+    try:
+        http_client = httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0), follow_redirects=True)  # type: ignore[call-arg]
+        return create_client(  # type: ignore[call-arg]
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+            options=ClientOptions(
+                postgrest_client_timeout=30,
+                storage_client_timeout=30,
+                function_client_timeout=30,
+                httpx_client=http_client,  # type: ignore[arg-type]
+            ),
+        )
+    except Exception:
+        return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 def _anon_client():
-    return create_client(settings.supabase_url, settings.supabase_anon_key)
+    import httpx
+    try:
+        http_client = httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0), follow_redirects=True)  # type: ignore[call-arg]
+        return create_client(  # type: ignore[call-arg]
+            settings.supabase_url,
+            settings.supabase_anon_key,
+            options=ClientOptions(
+                postgrest_client_timeout=30,
+                storage_client_timeout=30,
+                function_client_timeout=30,
+                httpx_client=http_client,  # type: ignore[arg-type]
+            ),
+        )
+    except Exception:
+        return create_client(settings.supabase_url, settings.supabase_anon_key)
 
 
 def _pkce_anon_client(storage: _DictStorage):
@@ -611,8 +640,25 @@ def refresh_session(refresh_token: str) -> dict:
     anon = _anon_client()
     try:
         res = anon.auth.refresh_session(refresh_token)
-    except AuthApiError as e:
-        raise ValueError(str(e))
+    except Exception as e:  # noqa: BLE001 — catch AuthApiError + httpx.ReadTimeout from Render log 01:40:26
+        # Retry once on transient network/timeout — Supabase <-> Render can hit ReadTimeout under cold start
+        err_name = type(e).__name__
+        if err_name in ("ReadTimeout", "ConnectTimeout", "PoolTimeout") or "timed out" in str(e).lower():
+            import time as _t
+            logger.warning("[auth] refresh_session transient %s, retrying once: %s", err_name, e)
+            _t.sleep(0.8)
+            try:
+                res = anon.auth.refresh_session(refresh_token)
+            except AuthApiError as e2:
+                raise ValueError(str(e2)) from e2
+            except Exception as e2:
+                raise ValueError(f"Session refresh temporarily unavailable: {e2}") from e2
+        if isinstance(e, AuthApiError):
+            raise ValueError(str(e)) from e
+        # Map httpx timeout to user-friendly message so UI doesn't show raw stack
+        if err_name in ("ReadTimeout", "ConnectTimeout", "PoolTimeout"):
+            raise ValueError("Authentication service temporarily unavailable — please try again.") from e
+        raise ValueError(str(e)) from e
     if not res.session:
         raise ValueError("Invalid or expired refresh token.")
     return {
