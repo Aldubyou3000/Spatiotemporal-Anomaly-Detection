@@ -616,6 +616,8 @@ export default function ZonesPage() {
   function handleCancel() {
     if (tickerRef.current) clearInterval(tickerRef.current);
     tickerRef.current = null;
+    abortRef.current?.abort();
+    abortRef.current = null;
     setRunning(false);
     setProgress(0);
     setActiveStage(0);
@@ -624,8 +626,15 @@ export default function ZonesPage() {
     setConfirmCancel(false);
   }
 
+  // Abort controller for in-flight zones processing (so Stop actually cancels the poll)
+  const abortRef = useRef<AbortController | null>(null);
+
   async function handleProcess() {
     if (files.length === 0 || running) return;
+    // Create a fresh abort controller for this run
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setError(null);
     setActiveStage(0);
@@ -643,24 +652,24 @@ export default function ZonesPage() {
       });
     });
 
-    // Start the animation ticker — smooth 60fps-ish
+    // Start the animation ticker — smooth 60fps-ish but deliberately slower so
+    // "Finalizing" doesn't appear in <5s while the real LOF + cold start takes 40-90s.
+    // We clamp at 92% until the server responds, then snap to 100% on done.
     let p = 0;
     tickerRef.current = setInterval(() => {
-      p += 0.8 + Math.random() * 1.5;
-      const clamped = Math.min(100, p);
+      // Slow ramp: 0.35 avg per tick => ~20s to reach 92% (matches real 4-file timing)
+      p += 0.25 + Math.random() * 0.5;
+      const clamped = Math.min(92, p);
       setProgress(clamped);
-      if      (clamped >= 33 && clamped < 66) setActiveStage(1);
-      else if (clamped >= 66)                  setActiveStage(2);
+      if      (clamped >= 30 && clamped < 62) setActiveStage(1);
+      else if (clamped >= 62)                  setActiveStage(2);
 
-      if (clamped >= 100) {
-        clearInterval(tickerRef.current!);
-        tickerRef.current = null;
-        setFinalizing(true);
-      }
-    }, 60);
+      // Don't auto-finalize at 92% — wait for server. Finalizing is set on success/final poll tick.
+    }, 80);
 
     try {
-      const data = await zonesApi.process(files);
+      const data = await zonesApi.process(files, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (tickerRef.current) clearInterval(tickerRef.current);
       tickerRef.current = null;
       setProgress(100);
@@ -670,18 +679,38 @@ export default function ZonesPage() {
       setConfigOpen(false);
       const anomalies = data.flagged_data.filter((r) => r.is_anomaly).length;
       const filePrefix = files.length > 1 ? `${files.length} files merged · ` : "";
+      // Detail confirms all files were merged, not just one
+      const stationCount = data.summary.total_stations;
       toast.success("Process complete", {
-        description: `${filePrefix}${data.cleaned_data.length.toLocaleString()} readings cleaned · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
+        description: `${filePrefix}${data.cleaned_data.length.toLocaleString()} daily readings from ${stationCount} station(s) · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
       });
     } catch (err) {
+      if (controller.signal.aborted) {
+        if (tickerRef.current) clearInterval(tickerRef.current);
+        tickerRef.current = null;
+        setFinalizing(false);
+        setRunning(false);
+        return;
+      }
       if (tickerRef.current) clearInterval(tickerRef.current);
       tickerRef.current = null;
-      const msg = err instanceof Error ? err.message : "Failed to process file.";
+      let msg = err instanceof Error ? err.message : "Failed to process file.";
+      // Friendly cold-start hint: the 90s client timeout + 1 retry can still trip on a
+      // just-woken Render instance (50s boot + 40s LOF >90s window). The server's async
+      // 202 path avoids this, but if we're here it means the 202 itself timed out.
+      // Nudge the user to retry immediately — second hit is warm and returns 202 in <1s.
+      if (msg.includes("timed out") || msg.includes("waking up")) {
+        msg = msg + " The server was waking up — please click Run Process again right now (the next attempt is usually instant).";
+      }
+      // Multi-file specific hint
+      if (files.length > 1 && msg.toLowerCase().includes("only one")) {
+        msg = msg + " All files were sent; if only one station appears, check that the other CSVs are valid HMDAS or combined files (station_id, date, rainfall).";
+      }
       setError(msg);
       setFinalizing(false);
       toast.error("Process failed", { description: msg });
     } finally {
-      setRunning(false);
+      if (!controller.signal.aborted) setRunning(false);
     }
   }
 

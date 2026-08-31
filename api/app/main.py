@@ -34,7 +34,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 _origin_regex = (
     r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?"
-    if settings.dev_mode else None
+    if settings.dev_mode else r"https://.*\.vercel\.app"
 )
 
 app.add_middleware(
@@ -44,7 +44,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With",
-                   "Cache-Control", "X-CSRF-Token"],
+                   "Cache-Control", "X-CSRF-Token", "Prefer"],
     expose_headers=["Content-Length"],
     max_age=600,
 )

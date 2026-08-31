@@ -122,8 +122,8 @@ async function request<T>(path: string, init: RequestInit & { timeoutMs?: number
   } catch (err: unknown) {
     if (isAbortError(err)) {
       // Auto-retry once for cold-start — Render free wakes 40-60s, Vercel proxy caps ~30s.
-      // Second hit is warm. Applies to login (60s) and zones heavy (90s).
-      const isColdStartPath = path.includes("/api/auth/login") || path.includes("/api/zones/process") || path.includes("/api/auth/refresh");
+      // Second hit is warm. Applies to login (60s), zones heavy (90s), and direct-token seeding for Google OAuth.
+      const isColdStartPath = path.includes("/api/auth/login") || path.includes("/api/zones/process") || path.includes("/api/auth/refresh") || path.includes("/api/auth/direct-token");
       if (isColdStartPath && typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app") && (init.timeoutMs ?? DEFAULT_TIMEOUT_MS) >= 30_000) {
         try {
           await new Promise((r) => setTimeout(r, 1500));
@@ -211,14 +211,19 @@ export const apiClient = {
     request<T>(path, { ...options, method: "DELETE", headers: withJson(options.headers) } as RequestInit & { timeoutMs?: number }, options.params),
 
   /** Upload multipart/form-data — browser sets Content-Type with boundary. */
-  upload: <T>(path: string, formData: FormData, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null } = {}) =>
-    request<T>(path, { ...options, method: "POST", body: formData, timeoutMs: HEAVY_TIMEOUT_MS } as RequestInit & { timeoutMs?: number }, options.params),
+  upload: <T>(path: string, formData: FormData, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null; headers?: Record<string, string> } = {}) => {
+    // Forward Prefer header if provided (for async 202) and merge with CSRF handling via request()
+    const extraHeaders = options.headers || {};
+    // request() will call withCsrf; we must ensure Prefer survives. So inject via options.headers
+    // and let request() preserve it.
+    return request<T>(path, { ...options, method: "POST", body: formData, timeoutMs: options.timeoutMs ?? HEAVY_TIMEOUT_MS, headers: extraHeaders } as RequestInit & { timeoutMs?: number }, options.params);
+  },
 
   /** Direct GET to Render — bypasses Vercel proxy for polling. */
-  getDirect: async <T>(path: string, opts: { timeoutMs?: number; signal?: AbortSignal | null } = {}): Promise<T> => {
+  getDirect: async <T>(path: string, opts: { timeoutMs?: number; signal?: AbortSignal | null; headers?: Record<string, string> } = {}): Promise<T> => {
     const token = getDirectToken();
     const url = new URL(path, DIRECT_BASE).toString();
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...(opts.headers || {}) };
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetchWithTimeout(url, { method: "GET", headers, credentials: "omit", timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, signal: opts.signal });
     if (!res.ok) {
@@ -229,12 +234,12 @@ export const apiClient = {
   },
 
   /** Direct upload to Render — bypasses Vercel proxy (avoids 30s timeout for 4-file LOF). */
-  uploadDirect: async <T>(path: string, formData: FormData, opts: { timeoutMs?: number; signal?: AbortSignal | null } = {}): Promise<T> => {
+  uploadDirect: async <T>(path: string, formData: FormData, opts: { timeoutMs?: number; signal?: AbortSignal | null; headers?: Record<string, string> } = {}): Promise<T> => {
     const token = getDirectToken();
     const url = new URL(path, DIRECT_BASE).toString();
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...(opts.headers || {}) };
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    // CSRF not needed for Bearer auth
+    // CSRF not needed for Bearer auth; Prefer header must be forwarded if provided
     const timeoutMs = opts.timeoutMs ?? HEAVY_TIMEOUT_MS;
     let res: Response;
     try {
@@ -245,7 +250,7 @@ export const apiClient = {
         const isColdStartPath = path.includes("/api/zones/process");
         if (isColdStartPath && typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app") && timeoutMs >= 30_000) {
           try {
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 2000));
             res = await fetchWithTimeout(url, { method: "POST", body: formData, headers, credentials: "omit", timeoutMs, signal: opts.signal });
           } catch (err2: unknown) {
             if (isAbortError(err2)) throw new Error("Request timed out — server is waking up (Render cold start). Please wait 10s and try again.");

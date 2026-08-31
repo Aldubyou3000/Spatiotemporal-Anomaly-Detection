@@ -49,7 +49,17 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        origins = [o.strip() for o in self.allowed_origins.split(",")]
+        origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        # Always allow the production Vercel frontend for direct (Bearer) uploads/polling.
+        # This is the first-party origin that bypasses Vercel's 30s proxy limit via DIRECT_BASE.
+        # Without this, cross-site CORS on onrender.com blocks the direct path and the
+        # app falls back to the proxied path which times out on 4-file LOF + cold start.
+        vercel_production = "https://spatiotemporal-anomaly-detection.vercel.app"
+        # Also allow any *.vercel.app preview deployment (Vercel creates branch URLs)
+        # via a suffix check in the CORS middleware regex (see main.py _origin_regex).
+        # Here we at least ensure the main production host is present if not explicitly listed.
+        if vercel_production not in origins:
+            origins = origins + [vercel_production]
         if self.dev_mode:
             extra = [
                 "http://localhost:8081", "http://localhost:8082",
@@ -59,7 +69,7 @@ class Settings(BaseSettings):
                 "http://192.168.100.10:3000",
             ]
             return list(dict.fromkeys(origins + extra))
-        return origins
+        return list(dict.fromkeys(origins))
 
     def assert_production_safe(self) -> None:
         """Fail closed: refuse to run in production with insecure defaults.

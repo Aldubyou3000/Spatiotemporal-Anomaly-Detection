@@ -19,7 +19,8 @@ export const authApi = {
     apiClient.get<UserProfile>("/api/auth/me"),
 
   directToken: async () => {
-    const res = await apiClient.get<{ access_token: string }>("/api/auth/direct-token");
+    // 65s to survive Render cold start (same reason as zones ensureDirectToken)
+    const res = await apiClient.get<{ access_token: string }>("/api/auth/direct-token", { timeoutMs: 65_000 });
     if (res.access_token) setDirectToken(res.access_token);
     return res;
   },

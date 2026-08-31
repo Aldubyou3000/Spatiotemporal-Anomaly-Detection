@@ -76,7 +76,10 @@ async def process_zones(
             "and/or a combined CSV (station_id, date, latitude, longitude, rainfall)."
         ),
     ),
-    async_mode: bool = Query(default=False, description="If true, returns 202 job_id and poll GET /api/zones/jobs/{id}"),
+    # Accept both ?async=true (client's historical param, `async` is a reserved keyword so we alias it)
+    # and ?async_mode=true for robustness. Either triggers 202 → poll.
+    async_mode: bool = Query(default=False, alias="async_mode", description="If true, returns 202 job_id and poll GET /api/zones/jobs/{id}"),
+    async_alias: bool = Query(default=False, alias="async", description="Alias for async_mode"),
     _user: UserProfile = Depends(require_analyst_or_bearer),
 ) -> Any:
     if not files:
@@ -122,7 +125,28 @@ async def process_zones(
         payload.append((name, contents))
 
     # ── Async mode — bypass Vercel 30s edge by returning 202 immediately
-    prefer_async = async_mode or request.headers.get("prefer", "").lower() == "respond-async"
+    # Check all async signals: alias ?async=, canonical ?async_mode=, Prefer header, and raw query fallback
+    # (covers any future client that sends either name). The explicit Query params handle the normal
+    # case; the raw query_params check is a safety net for edge rewrites that might drop alias mapping.
+    raw_async = request.query_params.get("async")
+    raw_async_mode = request.query_params.get("async_mode")
+    raw_async_truthy = (raw_async or "").lower() in ("1", "true", "yes")
+    raw_async_mode_truthy = (raw_async_mode or "").lower() in ("1", "true", "yes")
+    prefer_async = (
+        async_mode
+        or async_alias
+        or raw_async_truthy
+        or raw_async_mode_truthy
+        or request.headers.get("prefer", "").lower() == "respond-async"
+        or request.query_params.get("prefer") == "respond-async"
+    )
+    # Log mode decision for Render debugging (helps distinguish cold-start 50s vs LOF 45s)
+    logger.info(
+        "[zones] process mode async_mode=%s async_alias=%s raw_async=%s raw_async_mode=%s prefer=%s => prefer_async=%s files=%d hlen=%s",
+        async_mode, async_alias, raw_async, raw_async_mode,
+        request.headers.get("prefer"), prefer_async, len(files),
+        request.headers.get("content-length") or request.query_params.get("async"),
+    )
     if prefer_async:
         _gc_jobs()
         job_id = uuid.uuid4().hex

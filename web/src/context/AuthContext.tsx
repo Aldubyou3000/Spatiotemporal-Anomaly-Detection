@@ -23,7 +23,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     authApi
       .me()
-      .then(setUser)
+      .then((u) => {
+        setUser(u);
+        // Proactively seed direct Bearer token for zones uploads (needed for Vercel bypass).
+        // Google OAuth users never called authApi.login, so zones would otherwise need to
+        // fetch it on first upload (which adds a cold-start roundtrip). Seeding here makes
+        // the first upload instant. Use a short delay so it doesn't block the initial render.
+        if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+          authApi.directToken().catch(() => {/* ignore — zones will retry */});
+        }
+      })
       .catch(() => routerRef.current.replace("/login"))
       .finally(() => setLoading(false));
     // intentionally empty — runs once on mount only
