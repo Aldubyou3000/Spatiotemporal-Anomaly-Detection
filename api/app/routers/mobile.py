@@ -15,11 +15,6 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from ..core.dependencies import _client_ip, get_supabase, require_technician_mobile
 from ..core.config import settings
 from ..core.limiter import limiter
@@ -889,6 +884,13 @@ def mobile_download_ticket_pdf(
     user: dict = Depends(require_technician_mobile),
 ):
     """Generate and stream a PDF report for a ticket assigned to this technician."""
+    # HOTFIX: lazy import (saves 25 MB startup)
+    from reportlab.lib import colors  # noqa: WPS433
+    from reportlab.lib.pagesizes import A4  # noqa: WPS433
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # noqa: WPS433
+    from reportlab.lib.units import cm  # noqa: WPS433
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: WPS433
+
     sb = get_supabase()
     _assert_ticket_membership(sb, ticket_id, user["id"])
     ticket = _one(

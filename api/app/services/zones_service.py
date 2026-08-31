@@ -223,11 +223,20 @@ def _run_from_dataframe(
 # ─── helpers ─────────────────────────────────────────────────────────────
 
 def _build_raw_preview(df: pd.DataFrame) -> list[dict[str, Any]]:
-    # No row cap — every uploaded row is returned for full transparency.
-    # The Raw Data tab paginates client-side, so DOM cost stays constant.
-    out = df.copy()
+    # HOTFIX for Render 512 MB OOM (status 137): cap raw preview to 1000 rows.
+    # Previous uncapped 100k hourly rows → ~35 MB list[dict] + df.copy() pushed
+    # peak RSS ~530 MB (>512). Client paginates anyway; full data is in
+    # cleaned_data/flagged_data. Keep raw_total_rows accurate for UI.
+    PREVIEW_LIMIT = 1000
+    # Avoid df.copy() on full frame — slice first, then copy only the slice
+    preview_df = df.head(PREVIEW_LIMIT)
+    # Only copy the slice, and avoid dt.strftime on full frame
+    out = preview_df.copy()
     if "date" in out.columns:
-        out["date"] = out["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            out["date"] = out["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            out["date"] = out["date"].astype(str)
     return _records_safe(out)
 
 

@@ -38,6 +38,19 @@ async def process_zones(
             detail="No files were uploaded.",
         )
 
+    # HOTFIX: early reject huge Content-Length before buffering (saves OOM)
+    try:
+        clen = int(request.headers.get("content-length", "0") or 0)
+        if clen and clen > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Combined upload exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit (Content-Length {clen} bytes).",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
     payload: list[tuple[str, bytes]] = []
     total_bytes = 0
     for upload in files:

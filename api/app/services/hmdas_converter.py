@@ -215,6 +215,8 @@ def convert_uploads(files: list[tuple[str, bytes]]) -> tuple[pd.DataFrame, dict[
             frames.append(sub[OUTPUT_COLUMNS])
 
     merged = pd.concat(frames, ignore_index=True)
+    # HOTFIX: release per-file frames immediately (~40 MB for 4 files) before sort
+    del frames
     merged = merged.sort_values(["station_id", "date"]).reset_index(drop=True)
 
     # Guard: a duplicate (station, timestamp) inflates the daily sum at downmap.

@@ -3,11 +3,6 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from ..core.config import settings
 from ..core.limiter import limiter
 from ..core.dependencies import _client_ip, get_supabase, require_analyst
@@ -391,6 +386,13 @@ def download_ticket_pdf(
       - pending_review/verified : inspection report always included
       - verified only : analyst remarks section
     """
+    # HOTFIX: lazy import reportlab (saves ~25 MB RSS at startup, avoids OOM on zones)
+    from reportlab.lib import colors  # noqa: WPS433
+    from reportlab.lib.pagesizes import A4  # noqa: WPS433
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # noqa: WPS433
+    from reportlab.lib.units import cm  # noqa: WPS433
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: WPS433
+
     sb = get_supabase()
     ticket = get_ticket(sb, ticket_id)
     if not ticket:
