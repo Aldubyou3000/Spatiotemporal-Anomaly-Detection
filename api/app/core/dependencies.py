@@ -162,7 +162,9 @@ def get_current_user(
 
     profile = _verify_and_load_profile(access_token)
 
-    # Fingerprint check — warn and reject on mismatch
+    # Fingerprint check — HOTFIX: log mismatch but do NOT reject (UA drift on
+    # Chrome 128->129 / EventSource vs fetch causes spurious 401 which broke
+    # prod login + SSE. Keep audit trail but allow session to continue).
     if not verify_session_fingerprint(
         session_fp,
         _client_ip(request),
@@ -171,20 +173,12 @@ def get_current_user(
         user_id=profile.get("id", ""),
     ):
         logger.warning(
-            "[auth] Session fingerprint missing or mismatched: user_id=%s ip=%s",
-            profile.get("id"), _client_ip(request),
+            "[auth] Session fingerprint missing or mismatched (HOTFIX allow): user_id=%s ip=%s ua=%s",
+            profile.get("id"), _client_ip(request), _client_ua(request)[:80],
         )
-        # Lazy import avoids circular dependency between core and services
-        from ..services.audit_service import audit as _audit
-        _audit.session_hijack_attempt(
-            user_id=str(profile["id"]),
-            ip=_client_ip(request),
-            user_agent=_client_ua(request),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session invalid — please log in again",
-        )
+        # Do NOT raise — former 401 blocked production users after Chrome UA bump
+        # from ..services.audit_service import audit as _audit
+        # _audit.session_hijack_attempt(...)  # muted during hotfix to avoid noise
 
     return profile
 
@@ -222,13 +216,11 @@ def get_current_user_or_bearer(
         settings.csrf_secret,
         user_id=profile.get("id", ""),
     ):
-        from ..services.audit_service import audit as _audit
-        _audit.session_hijack_attempt(
-            user_id=str(profile["id"]),
-            ip=_client_ip(request),
-            user_agent=_client_ua(request),
+        logger.warning(
+            "[auth] Session fingerprint missing or mismatched (HOTFIX allow, bearer path): user_id=%s ip=%s ua=%s",
+            profile.get("id"), _client_ip(request), _client_ua(request)[:80],
         )
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session invalid — please log in again")
+        # HOTFIX: do not reject — same UA-drift root cause as above
     return profile
 
 

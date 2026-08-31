@@ -87,7 +87,7 @@ async function _doRefresh(): Promise<boolean> {
       method: "POST",
       credentials: "include",
       headers: withCsrf("POST", {}),
-      timeoutMs: 10_000,
+      timeoutMs: 30_000,
     });
     return res.ok;
   } catch {

@@ -268,8 +268,6 @@ _SHARED_TIMEOUT = _httpx.Timeout(30.0, connect=10.0)
 _SHARED_LIMITS = _httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=30.0)
 _service_httpx: _httpx.Client | None = None
 _anon_httpx: _httpx.Client | None = None
-_service_supabase = None  # type: ignore[no-redef]
-_anon_supabase = None  # type: ignore[no-redef]
 _supabase_clients_lock = threading.Lock()
 
 
@@ -292,49 +290,38 @@ def _get_anon_httpx() -> _httpx.Client:
 
 
 def _service_client():
-    global _service_supabase
-    if _service_supabase is not None:
-        return _service_supabase
-    with _supabase_clients_lock:
-        if _service_supabase is not None:
-            return _service_supabase
-        try:
-            _service_supabase = create_client(  # type: ignore[call-arg]
-                settings.supabase_url,
-                settings.supabase_service_role_key,
-                options=ClientOptions(  # type: ignore[call-arg]
-                    postgrest_client_timeout=30,
-                    storage_client_timeout=30,
-                    function_client_timeout=30,
-                    httpx_client=_get_service_httpx(),  # type: ignore[arg-type]
-                ),
-            )
-        except Exception:
-            _service_supabase = create_client(settings.supabase_url, settings.supabase_service_role_key)
-        return _service_supabase
+    # Reuse httpx pool but create a fresh Supabase Client per call — Client holds
+    # per-request auth state (session) which must not be shared across logins.
+    # Previous cache of the whole Client caused cross-user auth bleed and broke login.
+    try:
+        return create_client(  # type: ignore[call-arg]
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+            options=ClientOptions(  # type: ignore[call-arg]
+                postgrest_client_timeout=30,
+                storage_client_timeout=30,
+                function_client_timeout=30,
+                httpx_client=_get_service_httpx(),  # type: ignore[arg-type]
+            ),
+        )
+    except Exception:
+        return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 def _anon_client():
-    global _anon_supabase
-    if _anon_supabase is not None:
-        return _anon_supabase
-    with _supabase_clients_lock:
-        if _anon_supabase is not None:
-            return _anon_supabase
-        try:
-            _anon_supabase = create_client(  # type: ignore[call-arg]
-                settings.supabase_url,
-                settings.supabase_anon_key,
-                options=ClientOptions(  # type: ignore[call-arg]
-                    postgrest_client_timeout=30,
-                    storage_client_timeout=30,
-                    function_client_timeout=30,
-                    httpx_client=_get_anon_httpx(),  # type: ignore[arg-type]
-                ),
-            )
-        except Exception:
-            _anon_supabase = create_client(settings.supabase_url, settings.supabase_anon_key)
-        return _anon_supabase
+    try:
+        return create_client(  # type: ignore[call-arg]
+            settings.supabase_url,
+            settings.supabase_anon_key,
+            options=ClientOptions(  # type: ignore[call-arg]
+                postgrest_client_timeout=30,
+                storage_client_timeout=30,
+                function_client_timeout=30,
+                httpx_client=_get_anon_httpx(),  # type: ignore[arg-type]
+            ),
+        )
+    except Exception:
+        return create_client(settings.supabase_url, settings.supabase_anon_key)
 
 
 def _pkce_anon_client(storage: _DictStorage):
