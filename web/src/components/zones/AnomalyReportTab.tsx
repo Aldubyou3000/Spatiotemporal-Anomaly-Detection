@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, Gauge, MapPin, Plus, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, Gauge, MapPin, Plus, TrendingUp, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { StationChart, type NeighborSeries } from "./StationChart";
@@ -22,14 +22,51 @@ function stuckTone(status: StationStuckHealth["status"]): "success" | "warning" 
   if (status === "normal") return "success";
   return "neutral";
 }
-function humanHighReason(h: StationHealth | null): { title: string; detail: string; tip?: string } | null {
+function humanHighReason(h: StationHealth | null, fallback?: { peak: number | null; ratio: number | null; peakDate: string | null }): { title: string; detail: string; tip?: string } | null {
   if (!h) return null;
   if (h.status === "insufficient_data") return { title: "Not enough data yet", detail: `Only ${h.rain_days} rainy days so far — need more rain to judge.`, tip: `Only ${h.rain_days} rainy days checked` };
   const pct = h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) : 0;
-  const tip = `On ${h.rain_days} rainy days checked, this sensor averaged about ${pct}% above its neighbors.`;
-  if (h.status === "suspect") return { title: "Needs attention — reads high", detail: `About ${pct}% higher than nearby stations on rainy days. Likely needs calibration — flagged days may be inflated.`, tip };
-  if (h.status === "watch") return { title: "Monitor — slightly high", detail: `A bit higher than neighbors. Keep an eye on it.`, tip };
-  return { title: "Reliable — no pattern found", detail: "Matches neighbors over time. Flagged days look like real local rain and still need review.", tip };
+  const absPct = Math.abs(pct);
+  const pctDir = pct > 0 ? "higher" : pct < 0 ? "lower" : "about the same as";
+  let _peak = h.peak_rainfall as number | null;
+  let _ratio = (h as any).max_ratio as number | null;
+  let _peakDate: any = (h as any).peak_date ?? null;
+  // Fallback to anomaly_summary peak when health is from stale pipeline (before spike fields)
+  if ((_peak == null || _ratio == null) && fallback) {
+    if (_peak == null && fallback.peak != null) {
+      _peak = fallback.peak;
+      _peakDate = fallback.peakDate ?? _peakDate;
+    }
+    if (_ratio == null && fallback.ratio != null) _ratio = fallback.ratio;
+  }
+  const isSpike =
+    (_peak != null && _peak >= 300) ||
+    (_ratio != null && _peak != null && _ratio >= 15 && _peak >= 30) ||
+    (_ratio != null && _peak != null && _ratio >= 8 && _peak >= 20) ||
+    (_peak != null && _peak >= 150);
+  const peak = _peak != null ? _peak.toFixed(1) : null;
+  const ratio = _ratio != null ? Number(_ratio).toFixed(1) : null;
+  const peakD = _peakDate ?? (h as any).peak_date ?? null;
+  const baseTip = `On ${h.rain_days} rainy days checked, this sensor averaged ${pct > 0 ? `about ${absPct}% ${pctDir}` : pct < 0 ? `about ${absPct}% ${pctDir}` : "about the same as"} its neighbors.`;
+  const spikeTip = peak ? `Peak flagged day ${peak} mm${peakD ? ` on ${peakD}` : ""}${ratio ? ` (${ratio}× neighbors)` : ""}. Average is ${h.bias_ratio?.toFixed(2) ?? "—"}×.` : baseTip;
+  if (h.status === "suspect") {
+    if (isSpike && (h.bias_ratio == null || h.bias_ratio <= 1.5)) {
+      return { title: "Needs attention — extreme spike", detail: `One flagged day hit ${peak} mm${peakD ? ` on ${peakD}` : ""}${ratio ? ` (${ratio}× neighbors)` : ""}. Not local rain — likely a sensor fault.`, tip: spikeTip };
+    }
+    if (isSpike) {
+      return { title: "Needs attention — reads high + spikes", detail: `About ${absPct}% ${pctDir} on average and hit ${peak} mm${ratio ? ` (${ratio}× neighbors)` : ""}. Needs calibration and site check.`, tip: spikeTip };
+    }
+    if (pct <= 0) {
+      return { title: "Needs attention — check flagged days", detail: `Flagged ${h.times_flagged} days but average is ${absPct}% ${pctDir} — not a high-bias pattern. Review flagged days for isolated spikes.`, tip: baseTip };
+    }
+    return { title: "Needs attention — reads high", detail: `About ${absPct}% ${pctDir} than nearby stations on rainy days. Likely needs calibration — flagged days may be inflated.`, tip: baseTip };
+  }
+  if (h.status === "watch") {
+    if (isSpike) return { title: "Monitor — extreme spike", detail: `One flagged day hit ${peak} mm${ratio ? ` (${ratio}× neighbors)` : ""}. Check sensor — may be clogged or tipping error.`, tip: spikeTip };
+    if (pct < 0) return { title: "Monitor — check flagged days", detail: `Average is ${absPct}% ${pctDir} — not consistently high. Flagged days still need review.`, tip: baseTip };
+    return { title: "Monitor — slightly high", detail: `A bit higher than neighbors. Keep an eye on it.`, tip: baseTip };
+  }
+  return { title: "Reliable — no pattern found", detail: "Matches neighbors most days. Any flagged days below still need review — tap to compare with neighbors.", tip: `${baseTip} No extreme spikes found.` };
 }
 function humanLowReason(s: StationStuckHealth | null): { title: string; detail: string; tip?: string } | null {
   if (!s) return null;
@@ -234,7 +271,16 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
   const visibleEvents = filteredEvents;
 
   const activeStation = mode === "high" ? selectedStation : selectedDryStation;
-  const activeHealth = mode === "high" ? humanHighReason(selectedHealth) : humanLowReason(selectedStuck);
+  const activeHealth = (() => {
+    if (mode !== "high") return humanLowReason(selectedStuck);
+    let fallback: any = undefined;
+    if (selectedHealth && (selectedHealth.peak_rainfall == null || (selectedHealth as any).max_ratio == null) && (selectedStation as any)?.events?.length) {
+      let maxEv: any = (selectedStation as any).events[0];
+      for (const ev of (selectedStation as any).events) if (ev.rainfall > maxEv.rainfall) maxEv = ev;
+      fallback = { peak: maxEv.rainfall as number, ratio: (selectedHealth as any)?.max_ratio ?? null, peakDate: maxEv.date as string };
+    }
+    return humanHighReason(selectedHealth, fallback);
+  })();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 14 }}>
@@ -285,13 +331,34 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                 const selected = station.station_id === selectedId;
                 const barPct = (station.anomaly_count / maxAnomalies) * 100;
                 const h = healthById.get(station.station_id) ?? null;
+                const pct = h?.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) : 0;
+                const absPct = Math.abs(pct);
+                const pctDir = pct > 0 ? "higher" : pct < 0 ? "lower" : "same";
+                let peak = (h as any)?.peak_rainfall as number | null;
+                let ratio = (h as any)?.max_ratio as number | null;
+                // Fallback to anomaly_summary for stale health (before peak_rainfall existed)
+                if ((peak == null || ratio == null) && station.events.length > 0) {
+                  let maxEv: any = station.events[0];
+                  for (const ev of station.events) if (ev.rainfall > maxEv.rainfall) maxEv = ev;
+                  if (peak == null) peak = maxEv.rainfall as number;
+                  // ratio stays null if health didn't compute it — spike via peak alone still works
+                }
+                const isSpike = !!h && (
+                  (peak != null && peak >= 300) ||
+                  (ratio != null && peak != null && ratio >= 15 && peak >= 30) ||
+                  (ratio != null && peak != null && ratio >= 8 && peak >= 20) ||
+                  (peak != null && peak >= 150)
+                );
+                const avgLine = !h ? "" : h.rain_days < 5 ? `${h.rain_days} rainy days` : pct === 0 ? `Avg: about same as neighbors` : `Avg: ${absPct}% ${pctDir}`;
+                const peakLine = peak == null ? `No big spike` : isSpike ? `Peak: ${peak.toFixed(1)}mm · ${ratio != null ? ratio.toFixed(1) + "×" : ""} spike` : `Peak: ${peak.toFixed(1)}mm${ratio != null ? ` · ${ratio.toFixed(1)}×` : ""}`;
+                const badgeTitle = !h ? "" : h.status === "normal" ? `On ${h.rain_days} rainy days — reliable. ${avgLine}. ${peakLine}.` : h.status === "insufficient_data" ? `${h.rain_days} rainy days checked` : `On ${h.rain_days} rainy days: ${avgLine}. ${peakLine}.`;
                 return (
                   <button
                     key={station.station_id}
                     type="button"
                     onClick={() => setSelectedId(station.station_id)}
                     style={{
-                      display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: "var(--r-lg)",
+                      display: "flex", flexDirection: "column", gap: 5, padding: "10px 12px", borderRadius: "var(--r-lg)",
                       border: selected ? "1px solid color-mix(in oklab, var(--danger) 30%, transparent)" : "1px solid transparent",
                       background: selected ? "var(--danger-soft)" : "transparent", cursor: "pointer", textAlign: "left",
                     }}
@@ -302,7 +369,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                     </div>
                     <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--danger)" : "color-mix(in oklab, var(--danger) 50%, transparent)", borderRadius: 99 }} /></div>
                     {h && (
-                      <span title={h.status === "normal" ? `On ${h.rain_days} rainy days checked — reliable, no ongoing pattern. Flagged days still stand out.` : h.status === "insufficient_data" ? `${h.rain_days} rainy days checked` : `On ${h.rain_days} rainy days, this sensor reads about ${h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) + "% higher" : "high"} than neighbors.`} style={{ display: "inline-flex" }}>
+                      <span title={badgeTitle} style={{ display: "inline-flex" }}>
                         <Badge tone={healthTone(h.status)} dot={h.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
                           <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{h.status === "suspect" ? "Needs attention" : h.status === "watch" ? "Monitor" : h.status === "insufficient_data" ? "Not enough data" : "Reliable"}
                         </Badge>

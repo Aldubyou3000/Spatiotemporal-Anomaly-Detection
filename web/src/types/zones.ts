@@ -80,6 +80,10 @@ export interface StationHealth {
   top_rate: number | null;
   times_flagged: number;
   median_group_size: number;
+  // Spike evidence — null if no flagged days (new, optional for back-compat)
+  max_ratio?: number | null;
+  peak_rainfall?: number | null;
+  peak_date?: string | null;
 }
 
 export interface DryStuckEvent {

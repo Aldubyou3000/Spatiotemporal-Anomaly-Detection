@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Clock, Database, AlertTriangle, Gauge, HelpCircle, MapPin, CheckCircle2, XCircle, ChevronDown, ChevronUp, Layers, Flag } from "lucide-react";
+import { Clock, Database, AlertTriangle, Gauge, HelpCircle, MapPin, CheckCircle2, XCircle, ChevronDown, ChevronUp, Layers, Flag, TrendingUp, Zap } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
-import type { ProcessResult, StationHealth, StationStuckHealth } from "@/types/zones";
+import type { ProcessResult, StationHealth, StationStuckHealth, StationAnomalySummary } from "@/types/zones";
 
 const StationMap = dynamic(() => import("./StationMap").then((m) => m.StationMap), {
   ssr: false,
@@ -342,9 +342,11 @@ type UnifiedStatus = "suspect" | "watch" | "normal" | "insufficient_data";
 function SensorReliabilityCard({
   station_health,
   station_stuck_health,
+  anomaly_summary,
 }: {
   station_health: StationHealth[];
   station_stuck_health: StationStuckHealth[];
+  anomaly_summary?: StationAnomalySummary[];
 }) {
   const [showHealthy, setShowHealthy] = useState(false);
 
@@ -372,6 +374,10 @@ function SensorReliabilityCard({
       return "normal";
     }
 
+    // Fallback for stale pipeline results (before peak_rainfall/max_ratio existed)
+    const anomalyMap = new Map<string, StationAnomalySummary>();
+    for (const s of anomaly_summary ?? []) anomalyMap.set(s.station_id, s);
+
     const rows = Array.from(byId.entries()).map(([station_id, v]) => {
       const status = overall(v.high, v.low);
       const high = v.high;
@@ -397,19 +403,78 @@ function SensorReliabilityCard({
           badgeTone = status === "suspect" ? "danger" : "warning";
           tip = `On ${high!.rain_days} rainy days checked, this sensor averaged ${high!.bias_ratio?.toFixed(2) ?? "—"}× nearby stations and had ${lp}.`;
         } else if (highBad) {
-          const pct = high!.bias_ratio != null ? Math.round((high!.bias_ratio - 1) * 100) : 0;
-          if (high!.status === "suspect") {
-            reason = "Needs attention — reads high";
-            detail = `About ${pct}% higher than nearby stations on rainy days. Likely needs calibration.`;
-            badgeLabel = "Needs attention";
-            badgeTone = "danger";
-          } else {
-            reason = "Monitor — slightly high";
-            detail = `A bit higher than neighbors. Keep an eye on it.`;
-            badgeLabel = "Monitor";
-            badgeTone = "warning";
+          // Single-line, simple wording — but spike-aware with stale-data fallback
+          let _peak = high!.peak_rainfall as number | null;
+          let _ratio = (high as any).max_ratio as number | null;
+          let _peakDate: any = (high as any).peak_date ?? null;
+          if ((_peak == null || _ratio == null) && anomalyMap.size > 0) {
+            const summary = anomalyMap.get(high!.station_id);
+            if (summary && summary.events.length > 0) {
+              let maxEv: any = summary.events[0];
+              for (const ev of summary.events) if (ev.rainfall > maxEv.rainfall) maxEv = ev;
+              if (_peak == null) {
+                _peak = maxEv.rainfall as number;
+                _peakDate = (maxEv as any).date ?? _peakDate;
+              }
+            }
           }
-          tip = `Compared on ${high!.rain_days} rainy days. Usually a bit above its 3 neighbors.`;
+          const isSpike =
+            (_peak != null && _peak >= 300) ||
+            (_ratio != null && _peak != null && _ratio >= 15 && _peak >= 30) ||
+            (_ratio != null && _peak != null && _ratio >= 8 && _peak >= 20) ||
+            (_peak != null && _peak >= 150);
+          const isBiasHigh = high!.bias_ratio != null && high!.bias_ratio > 1.5;
+          const pct = high!.bias_ratio != null ? Math.round((high!.bias_ratio - 1) * 100) : 0;
+          const absPct = Math.abs(pct);
+          const pctDir = pct > 0 ? "higher" : pct < 0 ? "lower" : "about the same as";
+          const peak = _peak != null ? _peak.toFixed(1) : null;
+          const ratio = _ratio != null ? _ratio.toFixed(1) : null;
+          const peakD = _peakDate ?? (high as any).peak_date ?? null;
+          if (high!.status === "suspect") {
+            if (isSpike && !isBiasHigh) {
+              reason = "Needs attention — extreme spike";
+              detail = `One flagged day hit ${peak} mm${peakD ? ` on ${peakD}` : ""}${ratio ? ` (${ratio}× neighbors)` : ""}. Not local rain — likely a sensor fault.`;
+              badgeLabel = "Needs attention";
+              badgeTone = "danger";
+            } else if (isSpike && isBiasHigh) {
+              reason = "Needs attention — reads high + spikes";
+              detail = `About ${absPct}% ${pctDir} on average and hit ${peak} mm${ratio ? ` (${ratio}× neighbors)` : ""}. Needs calibration and site check.`;
+              badgeLabel = "Needs attention";
+              badgeTone = "danger";
+            } else {
+              if (pct <= 0) {
+                reason = "Needs attention — check flagged days";
+                detail = `Flagged ${high!.times_flagged} days but average is ${absPct}% ${pctDir} — review flagged days individually.`;
+              } else {
+                reason = "Needs attention — reads high most days";
+                detail = `Averages ${absPct}% ${pctDir} than nearby stations — not just one wet day. Likely needs calibration.`;
+              }
+              badgeLabel = "Needs attention";
+              badgeTone = "danger";
+            }
+          } else {
+            // watch
+            if (isSpike) {
+              reason = "Monitor — one big spike";
+              detail = `Average ${pct === 0 ? "matches neighbors" : `${absPct}% ${pctDir}`} — but one day hit ${peak} mm. Worth a site check.`;
+              badgeLabel = "Monitor";
+              badgeTone = "warning";
+            } else {
+              if (pct < 0) {
+                reason = "Monitor — check flagged days";
+                detail = `Average is ${absPct}% ${pctDir} — flagged days still need review, but no consistent high bias.`;
+              } else {
+                reason = "Monitor — slightly high on average";
+                detail = `Averages ${absPct}% ${pctDir} — keep an eye on it.`;
+              }
+              badgeLabel = "Monitor";
+              badgeTone = "warning";
+            }
+          }
+          (high as any)._isSpike = isSpike;
+          tip = isSpike
+            ? `Peak flagged day ${peak} mm on ${peakD ?? "a flagged day"} (${ratio ?? "—"}× neighbors). Compared on ${high!.rain_days} rainy days — average is ${high!.bias_ratio?.toFixed(2) ?? "—"}×.`
+            : `Compared on ${high!.rain_days} rainy days. Usually ${pct > 0 ? `${absPct}% ${pctDir}` : pct < 0 ? `${absPct}% ${pctDir}` : "about the same as"} its 3 neighbors.`;
         } else if (lowBad) {
           const pct = low!.zero_rate != null ? Math.round(low!.zero_rate * 100) : 0;
           const streak = low!.max_zero_streak ?? 0;
@@ -434,10 +499,10 @@ function SensorReliabilityCard({
         }
       } else if (status === "normal") {
         reason = "Reliable — no pattern found";
-        detail = "Matches neighbors over time. Flagged days look like real local rain and still need review.";
+        detail = "Matches neighbors most days. Any flagged days below are smaller spikes — tap chart to compare with neighbors.";
         badgeLabel = "Reliable";
         badgeTone = "success";
-        tip = `Checked on ${high?.rain_days ?? low?.rain_days ?? 0} rainy days — no repeated pattern found.`;
+        tip = `Checked on ${high?.rain_days ?? low?.rain_days ?? 0} rainy days — no ongoing bias or extreme spikes. Biggest flagged ${high?.peak_rainfall ?? "—"} mm.`;
       } else {
         const days = (high?.rain_days ?? low?.rain_days ?? 0);
         reason = "Not enough rainy days yet";
@@ -445,6 +510,13 @@ function SensorReliabilityCard({
         badgeLabel = "Not enough data";
         badgeTone = "neutral";
         tip = `Only ${days} rainy days checked — not enough to judge.`;
+        if (high) {
+          (high as any)._avgLine = `Only ${days} rainy days`;
+          (high as any)._avgSub = `Need ~5+ rainy days to judge`;
+          (high as any)._peakLine = high.peak_rainfall != null ? `${(high.peak_rainfall as number).toFixed(1)} mm — not enough context` : `No flagged day yet`;
+          (high as any)._peakSub = `More rain needed to tell if this is a spike`;
+          (high as any)._isSpike = false;
+        }
       }
       return { station_id, lat: v.lat, lon: v.lon, high, low, status, reason, detail, badgeLabel, badgeTone, tip };
     });
@@ -452,7 +524,7 @@ function SensorReliabilityCard({
     const order: Record<UnifiedStatus, number> = { suspect: 0, watch: 1, insufficient_data: 2, normal: 3 };
     rows.sort((a, b) => order[a.status] - order[b.status] || a.station_id.localeCompare(b.station_id));
     return rows;
-  }, [station_health, station_stuck_health]);
+  }, [station_health, station_stuck_health, anomaly_summary]);
 
   const needsReview = merged.filter((r) => r.status === "suspect" || r.status === "watch");
   const normalRows = merged.filter((r) => r.status === "normal");
@@ -476,7 +548,7 @@ function SensorReliabilityCard({
           <Gauge size={12} strokeWidth={2.4} style={{ color: needsReview.length > 0 ? "var(--warning-on)" : "var(--success-on)" }} />
         </span>
         <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Sensor Reliability</span>
-        <InfoTip text="How consistent this sensor is over time vs. its 3 closest neighbors on rainy days (≥10 mm). One unusual day is weather; a repeated pattern suggests the sensor needs attention." />
+        <InfoTip text="We check two things separately: 1) Does this sensor usually read higher or lower than its 3 nearest neighbors on rainy days? 2) Was there one single day where it reported way more (or way less) than neighbors? A single big difference can be a storm; higher every day means the sensor needs fixing. Details below separate Average from Biggest day." />
         <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
           {hasAny ? (needsReview.length > 0 ? `${needsReview.length} need review · ${normalRows.length} reliable` : `All ${merged.length} reliable`) + (insufficientRows.length ? ` · ${insufficientRows.length} not enough data` : "") : "no stations graded"}
         </span>
@@ -499,15 +571,15 @@ function SensorReliabilityCard({
           Key
         </span>
         <span style={{ width: 1, height: 14, background: "var(--border)", flexShrink: 0 }} />
-        <KeyBadge tone="danger" dot tip="Repeatedly higher or repeatedly no reading when neighbors recorded rain (≥10mm) — prioritize site check. Consistency vs. 3 closest neighbors; one odd day is weather.">
+        <KeyBadge tone="danger" dot tip="Needs attention if either: usually reads much higher than neighbors on most rainy days, OR had one day with way more rain than neighbors (like 300mm+ when neighbors saw almost nothing). That one day is likely a sensor fault, not real rain.">
           <Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />
           Needs attention
         </KeyBadge>
-        <KeyBadge tone="warning" tip="A bit high or sometimes no reading — monitor. Consistency vs. 3 closest neighbors on rainy days (≥10mm).">
+        <KeyBadge tone="warning" tip="Monitor if a bit higher than neighbors on average, or had one fairly large spike. Worth keeping an eye on, but not urgent.">
           <Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />
           Monitor
         </KeyBadge>
-        <KeyBadge tone="success" tip="Matches neighbors over time — reliable, no ongoing pattern.">
+        <KeyBadge tone="success" tip="Reliable means: matches nearby stations on average, AND never had a huge single-day spike. Any flagged days were smaller and could be normal heavy local rain — tap the chart to compare.">
           <Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />
           Reliable
         </KeyBadge>
@@ -542,7 +614,7 @@ function SensorReliabilityCard({
           ) : (
             <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, background: "color-mix(in oklab, var(--success) 6%, var(--surface))", borderBottom: healthyCount > 0 ? "1px solid var(--border)" : "none" }}>
               <CheckCircle2 size={13} style={{ color: "var(--success)", flexShrink: 0 }} />
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500 }}>All sensors look reliable — flagged days are likely real local rain.</span>
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500 }}>All sensors look consistent — no ongoing bias or extreme spikes. Flagged days below still need review; tap to compare.</span>
             </div>
           )}
 
@@ -757,7 +829,7 @@ export function OverviewTab({ result }: OverviewTabProps) {
       <style>{`@media (max-width: 900px) { .overview-main { grid-template-columns: 1fr !important; } }`}</style>
 
       {/* ── Row 4: Sensor reliability (unified) ── */}
-      <SensorReliabilityCard station_health={result.station_health ?? []} station_stuck_health={result.station_stuck_health ?? []} />
+      <SensorReliabilityCard station_health={result.station_health ?? []} station_stuck_health={result.station_stuck_health ?? []} anomaly_summary={result.anomaly_summary ?? []} />
 
       {/* ── Row 5: Data quality (collapsed) ── */}
       <QualityReportCard quality_report={quality_report} />

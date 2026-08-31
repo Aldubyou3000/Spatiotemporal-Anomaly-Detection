@@ -79,6 +79,10 @@ class StationHealth(BaseModel):
     Computed post-LOF from the same flagged daily frame + Zone B neighbor map.
     Lets an analyst tell "one weird day" (weather) from "weird every rain day"
     (gauge calibration / exposure) at a glance.
+
+    Now also carries isolated-spike evidence: a single impossible day (e.g. 775 mm
+    while neighbors saw 1 mm) elevates status even when the mean bias is normal.
+    See zones_service HEALTH_SPIKE_* thresholds.
     """
 
     station_id: str
@@ -96,6 +100,16 @@ class StationHealth(BaseModel):
     )
     times_flagged: int = Field(description="How many LOF flags this station has in this run.")
     median_group_size: int = Field(description="Median number of stations reporting on its rain days.")
+    # Spike evidence — null if station has no flagged days
+    max_ratio: float | None = Field(
+        default=None, description="Largest own/median(group) among this station's flagged days; null if no flags."
+    )
+    peak_rainfall: float | None = Field(
+        default=None, description="Largest rainfall among flagged days (mm); null if no flags."
+    )
+    peak_date: date | None = Field(
+        default=None, description="Date of the peak_rainfall flagged day; null if no flags."
+    )
 
 
 class DryStuckEvent(BaseModel):

@@ -40,15 +40,27 @@ REQUIRED_COLUMNS = {"station_id", "date", "latitude", "longitude"}
 HEALTH_MIN_RAIN_DAYS = 5  # fewer than this → insufficient_data (can't judge)
 HEALTH_WATCH_RATIO = 1.15  # 1.15–1.50× median → watch
 HEALTH_SUSPECT_RATIO = 1.50  # >1.50× → suspect
-HEALTH_SUSPECT_TOP_RATE = 0.60  # or top on >60% of rain days → suspect
+HEALTH_SUSPECT_TOP_RATE = 0.70  # or top on >70% of rain days → suspect (was 60% — too easy to hit by chance with 4 stations)
 HEALTH_RAIN_FLOOR_MM = 10.0  # only days where group median ≥ this count as "rain days"
+
+# ── Isolated-spike thresholds (catches "usually fine but one impossible day") ─
+# A sensor can be reliable on average yet have a single physically impossible spike
+# (e.g. 775 mm while neighbors saw 1–3 mm). Mean bias hides this; max-ratio / peak catches it.
+# These are checked against *flagged* days only, with a relaxed quorum (≥2 neighbors)
+# so the evidence is not discarded when one neighbor is missing that day (your screenshots).
+HEALTH_SPIKE_SUSPECT_PEAK_MM = 300.0  # any flagged day ≥300 mm → suspect (no ratio needed)
+HEALTH_SPIKE_SUSPECT_RATIO = 15.0  # any flagged day ≥15× median and ≥30 mm → suspect
+HEALTH_SPIKE_SUSPECT_MIN_MM = 30.0
+HEALTH_SPIKE_WATCH_RATIO = 8.0  # ≥8× and ≥20 mm → watch
+HEALTH_SPIKE_WATCH_MIN_MM = 20.0
+HEALTH_SPIKE_WATCH_PEAK_MM = 150.0  # ≥150 mm alone (even at 5×) → watch
 
 # ── Stuck-at-zero thresholds (flexible, symmetric to health — not biased) ─
 # A gauge is not flagged for a single 0 on a rainy day (could be weather).
 # It is flagged only when 0 is a pattern over many rainy days.
 STUCK_ZERO_MM = 1.0  # ≤ this counts as stuck/trace (covers 0.0, absorbs 0.1 mm + jitter)
 STUCK_WATCH_ZERO_RATE = 0.30  # zero on >30% of its rainy days → watch
-STUCK_SUSPECT_ZERO_RATE = 0.60  # zero on >60% → suspect
+STUCK_SUSPECT_ZERO_RATE = 0.70  # zero on >70% → suspect (was 60% — too easy to hit when neighbors get scattered showers)
 STUCK_WATCH_BIAS_LOW = 0.80  # <0.80× median → watch_low (symmetric to 1.15)
 STUCK_SUSPECT_BIAS_LOW = 0.50  # <0.50× → suspect_low (symmetric to 1.50)
 STUCK_WATCH_STREAK = 3  # ≥3 consecutive rainy days at 0 → watch
@@ -339,11 +351,21 @@ def _compute_station_health(
     For each station, looks at all *rain days* (group median ≥ HEALTH_RAIN_FLOOR_MM)
     where its Zone B group had ≥4 stations reporting. On each rain day computes
     station / group_median. The mean of those ratios is `bias_ratio`.
-    Classification:
+    Classification (bias):
       rain_days < 5                  → insufficient_data
       bias_ratio > 1.50 or top>60%   → suspect
       bias_ratio > 1.15              → watch
       else                           → normal
+
+    Isolated-spike override (catches "usually fine but one impossible day"):
+      Any flagged day with peak ≥300 mm → suspect
+      Any flagged day ≥15× median and ≥30 mm → suspect
+      Any flagged day ≥8× median and ≥20 mm, or peak ≥150 mm → watch
+    Spike check uses a relaxed quorum (≥2 group members) and ignores the
+    10 mm median floor, so a 775 mm vs 1 mm day is not discarded when a
+    neighbor is missing (your Napindan screenshots). Spike status wins over
+    bias status (suspect > watch > normal). If spike fires, the Health
+    record also carries peak_rainfall / peak_date / max_ratio for the UI.
     """
     if flagged_df.empty or not neighbors:
         return []
@@ -410,19 +432,105 @@ def _compute_station_health(
         rain_days = len(ratios)
         times_flagged = len(anomaly_dict.get(sid, []))
 
+        # ── Bias status (mean drift) ─────────────────────────────────────
         if rain_days < HEALTH_MIN_RAIN_DAYS:
-            status = "insufficient_data"
+            bias_status = "insufficient_data"
             bias_ratio = None
             top_rate = None
         else:
             bias_ratio = round(float(np.mean(ratios)), 2)
             top_rate = round(top_hits / rain_days, 2) if rain_days else 0.0
             if bias_ratio > HEALTH_SUSPECT_RATIO or (top_rate is not None and top_rate > HEALTH_SUSPECT_TOP_RATE):
-                status = "suspect"
+                bias_status = "suspect"
             elif bias_ratio > HEALTH_WATCH_RATIO:
-                status = "watch"
+                bias_status = "watch"
             else:
-                status = "normal"
+                bias_status = "normal"
+
+        # ── Spike status (single impossible day) — uses flagged days only ──
+        # Compute max_ratio / peak_rain for this station from its LOF-flagged days.
+        # Relaxed quorum (≥2) so a day isn't hidden when one neighbor is missing,
+        # and no 10 mm median floor — 775 mm vs 1 mm must still count.
+        # Spike evidence: separate absolute peak and max neighbor-based ratio
+        max_ratio: float | None = None
+        max_ratio_date: Any | None = None
+        abs_peak_rain: float | None = None
+        abs_peak_date: Any | None = None
+        # Absolute peak among flagged days (no quorum/median gate)
+        for ev in anomaly_dict.get(sid, []):
+            try:
+                r_abs = float(ev.get("rainfall", ev.get(rain_col, 0)) or 0)
+            except Exception:
+                continue
+            if abs_peak_rain is None or r_abs > abs_peak_rain:
+                abs_peak_rain = r_abs
+                abs_peak_date = _to_date(ev.get("date"))
+        # Max ratio vs neighbors (neighbor median, not group median, to match frontend "× neighbors")
+        # Require ≥2 neighbors and neighbor median ≥10 mm so a dry-area 70 mm isolated storm
+        # (median 1 mm → 70×) is not automatically called a sensor fault — absolute peak handles that.
+        for ev in anomaly_dict.get(sid, []):
+            ev_date = _to_date(ev.get("date"))
+            if ev_date is None:
+                continue
+            day_map = date_groups.get(ev_date)
+            if not day_map:
+                continue
+            neighbor_vals = [day_map[g] for g in neighbor_ids if g in day_map]
+            if len(neighbor_vals) < 2:
+                continue
+            try:
+                median_nbr = float(np.median(np.array(neighbor_vals, dtype=float)))
+            except Exception:
+                continue
+            if median_nbr < 10.0 - 1e-9:  # same floor as HEALTH_RAIN_FLOOR_MM — ignore dry-neighbor ratios
+                continue
+            own_spike = day_map.get(sid)
+            if own_spike is None:
+                continue
+            try:
+                rain_spike = float(own_spike)
+            except Exception:
+                try:
+                    rain_spike = float(ev.get("rainfall", ev.get(rain_col, 0)) or 0)
+                except Exception:
+                    continue
+            if median_nbr < 1e-9:
+                continue
+            ratio_spike = rain_spike / median_nbr
+            if max_ratio is None or ratio_spike > max_ratio:
+                max_ratio = ratio_spike
+                max_ratio_date = ev_date
+        # Use absolute peak for status/peak fields (what the user sees as "Peak X mm")
+        peak_rain = abs_peak_rain
+        peak_date = abs_peak_date
+
+        spike_status: str | None = None
+        if peak_rain is not None:
+            if peak_rain >= HEALTH_SPIKE_SUSPECT_PEAK_MM or (
+                max_ratio is not None
+                and max_ratio >= HEALTH_SPIKE_SUSPECT_RATIO
+                and peak_rain >= HEALTH_SPIKE_SUSPECT_MIN_MM
+            ):
+                spike_status = "suspect"
+            elif (
+                (max_ratio is not None and max_ratio >= HEALTH_SPIKE_WATCH_RATIO and peak_rain >= HEALTH_SPIKE_WATCH_MIN_MM)
+                or peak_rain >= HEALTH_SPIKE_WATCH_PEAK_MM
+            ):
+                spike_status = "watch"
+
+        # ── Final status: spike wins over bias ───────────────────────────
+        # insufficient_data is overridden if a spike proves the gauge is faulty
+        rank = {"suspect": 3, "watch": 2, "normal": 1, "insufficient_data": 0}
+        bias_rank = rank.get(bias_status, 0)
+        spike_rank = rank.get(spike_status, 0) if spike_status else 0
+        if spike_rank > bias_rank:
+            status = spike_status  # type: ignore[assignment]
+        else:
+            status = bias_status
+
+        # Preserve spike evidence for the UI (even when status is still bias-driven)
+        peak_ratio_rounded = round(float(max_ratio), 1) if max_ratio is not None else None
+        peak_rain_rounded = round(float(peak_rain), 1) if peak_rain is not None else None
 
         health.append(
             StationHealth(
@@ -435,6 +543,9 @@ def _compute_station_health(
                 top_rate=top_rate,
                 times_flagged=times_flagged,
                 median_group_size=int(np.median(group_sizes)) if group_sizes else 0,
+                max_ratio=peak_ratio_rounded,
+                peak_rainfall=peak_rain_rounded,
+                peak_date=peak_date,  # type: ignore[arg-type]
             )
         )
 
