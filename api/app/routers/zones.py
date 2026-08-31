@@ -8,10 +8,8 @@ import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from ..core.dependencies import require_analyst_or_bearer
+from ..core.limiter import limiter
 from ..schemas.auth import UserProfile
 from ..schemas.zones import ProcessResult
 from ..services.zones_service import ZoneProcessingError, run_pipeline_multi
@@ -19,10 +17,7 @@ from ..services.zones_service import ZoneProcessingError, run_pipeline_multi
 logger = logging.getLogger("zones.router")
 
 router = APIRouter(prefix="/api/zones", tags=["zones"])
-limiter = Limiter(key_func=get_remote_address)
-
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
-
 
 @router.post("/process", response_model=ProcessResult)
 @limiter.limit("10/minute")

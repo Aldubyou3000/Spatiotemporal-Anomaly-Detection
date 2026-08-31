@@ -21,10 +21,9 @@ import secrets
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from ..core.config import settings
+from ..core.limiter import limiter
 from ..core.dependencies import _client_ip, _client_ua, get_current_user
 from ..core.security import make_session_fingerprint
 from ..schemas.auth import LoginRequest, LoginResponse
@@ -40,7 +39,6 @@ from ..services.auth_service import (
 logger = logging.getLogger("auth.router")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-limiter = Limiter(key_func=get_remote_address)
 
 _ACCESS_MAX_AGE = 30 * 60           # 30 minutes
 _REFRESH_MAX_AGE = 7 * 24 * 60 * 60  # 7 days

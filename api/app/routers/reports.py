@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from ..core.dependencies import _client_ip, get_current_user, get_supabase, require_analyst
+from ..core.limiter import limiter
 from ..services.audit_service import audit
 from ..schemas.auth import UserProfile
 from ..schemas.reports import InspectionReport, InspectionReportListResponse, ReportApprove
@@ -10,9 +8,6 @@ from ..services.reports_service import approve_report, get_report, list_reports
 from .mobile import _signed_urls_batch
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
-limiter = Limiter(key_func=get_remote_address)
-
-
 @router.get("", response_model=InspectionReportListResponse)
 @limiter.limit("60/minute")
 def list_reports_endpoint(
@@ -21,7 +16,6 @@ def list_reports_endpoint(
 ):
     sb = get_supabase()
     return list_reports(sb)
-
 
 @router.get("/{report_id}", response_model=InspectionReport)
 @limiter.limit("60/minute")
@@ -35,7 +29,6 @@ def get_report_endpoint(
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
     return report
-
 
 @router.get("/{report_id}/photos")
 @limiter.limit("60/minute")
@@ -83,7 +76,6 @@ def get_report_photos_endpoint(
             row = {**row, "photo_url": fresh}
         result.append(row)
     return result
-
 
 @router.patch("/{report_id}/approve", response_model=InspectionReport)
 @limiter.limit("30/minute")

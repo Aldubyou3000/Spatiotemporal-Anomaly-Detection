@@ -1,9 +1,10 @@
 import logging
 import threading
 
+import httpx
 import jwt
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
-from supabase import Client, create_client
+from supabase import Client, ClientOptions, create_client
 
 from .config import settings
 from .security import verify_session_fingerprint, verify_supabase_token
@@ -16,16 +17,73 @@ logger = logging.getLogger("auth")
 _supabase_client: Client | None = None
 _supabase_lock = threading.Lock()
 
+# Shared httpx transport tuned for Render 0.1 CPU + Supabase cold start.
+# Default supabase-py uses httpx.Client(timeout=10s) with no Limits tuning —
+# under burst (health + SSE + tickets workload) that trips ReadTimeout and
+# `httpcore.ReadError: [Errno 11] Resource temporarily unavailable` (FD/EAGAIN
+# on http2). Reuse one Client (thread-safe for sync) with 30s timeout,
+# conservative pooling and http2 disabled (ALPN http/1.1, no multiplex contention).
+_SUPABASE_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+_SUPABASE_LIMITS = httpx.Limits(
+    max_connections=20,
+    max_keepalive_connections=10,
+    keepalive_expiry=30.0,
+)
+_supabase_httpx: httpx.Client | None = None
+_supabase_httpx_lock = threading.Lock()
+
+
+def _get_supabase_httpx() -> httpx.Client:
+    global _supabase_httpx
+    if _supabase_httpx is None:
+        with _supabase_httpx_lock:
+            if _supabase_httpx is None:
+                _supabase_httpx = httpx.Client(
+                    timeout=_SUPABASE_TIMEOUT,
+                    limits=_SUPABASE_LIMITS,
+                    http2=False,
+                    follow_redirects=True,
+                )
+    return _supabase_httpx
+
 
 def get_supabase() -> Client:
     global _supabase_client
     if _supabase_client is None:
         with _supabase_lock:
             if _supabase_client is None:
-                _supabase_client = create_client(
-                    settings.supabase_url, settings.supabase_service_role_key
-                )
+                # Reuse the tuned httpx client so PostgREST/Storage/GoTrue share
+                # one pool (max 20 conns) instead of per-request CLS churn.
+                try:
+                    httpx_client = _get_supabase_httpx()
+                    _supabase_client = create_client(  # type: ignore[call-arg]
+                        settings.supabase_url,
+                        settings.supabase_service_role_key,
+                        options=ClientOptions(  # type: ignore[call-arg]
+                            postgrest_client_timeout=30,
+                            storage_client_timeout=30,
+                            function_client_timeout=30,
+                            httpx_client=httpx_client,  # type: ignore[arg-type]
+                        ),
+                    )
+                except Exception:
+                    # Fallback to defaults if ClientOptions signature changes
+                    _supabase_client = create_client(
+                        settings.supabase_url, settings.supabase_service_role_key
+                    )
     return _supabase_client
+
+
+def shutdown_supabase() -> None:
+    """Close the shared httpx pool on lifespan shutdown (best-effort)."""
+    global _supabase_client, _supabase_httpx
+    try:
+        if _supabase_httpx is not None:
+            _supabase_httpx.close()
+    except Exception:
+        pass
+    _supabase_httpx = None
+    _supabase_client = None
 
 
 def _client_ip(request: Request) -> str:

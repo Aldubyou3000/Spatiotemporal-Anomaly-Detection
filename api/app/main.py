@@ -4,28 +4,14 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from .core.config import settings
+from .core.limiter import limiter
 from .routers import audit, auth, events, mobile, mobile_events, reports, technicians, tickets, zones
 
 logger = logging.getLogger("uvicorn.error")
-
-
-def _rate_limit_key(request) -> str:
-    """Rate-limit key that reads X-Forwarded-For (matches _client_ip behavior).
-
-    Without this, slowapi's default get_remote_address reads request.client.host,
-    which is the proxy IP behind ngrok/reverse-proxy — all clients share one bucket.
-    """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
-limiter = Limiter(key_func=_rate_limit_key, default_limits=["120/minute"])
 
 # Fail closed before the app is even constructed: in production (dev_mode=False)
 # this raises if the config still carries insecure dev defaults.
@@ -132,6 +118,7 @@ async def _startup_audit():
 
 @app.on_event("shutdown")
 async def _shutdown_audit():
+    from .core.dependencies import shutdown_supabase
     from .services import events_service
     from .services.audit_service import _writer
 
@@ -140,6 +127,12 @@ async def _shutdown_audit():
 
     _writer.shutdown()
     _writer.join(timeout=10)  # wait up to 10 s for the queue to drain
+
+    # Close shared Supabase httpx pool (best-effort)
+    try:
+        shutdown_supabase()
+    except Exception:
+        pass
 
 
 @app.get("/health")

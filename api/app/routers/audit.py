@@ -15,18 +15,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from ..core.dependencies import get_supabase, require_analyst
+from ..core.limiter import limiter
 from ..schemas.audit import AuditChainReport, AuditChainResult, AuditLogListResponse
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
-limiter = Limiter(key_func=get_remote_address)
-
 # Max rows the export endpoint will materialise — a safeguard against OOM.
 _EXPORT_LIMIT = 50_000
-
 
 def _parse_dt(value: str | None) -> str | None:
     """Accept ISO-8601 datetime strings; pass through None."""
@@ -37,7 +32,6 @@ def _parse_dt(value: str | None) -> str | None:
     except ValueError:
         return None
     return value
-
 
 def _build_query(
     sb,
@@ -89,7 +83,6 @@ def _build_query(
 
     return q
 
-
 @router.get("", response_model=AuditLogListResponse)
 @limiter.limit("30/minute")
 def list_audit_logs(
@@ -136,7 +129,6 @@ def list_audit_logs(
     )
 
     return {"total": total, "items": rows}
-
 
 @router.get("/export")
 @limiter.limit("5/minute")
@@ -193,7 +185,6 @@ def export_audit_csv(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
 @router.get("/integrity")
 @limiter.limit("5/minute")
 def verify_chain_integrity(
@@ -219,7 +210,6 @@ def verify_chain_integrity(
         tampered=len(tampered),
         results=rows,
     )
-
 
 @router.get("/stats")
 @limiter.limit("30/minute")

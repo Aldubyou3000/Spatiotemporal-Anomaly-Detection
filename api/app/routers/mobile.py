@@ -20,11 +20,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from ..core.dependencies import _client_ip, get_supabase, require_technician_mobile
 from ..core.config import settings
+from ..core.limiter import limiter
 from ..services.audit_service import audit
 from ..services.auth_service import (
     OAuthGateError,
@@ -37,9 +35,6 @@ from ..services.auth_service import (
 logger = logging.getLogger("mobile.router")
 
 router = APIRouter(prefix="/api/mobile", tags=["mobile"])
-limiter = Limiter(key_func=get_remote_address)
-
-
 def _one(table_res) -> dict | None:
     """Return the first row from a list result, or None."""
     rows = table_res.data
@@ -47,12 +42,10 @@ def _one(table_res) -> dict | None:
         return None
     return rows[0]
 
-
 def _signed_url(sb, bucket: str, path: str, expires: int = 3600) -> str:
     """Generate a signed URL for a single path (kept for one-off use)."""
     result = _signed_urls_batch(sb, bucket, [path], expires)
     return result.get(path, "")
-
 
 def _signed_urls_batch(sb, bucket: str, paths: list[str], expires: int = 3600) -> dict[str, str]:
     """Sign multiple storage paths in one HTTP call. Returns {path: signed_url}.
@@ -71,23 +64,19 @@ def _signed_urls_batch(sb, bucket: str, paths: list[str], expires: int = 3600) -
     except Exception:
         return {}
 
-
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
 class MobileLoginRequest(BaseModel):
     credential: str
     password: str
 
-
 class MobileLoginResponse(BaseModel):
     access_token: str
     refresh_token: str
     user: dict
 
-
 class MobileRefreshRequest(BaseModel):
     refresh_token: str
-
 
 @router.post("/auth/login", response_model=MobileLoginResponse)
 @limiter.limit("10/minute")
@@ -101,7 +90,6 @@ def mobile_login_endpoint(request: Request, body: MobileLoginRequest):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     return result
 
-
 @router.post("/auth/refresh")
 @limiter.limit("30/minute")
 def mobile_refresh(request: Request, body: MobileRefreshRequest):
@@ -112,7 +100,6 @@ def mobile_refresh(request: Request, body: MobileRefreshRequest):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     return result
 
-
 @router.post("/auth/logout")
 @limiter.limit("30/minute")
 def mobile_logout(request: Request, body: MobileRefreshRequest, user: dict = Depends(require_technician_mobile)):
@@ -121,12 +108,10 @@ def mobile_logout(request: Request, body: MobileRefreshRequest, user: dict = Dep
     audit.logout(user_id=str(user["id"]), ip=_client_ip(request), platform="mobile")
     return {"ok": True}
 
-
 @router.get("/auth/me")
 @limiter.limit("60/minute")
 def mobile_me(request: Request, user: dict = Depends(require_technician_mobile)):
     return user
-
 
 # ─── Google OAuth (technician sign-in) ────────────────────────────────────────
 # Server-side PKCE, mirroring the web flow but: (1) gates on technician role,
@@ -150,7 +135,6 @@ _APP_SCHEME_PREFIX = "awscout://"
 # A public http(s) host (e.g. https://evil.com) is never allowed.
 _ALLOWED_NATIVE_SCHEMES = ("awscout://", "spatiotemporal://", "exp://", "exps://")
 
-
 def _is_allowed_return_url(url: str) -> bool:
     if any(url.startswith(p) for p in _ALLOWED_NATIVE_SCHEMES):
         return True
@@ -170,7 +154,6 @@ def _is_allowed_return_url(url: str) -> bool:
         return False  # a real domain name over http — reject
     return ip.is_loopback or ip.is_private
 
-
 # Front-end hostnames we are willing to advertise back to Supabase as the OAuth
 # callback. Deriving from any arbitrary Host header would be Host-header
 # poisoning; anything not on this list falls back to MOBILE_OAUTH_REDIRECT_BASE
@@ -181,7 +164,6 @@ _TRUSTED_HOST_SUFFIXES = (
     ".ngrok-free.dev", ".ngrok-free.app", ".ngrok.app", ".ngrok.io",
     ".trycloudflare.com",
 )
-
 
 def _is_trusted_callback_host(host: str) -> bool:
     if not host:
@@ -195,7 +177,6 @@ def _is_trusted_callback_host(host: str) -> bool:
     except ValueError:
         return False
     return ip.is_loopback or ip.is_private
-
 
 def _mobile_oauth_callback_url(request: Request) -> str:
     """Build the backend OAuth callback from the host the phone's BROWSER used
@@ -227,7 +208,6 @@ def _mobile_oauth_callback_url(request: Request) -> str:
         return f"https://{host}/api/mobile/auth/oauth/google/callback"
     return settings.mobile_oauth_callback_url
 
-
 @router.get("/auth/oauth/google/start")
 @limiter.limit("10/minute")
 def mobile_oauth_start(request: Request, return_url: str):
@@ -248,7 +228,6 @@ def mobile_oauth_start(request: Request, return_url: str):
         logger.exception("[oauth] mobile oauth_start failed")
         return _mobile_oauth_error(return_url, "oauth_unavailable")
     return _no_store_redirect(data["url"])
-
 
 @router.get("/auth/oauth/google/callback/{state}")
 @limiter.limit("10/minute")
@@ -293,7 +272,6 @@ def mobile_oauth_callback(
     )
     return _no_store_redirect(target)
 
-
 def _no_store_redirect(url: str) -> RedirectResponse:
     """302 that must never be cached. The in-app browser (Chrome Custom Tabs)
     caches redirects aggressively; a stale cached OAuth redirect short-circuits
@@ -304,17 +282,14 @@ def _no_store_redirect(url: str) -> RedirectResponse:
     resp.headers["Pragma"] = "no-cache"
     return resp
 
-
 def _mobile_oauth_error(return_url: str, code: str) -> RedirectResponse:
     """Bounce a known-good app return_url with an error fragment."""
     return _no_store_redirect(f"{return_url}#error={code}")
-
 
 def _mobile_oauth_terminal_error(code: str) -> RedirectResponse:
     """When we can't recover the app return_url, deep-link to the app's fixed
     callback path with the error so the app can still react."""
     return _no_store_redirect(f"{_APP_SCHEME_PREFIX}oauth-callback#error={code}")
-
 
 # ─── Tickets ──────────────────────────────────────────────────────────────────
 
@@ -328,7 +303,6 @@ def _technician_ticket_ids(sb, user_id: str) -> list[str]:
         .execute()
     )
     return [r["ticket_id"] for r in (res.data or [])]
-
 
 def _assert_ticket_membership(sb, ticket_id: str, user_id: str) -> None:
     """Raise 404 if the technician does not have an active assignment on this ticket."""
@@ -344,13 +318,11 @@ def _assert_ticket_membership(sb, ticket_id: str, user_id: str) -> None:
     if not (res.data or []):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
-
 _TICKET_FIELDS = (
     "id, ticket_number, title, description, station_id, status, priority, anomaly_zone, "
     "anomaly_data, follow_up_count, follow_up_notes, cancelled_at, cancellation_reason, "
     "created_at, assigned_at, completed_at, updated_at"
 )
-
 
 @router.get("/tickets")
 @limiter.limit("60/minute")
@@ -368,7 +340,6 @@ def mobile_list_tickets(request: Request, user: dict = Depends(require_technicia
         .execute()
     )
     return res.data or []
-
 
 @router.get("/tickets/{ticket_id}")
 @limiter.limit("60/minute")
@@ -449,10 +420,8 @@ def mobile_get_ticket(request: Request, ticket_id: str, user: dict = Depends(req
     ticket["reports"] = reports
     return ticket
 
-
 class TicketStatusUpdate(BaseModel):
     status: str
-
 
 @router.patch("/tickets/{ticket_id}/status")
 @limiter.limit("30/minute")
@@ -504,7 +473,6 @@ def mobile_update_ticket_status(
     )
     return {"id": ticket_id, "status": "in-progress", "updated_at": now}
 
-
 # ─── Reports ──────────────────────────────────────────────────────────────────
 
 class ReportSubmit(BaseModel):
@@ -514,7 +482,6 @@ class ReportSubmit(BaseModel):
     root_cause: str | None = None
     corrective_action: str | None = None
     issue_resolved: bool | None = None
-
 
 @router.post("/reports", status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
@@ -626,7 +593,6 @@ def mobile_submit_report(
     )
     return report_row
 
-
 @router.get("/tickets/{ticket_id}/report-id")
 @limiter.limit("60/minute")
 def mobile_get_report_id(
@@ -650,7 +616,6 @@ def mobile_get_report_id(
         .execute()
     )
     return report  # None if no active report — frontend handles this
-
 
 @router.get("/tickets/{ticket_id}/follow-up-context")
 @limiter.limit("60/minute")
@@ -689,7 +654,6 @@ def mobile_get_follow_up_context(
         "previous_reports": history_res.data or [],
     }
 
-
 @router.get("/tickets/{ticket_id}/attachments")
 @limiter.limit("60/minute")
 def mobile_get_ticket_attachments(
@@ -725,7 +689,6 @@ def mobile_get_ticket_attachments(
         fresh = signed.get(path, "") if path else ""
         result.append({**row, "file_url": fresh or row["file_url"]})
     return result
-
 
 @router.get("/reports/{report_id}/photos")
 @limiter.limit("60/minute")
@@ -779,7 +742,6 @@ def mobile_get_report_photos(
         fresh = signed.get(path, "") if path else ""
         result.append({**row, "photo_url": fresh or row["photo_url"]})
     return result
-
 
 @router.post("/reports/{report_id}/photos", status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
@@ -911,7 +873,6 @@ async def mobile_upload_photo(
     )
     return {"photo_url": signed_url, "path": path}
 
-
 def _fmt_date(val: str | None) -> str:
     if not val:
         return "—"
@@ -919,7 +880,6 @@ def _fmt_date(val: str | None) -> str:
         return datetime.fromisoformat(val).strftime("%Y-%m-%d %H:%M UTC")
     except ValueError:
         return val
-
 
 @router.get("/tickets/{ticket_id}/pdf")
 @limiter.limit("20/minute")
@@ -1070,7 +1030,6 @@ def mobile_download_ticket_pdf(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
 # ─── Activity feed ─────────────────────────────────────────────────────────────
 # A technician-scoped, sanitised view of the audit log: every lifecycle event on
 # tickets the technician is (or was) assigned to. The raw audit_log holds IPs,
@@ -1092,7 +1051,6 @@ _ACTIVITY_EVENTS = (
     "file_uploaded",
     "photo_uploaded",
 )
-
 
 @router.get("/activity")
 @limiter.limit("60/minute")

@@ -8,10 +8,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from ..core.config import settings
+from ..core.limiter import limiter
 from ..core.dependencies import _client_ip, get_supabase, require_analyst
 from ..services.audit_service import audit
 from ..schemas.tickets import (
@@ -39,9 +37,6 @@ from ..services.tickets_service import (
 )
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
-limiter = Limiter(key_func=get_remote_address)
-
-
 @router.get("", response_model=TicketListResponse)
 @limiter.limit("60/minute")
 def list_tickets_endpoint(
@@ -56,7 +51,6 @@ def list_tickets_endpoint(
     sb = get_supabase()
     return list_tickets(sb, status=status, priority=priority, station_id=station_id, limit=limit, offset=offset)
 
-
 @router.get("/technicians", response_model=list[TechnicianListItem])
 @limiter.limit("60/minute")
 def list_technicians_endpoint(
@@ -67,7 +61,6 @@ def list_technicians_endpoint(
 ):
     sb = get_supabase()
     return list_technicians(sb, limit=limit, offset=offset)
-
 
 @router.post("", response_model=TicketDetail, status_code=status.HTTP_201_CREATED)
 @limiter.limit("30/minute")
@@ -86,7 +79,6 @@ def create_ticket_endpoint(
     )
     return ticket
 
-
 @router.get("/{ticket_id}", response_model=TicketDetail)
 @limiter.limit("60/minute")
 def get_ticket_endpoint(
@@ -99,7 +91,6 @@ def get_ticket_endpoint(
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
     return ticket
-
 
 @router.patch("/{ticket_id}", response_model=TicketDetail)
 @limiter.limit("30/minute")
@@ -125,7 +116,6 @@ def update_ticket_endpoint(
     )
     return ticket
 
-
 @router.post("/{ticket_id}/technicians", response_model=TicketDetail)
 @limiter.limit("30/minute")
 def assign_technicians_endpoint(
@@ -146,7 +136,6 @@ def assign_technicians_endpoint(
         reason=body.reason,
     )
     return ticket
-
 
 @router.delete("/{ticket_id}/technicians/{user_id}", response_model=TicketDetail)
 @limiter.limit("30/minute")
@@ -171,7 +160,6 @@ def remove_technician_endpoint(
     )
     return ticket
 
-
 @router.post("/{ticket_id}/follow-up", response_model=TicketDetail)
 @limiter.limit("20/minute")
 def request_follow_up_endpoint(
@@ -190,7 +178,6 @@ def request_follow_up_endpoint(
     )
     return ticket
 
-
 @router.post("/{ticket_id}/cancel", response_model=TicketDetail)
 @limiter.limit("20/minute")
 def cancel_ticket_endpoint(
@@ -208,7 +195,6 @@ def cancel_ticket_endpoint(
         ip=_client_ip(request),
     )
     return ticket
-
 
 @router.get("/{ticket_id}/attachments")
 @limiter.limit("60/minute")
@@ -244,7 +230,6 @@ def get_ticket_attachments(
                 row = {**row, "file_url": fresh}
         result.append(row)
     return result
-
 
 @router.post("/{ticket_id}/attachments", status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
@@ -295,7 +280,6 @@ async def upload_ticket_attachment(
     )
     return {"file_url": signed_url, "file_name": original_name, "path": path}
 
-
 def _fmt_date(val: str | None) -> str:
     if not val:
         return "—"
@@ -303,7 +287,6 @@ def _fmt_date(val: str | None) -> str:
         return datetime.fromisoformat(val).strftime("%Y-%m-%d %H:%M UTC")
     except ValueError:
         return val
-
 
 def _sign_inspection_photos(sb, rows: list[dict]) -> dict[str, list[dict]]:
     """Batch-fetch and sign photos for many report rounds in one DB round-trip.
@@ -354,7 +337,6 @@ def _sign_inspection_photos(sb, rows: list[dict]) -> dict[str, list[dict]]:
         )
     return grouped
 
-
 @router.get("/{ticket_id}/report")
 @limiter.limit("60/minute")
 def get_ticket_report(
@@ -393,7 +375,6 @@ def get_ticket_report(
     current = next((r for r in rows if r.get("is_active")), None)
     history = [r for r in rows if not r.get("is_active")]  # already ascending by round
     return {"current": current, "history": history}
-
 
 @router.get("/{ticket_id}/pdf")
 @limiter.limit("20/minute")

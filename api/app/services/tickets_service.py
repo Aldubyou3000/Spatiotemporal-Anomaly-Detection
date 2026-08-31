@@ -1,11 +1,44 @@
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from supabase import Client
 
 from ..schemas.tickets import TicketCreate, TicketUpdate
+
+logger = logging.getLogger("tickets.service")
+
+
+def _is_transient_supabase_error(err: Exception) -> bool:
+    name = type(err).__name__
+    msg = str(err).lower()
+    return (
+        name in ("ReadTimeout", "ConnectTimeout", "PoolTimeout", "ReadError", "ConnectError", "NetworkError")
+        or "temporarily unavailable" in msg
+        or "timed out" in msg
+        or "resource temporarily" in msg
+        or "connection" in msg
+        and "reset" in msg
+    )
+
+
+def _execute_with_retry(fn, *, retries: int = 2, backoff: float = 0.4):
+    last: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            if attempt < retries and _is_transient_supabase_error(e):
+                logger.warning("[tickets] transient Supabase %s, retry %d/%d: %s", type(e).__name__, attempt + 1, retries, e)
+                time.sleep(backoff * (2**attempt))
+                continue
+            raise
+    assert last is not None
+    raise last  # pragma: no cover
 
 
 def _now() -> str:
@@ -406,13 +439,23 @@ def _technician_workload(sb: Client) -> dict[str, dict[str, int]]:
     The embedded ``tickets!inner(...)`` makes the join an INNER join so rows whose
     ticket was hard-deleted are naturally excluded; terminal statuses are filtered
     out in Python (small result set, avoids brittle embedded NOT-IN syntax).
+    Retries once on transient Supabase `ReadError [Errno 11]` / `ReadTimeout`.
     """
-    res = (
-        sb.table("ticket_technicians")
-        .select("user_id, tickets!inner(status)")
-        .is_("removed_at", "null")
-        .execute()
-    )
+    def _do():
+        return (
+            sb.table("ticket_technicians")
+            .select("user_id, tickets!inner(status)")
+            .is_("removed_at", "null")
+            .execute()
+        )
+
+    try:
+        res = _execute_with_retry(_do)
+    except Exception as e:
+        if _is_transient_supabase_error(e):
+            logger.error("[tickets] _technician_workload failed after retry: %s", e)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Workload temporarily unavailable — please try again.") from e
+        raise
     workload: dict[str, dict[str, int]] = {}
     for row in res.data or []:
         ticket = row.get("tickets") or {}
@@ -428,15 +471,24 @@ def _technician_workload(sb: Client) -> dict[str, dict[str, int]]:
 
 
 def list_technicians(sb: Client, *, limit: int = 200, offset: int = 0) -> list[dict]:
-    res = (
-        sb.table("profiles")
-        .select("id, username, full_name, email, station_ids, is_active")
-        .eq("role", "technician")
-        .eq("is_active", True)
-        .order("full_name")
-        .range(offset, offset + limit - 1)
-        .execute()
-    )
+    def _do_profiles():
+        return (
+            sb.table("profiles")
+            .select("id, username, full_name, email, station_ids, is_active")
+            .eq("role", "technician")
+            .eq("is_active", True)
+            .order("full_name")
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+
+    try:
+        res = _execute_with_retry(_do_profiles)
+    except Exception as e:
+        if _is_transient_supabase_error(e):
+            logger.error("[tickets] list_technicians profiles failed after retry: %s", e)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Technicians temporarily unavailable — please try again.") from e
+        raise
     technicians = res.data or []
 
     # Attach per-technician active workload (anti-overload signal for the analyst's

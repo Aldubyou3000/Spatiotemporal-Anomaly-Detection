@@ -221,15 +221,32 @@ export const apiClient = {
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     // CSRF not needed for Bearer auth
+    const timeoutMs = opts.timeoutMs ?? HEAVY_TIMEOUT_MS;
     let res: Response;
     try {
-      res = await fetchWithTimeout(url, { method: "POST", body: formData, headers, credentials: "omit", timeoutMs: opts.timeoutMs ?? HEAVY_TIMEOUT_MS, signal: opts.signal });
+      res = await fetchWithTimeout(url, { method: "POST", body: formData, headers, credentials: "omit", timeoutMs, signal: opts.signal });
     } catch (err: unknown) {
-      if (isAbortError(err)) throw new Error("Request timed out — check your connection and try again.");
-      throw err instanceof Error ? err : new Error("Network error — check your connection.");
+      if (isAbortError(err)) {
+        // Same cold-start retry as proxied path — Render wake 40-60s, direct still times out if cold
+        const isColdStartPath = path.includes("/api/zones/process");
+        if (isColdStartPath && typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app") && timeoutMs >= 30_000) {
+          try {
+            await new Promise((r) => setTimeout(r, 1500));
+            res = await fetchWithTimeout(url, { method: "POST", body: formData, headers, credentials: "omit", timeoutMs, signal: opts.signal });
+          } catch (err2: unknown) {
+            if (isAbortError(err2)) throw new Error("Request timed out — server is waking up (Render cold start). Please wait 10s and try again.");
+            throw err2 instanceof Error ? err2 : new Error("Network error — check your connection.");
+          }
+        } else {
+          throw new Error("Request timed out — server may be waking up (Render cold start), please try again.");
+        }
+      } else {
+        throw err instanceof Error ? err : new Error("Network error — check your connection.");
+      }
     }
     if (!res.ok) {
       const body = await res.json().catch(() => ({ detail: "Request failed" }));
+      // Surface 503 from tickets workload as friendly retry message; SWR will retry
       throw new Error(body?.detail ?? body?.message ?? "Request failed");
     }
     return res.json() as Promise<T>;

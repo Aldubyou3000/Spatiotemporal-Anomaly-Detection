@@ -1,10 +1,8 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from ..core.dependencies import _client_ip, get_supabase, require_analyst
+from ..core.limiter import limiter
 from ..services.audit_service import audit
 from ..schemas.auth import UserProfile
 from ..schemas.technicians import TechnicianCreate, TechnicianProfile
@@ -17,9 +15,6 @@ from ..services.technicians_service import (
 logger = logging.getLogger("technicians.router")
 
 router = APIRouter(prefix="/api/technicians", tags=["technicians"])
-limiter = Limiter(key_func=get_remote_address)
-
-
 @router.get("", response_model=list[TechnicianProfile])
 @limiter.limit("60/minute")
 def list_technicians_endpoint(
@@ -28,7 +23,6 @@ def list_technicians_endpoint(
 ):
     sb = get_supabase()
     return list_technicians(sb)
-
 
 @router.post("", response_model=TechnicianProfile, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
@@ -55,7 +49,6 @@ def create_technician_endpoint(
         ip=_client_ip(request),
     )
     return technician
-
 
 @router.patch("/{technician_id}/toggle-active", response_model=TechnicianProfile)
 @limiter.limit("20/minute")
