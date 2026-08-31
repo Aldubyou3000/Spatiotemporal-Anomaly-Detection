@@ -3,7 +3,8 @@ import type { LoginRequest, LoginResponse, UserProfile } from "@/types/auth";
 
 export const authApi = {
   login: async (body: LoginRequest): Promise<LoginResponse> => {
-    const res = await apiClient.post<LoginResponse>("/api/auth/login", body, { timeoutMs: 30_000 });
+    // 60s for Render free-tier cold start (first hit after ~15 min idle can be 40-50s)
+    const res = await apiClient.post<LoginResponse>("/api/auth/login", body, { timeoutMs: 60_000 });
     if (res.access_token) setDirectToken(res.access_token);
     return res;
   },

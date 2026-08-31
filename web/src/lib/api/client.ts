@@ -34,7 +34,7 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
-// Timeout defaults — 20s normal (Render cold start), 45s heavy (zones).
+// Timeout defaults — 20s normal, 45s heavy (zones), 10s for refresh. Render free-tier cold start is 40-60s so login uses 60s.
 export const DEFAULT_TIMEOUT_MS = 20_000;
 export const HEAVY_TIMEOUT_MS = 45_000;
 
