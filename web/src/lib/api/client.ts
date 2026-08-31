@@ -120,8 +120,24 @@ async function request<T>(path: string, init: RequestInit & { timeoutMs?: number
   try {
     res = await fetchWithTimeout(url.toString(), enrichedInit as RequestInit & { timeoutMs?: number });
   } catch (err: unknown) {
-    if (isAbortError(err)) throw new Error("Request timed out — server may be waking up (Render cold start), please try again.");
-    throw err instanceof Error ? err : new Error("Network error — check your connection.");
+    if (isAbortError(err)) {
+      // One automatic retry for cold-start — Render can take 40-60s to wake, Vercel proxy times out at ~30s.
+      // Second try is usually instant (instance now warm).
+      const isLogin = path.includes("/api/auth/login");
+      if (isLogin && typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app") && (init.timeoutMs ?? DEFAULT_TIMEOUT_MS) >= 30_000) {
+        try {
+          await new Promise((r) => setTimeout(r, 1200));
+          res = await fetchWithTimeout(url.toString(), enrichedInit as RequestInit & { timeoutMs?: number });
+        } catch (err2: unknown) {
+          if (isAbortError(err2)) throw new Error("Request timed out — server is waking up (Render cold start). Please wait 10s and try again.");
+          throw err2 instanceof Error ? err2 : new Error("Network error — check your connection.");
+        }
+      } else {
+        throw new Error("Request timed out — server may be waking up (Render cold start), please try again.");
+      }
+    } else {
+      throw err instanceof Error ? err : new Error("Network error — check your connection.");
+    }
   }
 
   if (res.status === 401 && !path.startsWith("/api/auth/")) {

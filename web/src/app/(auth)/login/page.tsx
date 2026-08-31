@@ -66,6 +66,17 @@ export default function LoginPage() {
     }
   }, []);
 
+  // Warm Render on page load so the first login doesn't hit a 50s cold start
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_API_URL;
+    // Fire-and-forget pings — both direct (wakes Render) and proxied (warms Vercel edge)
+    if (base && !base.includes("localhost")) {
+      fetch(new URL("/health", base).toString(), { cache: "no-store" }).catch(() => {});
+    }
+    fetch("/api/health", { cache: "no-store" }).catch(() => {});
+    fetch("/health", { cache: "no-store" }).catch(() => {});
+  }, []);
+
   // Decorative Philippines map — zoomed in with place names, UI only (low opacity, non-interactive)
   useEffect(() => {
     if (!philMapContainerRef.current || philMapRef.current) return;
