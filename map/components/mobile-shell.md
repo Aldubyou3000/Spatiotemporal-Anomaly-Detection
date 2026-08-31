@@ -46,14 +46,15 @@ components/                  19 RN components (Button, Card, BottomSheet, Ticket
 - `constants/activityEvents.ts`: which audit events show up in the technician's feed.
 
 ## Presentation constants
-- `constants/ticketStatus.ts`: mobile's single source of truth for status labels/colors/icons. **Mirrors `web/src/lib/ticketStatus.ts`** (explicitly so — the docstring says it replaced drifted local maps). See [shared-candidates.md](../shared-candidates.md) §4.
-- `constants/theme.ts`: `palette`, `getTheme(isDarkMode)`, `lightStatus`/`StatusHues`.
-- `constants/Motion.ts`: `duration`, `ease`, `spring`, `stagger` — shared animation tokens.
+- `constants/ticketStatus.ts`: mobile's single source of truth for status labels/colors/icons. **Mirrors `web/src/lib/ticketStatus.ts`** (explicitly so — the docstring says it replaced drifted local maps). See [shared-candidates.md](../shared-candidates.md) §4. `DbStatus` type removed (dead).
+- `constants/theme.ts`: `palette`, `getTheme(isDarkMode)`, `lightStatus`/`StatusHues`. `minTouchTarget` removed (dead).
+- `constants/Motion.ts`: `duration`, `ease`/`easeOut`, `spring`, `stagger` — shared animation tokens. `easeIn` removed (dead).
+- `constants/activityEvents.ts`: `activityMeta`, `relativeTime`, `isWithin24h` (`dateGroupLabel` removed — dead).
 - `constants/tourSteps.ts`, `lib/tourTargets.ts`, `lib/tutorialSeen.ts`: spotlight onboarding tour.
 
 ## Depends on
 - `@tanstack/react-query`, `@tanstack/react-query-persist-client`, `@tanstack/query-async-storage-persister`
-- `expo-router`, `expo-secure-store`, `expo-web-browser`, `expo-linking`, `expo-file-system`, `expo-image-picker`, `expo-print`, `react-native-sse`, `react-native-reanimated`, `react-native-gesture-handler`
+- `expo-router`, `expo-secure-store`, `expo-web-browser`, `expo-linking`, `expo-file-system`, `expo-image-picker`, `react-native-sse`, `react-native-reanimated`, `react-native-gesture-handler`, `react-native-url-polyfill` (wired in `App/app/_layout.tsx:1`)
 - Backend `/api/mobile/*` (see [api-mobile.md](./api-mobile.md))
 
 ## Depends on it (reverse)

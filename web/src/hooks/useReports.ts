@@ -18,32 +18,5 @@ export function useReports() {
     isValidating,
     error: error as Error | undefined,
     refresh: mutate,
-    optimisticApprove: (updated: InspectionReport) =>
-      mutate(
-        (cur) =>
-          cur
-            ? {
-                pending: cur.pending.filter((r) => r.id !== updated.id),
-                follow_up: cur.follow_up ?? [],
-                approved: [updated, ...cur.approved],
-              }
-            : cur,
-        { revalidate: true },
-      ),
-    optimisticFollowUp: (ticketId: string) =>
-      mutate(
-        (cur) =>
-          cur
-            ? {
-                pending: cur.pending.filter((r) => r.ticket_id !== ticketId),
-                follow_up: [
-                  ...(cur.follow_up ?? []),
-                  ...(cur.pending.filter((r) => r.ticket_id === ticketId)),
-                ],
-                approved: cur.approved,
-              }
-            : cur,
-        { revalidate: true },
-      ),
   };
 }

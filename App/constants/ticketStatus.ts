@@ -19,15 +19,6 @@ import { palette, lightStatus, type StatusHues } from './theme';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
-export type DbStatus =
-  | 'created'        // synonym for assigned (pre-dispatch); treated as assigned
-  | 'assigned'
-  | 'in-progress'
-  | 'pending_review'
-  | 'follow_up'
-  | 'verified'
-  | 'cancelled';
-
 type ColorPair = { color: string; bg: string };
 
 // ── Labels ───────────────────────────────────────────────────────────────────

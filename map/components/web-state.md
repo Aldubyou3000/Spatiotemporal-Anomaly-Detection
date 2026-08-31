@@ -14,9 +14,9 @@ One file per domain. Cache keys are the contract — matchers in `useRealtimeSyn
 
 | Hook file | Exports | Key conventions |
 |-----------|---------|-----------------|
-| `useTickets.ts` | `useTicketList`, `useTicketDetail`, `useTicketReport`, `useTicketAttachments`, `invalidateTicketLists` | List key `/api/tickets`; detail `/api/tickets/{id}`; etc. |
+| `useTickets.ts` | `useTicketList`, `useTicketDetail`, `useTicketReport`, `useTicketAttachments`, `invalidateTicketLists`, `invalidateReports` | List key `/api/tickets`; detail `/api/tickets/{id}`; etc. |
 | `useTechnicians.ts` | `useTicketTechnicians` (summary, **shared key** across Tickets + Zones), `useTechnicianProfiles` (full, Technicians page) | |
-| `useReports.ts` | `useReports` (incl. `optimisticApprove`) | |
+| `useReports.ts` | `useReports` | |
 | `useAuditLogs.ts` | `useAuditLogs` (paginated), `useAuditStats` | |
 | `useRealtimeSync.ts` | Mounts the single `EventSource` → `globalMutate(keyMatcher)` | See [web-realtime.md](./web-realtime.md) |
 
@@ -25,6 +25,11 @@ Mutation pattern: call API directly → `mutate()` or `invalidateTicketLists()` 
 ## Raw fetch wrappers (`web/src/lib/api/`)
 One file per domain (`auth`, `zones`, `tickets`, `reports`, `technicians`, `audit`), **all through `client.ts`**:
 - `client.ts` — base fetch: `credentials: "include"` via `apiBase()` (`vercel.app` → `window.location.origin` → same-origin proxied; localhost → `NEXT_PUBLIC_API_URL`), sends `X-CSRF-Token` from the `csrf_token` cookie on mutations, **silent refresh on 401** (single-flight, retry once), then throws. Also exports `setDirectToken`/`getDirectToken`/`DIRECT_BASE` for zones 4-file bypass. Parallel to `App/services/api.ts` on mobile (cookie vs Bearer — see [shared-candidates.md](../shared-candidates.md) §3).
+- `auth.ts` — `login`, `logout`, `me` (refresh handled internally by `client.ts`).
+- `tickets.ts` — `list`, `get`, `create`, `listTechnicians`, `assignTechnicians`, `removeTechnician`, `requestFollowUp`, `cancelTicket`, `attachments`, `uploadAttachment`, `report`, `downloadPdf`.
+- `reports.ts` — `list`, `approve`.
+- `technicians.ts` — `list`, `create`.
+- `audit.ts` — `list`, `stats`, `exportUrl` (chain `verifyIntegrity` removed — no UI consumer).
 - `zones.ts` — `process()` uses `uploadDirect` with `Authorization: Bearer` to `https://spatiotemporal-api.onrender.com` when on Vercel + `direct_access_token` exists (bypasses Vercel 30s proxy timeout for 4-file 25-45s LOF).
 - `cn.ts` — classname joiner.
 

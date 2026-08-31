@@ -20,7 +20,6 @@ import {
   MapPin,
   RotateCcw,
   Table2,
-  X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useZones } from "@/context/ZonesContext";

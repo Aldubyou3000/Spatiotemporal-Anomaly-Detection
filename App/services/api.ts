@@ -21,7 +21,15 @@ WebBrowser.maybeCompleteAuthSession();
 if (!process.env.EXPO_PUBLIC_API_URL) {
   console.warn('[api] EXPO_PUBLIC_API_URL is not set — defaulting to http://localhost:8000');
 }
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+
+// Where the phone's BROWSER is sent for Google OAuth. In production this MUST
+// differ from API_URL: the OAuth flow runs in a Chrome Custom Tab, and Chrome
+// flags the Render backend hostname (onrender.com is shared hosting) with Safe
+// Browsing, which hangs sign-in before the deep link returns. The Vercel
+// first-party host proxies /api/* to the same backend, so OAuth stays on a
+// trusted hostname. Falls back to API_URL (LAN dev still works).
+export const OAUTH_URL = (process.env.EXPO_PUBLIC_OAUTH_URL?.trim() ? process.env.EXPO_PUBLIC_OAUTH_URL.trim() : API_URL).replace(/\/$/, '');
 
 // Always surface the resolved base URL once at startup — the single most useful
 // line for diagnosing "site can't be reached" issues from a phone.
@@ -295,59 +303,106 @@ async function _consumeOAuthCallbackUrl(url: string): Promise<UserProfile> {
   return profile;
 }
 
+function _isNoBrowserError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e ?? '');
+  return /no matching browser activity/i.test(msg) || /customtabs/i.test(msg) || /activitynotfound/i.test(msg) || /browser.*not found/i.test(msg);
+}
+
 export async function apiLoginWithGoogle(): Promise<UserProfile> {
   const returnUrl = Linking.createURL('oauth-callback');
-  const startUrl = `${API_URL}/api/mobile/auth/oauth/google/start?return_url=${encodeURIComponent(returnUrl)}`;
+  const startUrl = `${OAUTH_URL}/api/mobile/auth/oauth/google/start?return_url=${encodeURIComponent(returnUrl)}`;
 
-  // RACE two ways of capturing the awscout:// return, because Android's
-  // openAuthSessionAsync has a documented bug where it sometimes never resolves
-  // on a server 302→custom-scheme redirect (the in-app browser doesn't fire the
-  // deep link). A standalone Linking 'url' listener catches the deep link even
-  // when the browser session hangs. Whichever fires first wins.
+  // Two contenders race to capture the awscout:// return:
+  // - callbackPromise: OS deep-link via Linking (catches the redirect even when
+  //   the Custom Tab never resolves — Android bug #13754/#34187).
+  // - browserPromise: WebBrowser.openAuthSessionAsync result.
   let resolved = false;
+  let sub: { remove: () => void } | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let graceId: ReturnType<typeof setTimeout> | null = null;
+  const cleanup = () => {
+    resolved = true;
+    try { sub?.remove(); } catch {}
+    sub = null;
+    if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+    if (graceId) { clearTimeout(graceId); graceId = null; }
+  };
+
   const callbackPromise = new Promise<string>((resolve) => {
-    const sub = Linking.addEventListener('url', ({ url }) => {
-      if (url.startsWith(returnUrl) || url.startsWith('awscout://oauth-callback')) {
-        resolved = true;
-        sub.remove();
-        // Make sure the in-app browser tab is dismissed once we have the deep link.
+    sub = Linking.addEventListener('url', ({ url }) => {
+      console.log('[oauth] Linking url event', url);
+      if (url.startsWith(returnUrl) || url.startsWith('awscout://oauth-callback') || url.startsWith('spatiotemporal://oauth-callback') || url.startsWith('exp://')) {
+        const captured = url;
+        console.log('[oauth] deep-link captured', captured.slice(0, 80));
+        cleanup();
         WebBrowser.dismissBrowser?.();
-        resolve(url);
+        resolve(captured);
+      } else {
+        console.log('[oauth] ignored url', url.slice(0, 80));
       }
     });
   });
 
-  const browserPromise = WebBrowser.openAuthSessionAsync(startUrl, returnUrl).then((result) => {
-    if (result.type === 'success' && result.url) return result.url;
-    if ((result.type === 'cancel' || result.type === 'dismiss') && !resolved) {
-      // Browser closed without a result AND the listener hasn't fired — treat as
-      // cancel, but give the listener a brief grace window first (the dismiss can
-      // arrive a tick before the deep link on Android).
-      return new Promise<string>((_, reject) =>
-        setTimeout(() => (resolved ? undefined : reject(new OAuthCancelled())), 1500),
-      );
-    }
-    // type was success-without-url or other: let the listener win, else fail later.
-    return new Promise<string>(() => {});
-  });
+  // Diagnostic — you’ll see this in `npx expo start --dev-client` Metro console
+  console.log('[oauth] startUrl =', startUrl);
+  console.log('[oauth] returnUrl =', returnUrl, 'OAUTH_URL =', OAUTH_URL);
 
-  // Guard against a background tab: if the user puts the app in the background
-  // mid-flow, WebBrowser can resolve `dismiss`/`lock` in odd shapes and the
-  // Linking listener never fires → previously hung this promise forever. 90s
-  // is plenty for a Google account pick; when it expires we surface a clear
-  // error instead of spinning.
-  const timeoutPromise = new Promise<string>((_, reject) =>
-    setTimeout(
-      () => reject(new Error('Google sign-in timed out. Close the browser and try again.')),
-      90_000,
-    ),
-  );
+  const browserPromise = (async (): Promise<string> => {
+    try {
+      const result = await WebBrowser.openAuthSessionAsync(startUrl, returnUrl);
+      console.log('[oauth] browser result', JSON.stringify(result));
+      if (result.type === 'success' && (result as { url?: string }).url) {
+        const url = (result as { url: string }).url;
+        cleanup();
+        return url;
+      }
+      if ((result.type === 'cancel' || result.type === 'dismiss') && !resolved) {
+        // Browser closed without a result — give the deep-link a brief grace window
+        // (dismiss can arrive a tick before the URL event on Android).
+        return await new Promise<string>((_, reject) => {
+          graceId = setTimeout(() => {
+            if (resolved) return;
+            cleanup();
+            reject(new OAuthCancelled());
+          }, 1500);
+        });
+      }
+      // Unknown result (e.g. 'locked') — don’t hang forever, treat as cancel
+      // and let the Linking listener win within the grace window.
+      console.warn('[oauth] browser unknown result, waiting for deep-link', result.type);
+      return await new Promise<string>((_, reject) => {
+        graceId = setTimeout(() => {
+          if (resolved) return;
+          cleanup();
+          reject(new OAuthCancelled());
+        }, 2000);
+      });
+    } catch (e: unknown) {
+      console.log('[oauth] browser error', e);
+      if (_isNoBrowserError(e)) {
+        cleanup();
+        throw new Error('No browser found. Install or enable Chrome to use Google sign-in — or use your username and password.');
+      }
+      cleanup();
+      throw e;
+    }
+  })();
+
+  // Hard guard: backgrounding the app mid-flow can leave both contenders pending.
+  // 30s is plenty for the Google picker; was 90s, but infinite spinner is worse than a clear timeout.
+  const timeoutPromise = new Promise<string>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      console.log('[oauth] timeout fired');
+      cleanup();
+      reject(new Error('Google sign-in timed out. Close the browser and try again.'));
+    }, 30_000);
+  });
 
   let callbackUrl: string;
   try {
     callbackUrl = await Promise.race([callbackPromise, browserPromise, timeoutPromise]);
   } finally {
-    resolved = true;
+    cleanup();
   }
 
   return _consumeOAuthCallbackUrl(callbackUrl);

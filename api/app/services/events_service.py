@@ -43,7 +43,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 logger = logging.getLogger("events")
 

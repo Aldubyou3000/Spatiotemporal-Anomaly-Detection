@@ -4,7 +4,6 @@ import type {
   TicketCreate,
   TicketDetail,
   TicketListResponse,
-  TicketUpdate,
   Technician,
 } from "@/types/tickets";
 
@@ -50,9 +49,6 @@ export const ticketsApi = {
 
   create: (body: TicketCreate) =>
     apiClient.post<TicketDetail>("/api/tickets", body),
-
-  update: (id: string, body: TicketUpdate) =>
-    apiClient.patch<TicketDetail>(`/api/tickets/${id}`, body),
 
   listTechnicians: () =>
     apiClient.get<Technician[]>("/api/tickets/technicians"),

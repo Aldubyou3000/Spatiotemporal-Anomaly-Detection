@@ -171,24 +171,60 @@ def _is_allowed_return_url(url: str) -> bool:
     return ip.is_loopback or ip.is_private
 
 
+# Front-end hostnames we are willing to advertise back to Supabase as the OAuth
+# callback. Deriving from any arbitrary Host header would be Host-header
+# poisoning; anything not on this list falls back to MOBILE_OAUTH_REDIRECT_BASE
+# (fail closed). localhost/private IPs cover LAN dev; *.vercel.app is the
+# production first-party proxy; *.ngrok-* / *.trycloudflare.com cover dev tunnels.
+_TRUSTED_HOST_SUFFIXES = (
+    ".vercel.app",
+    ".ngrok-free.dev", ".ngrok-free.app", ".ngrok.app", ".ngrok.io",
+    ".trycloudflare.com",
+)
+
+
+def _is_trusted_callback_host(host: str) -> bool:
+    if not host:
+        return False
+    if host.endswith(_TRUSTED_HOST_SUFFIXES):
+        return True
+    if host in ("localhost", "127.0.0.1"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private
+
+
 def _mobile_oauth_callback_url(request: Request) -> str:
-    """Build the backend callback URL from the host the phone actually used to
-    reach the API, so it matches what's registered in Supabase. Honour the
-    tunnel/proxy's X-Forwarded-Proto so a cloudflared HTTPS front-end produces an
-    https callback (the phone's BROWSER must never get an http LAN hop — Chrome
-    blocks cleartext private-network redirects mid-OAuth)."""
-    host = request.headers.get("host")
-    if host:
-        # Behind cloudflared/ngrok, X-Forwarded-Proto is https even though the
-        # internal hop to uvicorn is http. Trust it; default to request scheme.
-        scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
-        # Plain-http request (LAN dev box, no tunnel) cannot complete OAuth —
-        # Chrome blocks the http redirect back. Fall back to the configured
-        # HTTPS base (MOBILE_OAUTH_REDIRECT_BASE / ngrok) so the flow survives
-        # even when the app points at the LAN IP.
-        if scheme == "http":
-            return settings.mobile_oauth_callback_url
-        return f"{scheme}://{host}/api/mobile/auth/oauth/google/callback"
+    """Build the backend OAuth callback from the host the phone's BROWSER used
+    to reach the API, so it matches what's registered in Supabase.
+
+    Prefer X-Forwarded-Host over Host: behind a first-party proxy (Vercel
+    rewrite fronting the Render backend) the upstream Host is the backend host
+    (onrender.com), which Chrome on Android must NEVER navigate to — shared-
+    hosting hostnames trip Safe Browsing interstitials mid-OAuth and the flow
+    hangs before the deep link returns. X-Forwarded-Host carries the original
+    first-party host (…vercel.app), exactly like the web flow. Honour
+    X-Forwarded-Proto too so an https tunnel front-end produces an https
+    callback (Chrome also blocks cleartext http LAN hops mid-OAuth).
+
+    Only trusted front-end hosts are derived; anything else falls back to the
+    configured MOBILE_OAUTH_REDIRECT_BASE (fail closed)."""
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    host = (request.headers.get("host") or "").split(",")[0].strip()
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+
+    if _is_trusted_callback_host(forwarded_host.split(":")[0]):
+        return f"https://{forwarded_host}/api/mobile/auth/oauth/google/callback"
+    # Plain-http request (LAN dev box, no tunnel) cannot complete OAuth — Chrome
+    # blocks the http redirect back. Fall back to the configured HTTPS base so
+    # the flow survives even when the app points at the LAN IP.
+    if scheme == "http":
+        return settings.mobile_oauth_callback_url
+    if _is_trusted_callback_host(host.split(":")[0]):
+        return f"https://{host}/api/mobile/auth/oauth/google/callback"
     return settings.mobile_oauth_callback_url
 
 

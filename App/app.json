@@ -35,6 +35,7 @@
       "expo-router",
       "expo-secure-store",
       "expo-sharing",
+      "./plugins/withCustomTabsQueries",
       [
         "expo-build-properties",
         {
@@ -50,7 +51,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a01de4bf-158f-4d8d-b9ca-b9663b9a7e52"
+        "projectId": "5b87e5c0-abcf-4a0b-bfe9-4253b8eb3cfb"
       }
     }
   }

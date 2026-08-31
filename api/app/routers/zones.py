@@ -11,7 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from ..core.dependencies import require_analyst, require_analyst_or_bearer
+from ..core.dependencies import require_analyst_or_bearer
 from ..schemas.auth import UserProfile
 from ..schemas.zones import ProcessResult
 from ..services.zones_service import ZoneProcessingError, run_pipeline_multi

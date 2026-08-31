@@ -7,7 +7,4 @@ export const techniciansApi = {
 
   create: (body: TechnicianCreate) =>
     apiClient.post<TechnicianProfile>("/api/technicians", body),
-
-  toggleActive: (id: string) =>
-    apiClient.patch<TechnicianProfile>(`/api/technicians/${id}/toggle-active`),
 };

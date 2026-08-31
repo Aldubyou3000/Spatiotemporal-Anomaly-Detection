@@ -4,7 +4,6 @@ import { Easing } from 'react-native-reanimated';
 // iOS-standard / Material default — feels natural for almost everything.
 export const ease    = Easing.bezier(0.25, 0.1, 0.25, 1);
 export const easeOut = Easing.bezier(0.0,  0.0, 0.2,  1);
-export const easeIn  = Easing.bezier(0.4,  0.0, 1,    1);
 
 // ─── Duration tokens (ms) ────────────────────────────────────────────────────
 // Snappy mobile standard (Material/iOS): micro-interactions ~100ms, most

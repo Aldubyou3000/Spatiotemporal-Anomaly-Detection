@@ -7,7 +7,7 @@ from ..services.audit_service import audit
 from ..schemas.auth import UserProfile
 from ..schemas.reports import InspectionReport, InspectionReportListResponse, ReportApprove
 from ..services.reports_service import approve_report, get_report, list_reports
-from .mobile import _signed_url
+from .mobile import _signed_urls_batch
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 limiter = Limiter(key_func=get_remote_address)
@@ -62,8 +62,6 @@ def get_report_photos_endpoint(
 
     bucket = "inspection-photos"
     marker = f"/{bucket}/"
-    # Batch sign all photos in one call
-    from .mobile import _signed_urls_batch
 
     row_paths: dict[str, str] = {}
     for row in rows:

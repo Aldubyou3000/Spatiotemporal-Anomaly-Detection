@@ -10,10 +10,10 @@ The flagship feature: CSV upload → clean → group → anomaly-detect, returni
 ## Files
 | File | Role |
 |------|------|
-| `routers/zones.py` | HTTP layer: `require_analyst_or_bearer` (cookie **or** `Bearer` for direct 4-file bypass), accepts `UploadFile`s, calls `run_pipeline_multi` via `run_in_threadpool`, raises `ZoneProcessingError` → 400. `MAX_UPLOAD_BYTES 20 MB:24` but Vercel proxy caps 4.5 MB / 30s — 4-file LOF uses direct. |
+| `routers/zones.py` | HTTP layer: `require_analyst_or_bearer` (cookie **or** `Bearer` for direct 4-file bypass), accepts `UploadFile`s, calls `run_pipeline_multi` via `run_in_threadpool`, raises `ZoneProcessingError` → 400. `MAX_UPLOAD_BYTES 20 MB:24` but Vercel proxy caps 4.5 MB / 30s — 4-file LOF uses direct. Dead `require_analyst` import pruned. |
 | `services/zones_service.py` | Orchestration: `parse_csv_to_dataframe`, `run_pipeline`, `run_pipeline_multi`, `ZoneProcessingError`. Calls `zone_a/b/c`. |
 | `services/hmdas_converter.py` | Reformats PAGASA/HMDAS exports (one file per station, 6-line metadata header) into the combined pipeline frame. **Does not judge data quality — Zone A still does QC.** Auto-detects raw HMDAS vs already-combined CSV. |
-| `zones/zone_a.py` | **Frozen.** Hourly→daily downmap, single-day linear interpolation, drops stations with gaps ≥2 days or <2 valid readings. |
+| `zones/zone_a.py` | **Frozen** (algorithm untouched; dead `numpy` import removed). Hourly→daily downmap, single-day linear interpolation, drops stations with gaps ≥2 days or <2 valid readings. |
 | `zones/zone_b.py` | **Frozen.** Haversine distance grouping (1–50 km threshold), adds `neighbor_group_id`. |
 | `zones/zone_c.py` | **Frozen.** LOF per-day within-group (`MIN_STATIONS_PER_DAY=4:30`, `ANOMALY_THRESHOLD=2.0:35` — was 1.5, now stricter), `MIN_ANOMALY_RAINFALL_MM=10.0`, jitter `1e-3`. |
 | `schemas/zones.py` | `ProcessResult` and supporting Pydantic models. |

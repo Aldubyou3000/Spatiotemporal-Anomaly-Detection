@@ -89,27 +89,6 @@ export function activityMeta(event: string, actor: Actor, hues: StatusHues = lig
   };
 }
 
-// ── Date grouping ────────────────────────────────────────────────────────────
-// Groups timestamps into Today / Yesterday / "Mon DD, YYYY" buckets.
-
-export function dateGroupLabel(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dayDiff = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
-
-  if (dayDiff <= 0) return 'Today';
-  if (dayDiff === 1) return 'Yesterday';
-  // Within the last week → weekday name ("Monday"); older → "June 3".
-  if (dayDiff < 7) return d.toLocaleDateString('en-US', { weekday: 'long' });
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  });
-}
-
 // Compact, Facebook-style relative time for a notification row:
 // "Just now", "5m", "3h", "2d", "3w", then an absolute date for anything older.
 export function relativeTime(iso: string): string {

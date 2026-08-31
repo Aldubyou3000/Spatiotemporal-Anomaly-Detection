@@ -32,21 +32,6 @@ export interface AuditStatEntry {
   failures: number;
 }
 
-export interface AuditChainResult {
-  id: number;
-  created_at: string;
-  event: string;
-  stored_hash: string;
-  prev_hash: string;
-  is_intact: boolean;
-}
-
-export interface AuditChainReport {
-  checked: number;
-  tampered: number;
-  results: AuditChainResult[];
-}
-
 export interface AuditFilters {
   event?: string;
   user_id?: string;
@@ -72,12 +57,6 @@ export const auditApi = {
   stats(filters: Pick<AuditFilters, "from_dt" | "to_dt"> = {}): Promise<AuditStatEntry[]> {
     return apiClient.get<AuditStatEntry[]>("/api/audit/stats", {
       params: filters as Record<string, string | undefined>,
-    });
-  },
-
-  verifyIntegrity(fromId = 1, toId?: number): Promise<AuditChainReport> {
-    return apiClient.get<AuditChainReport>("/api/audit/integrity", {
-      params: { from_id: fromId, to_id: toId },
     });
   },
 

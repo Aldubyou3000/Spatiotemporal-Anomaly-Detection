@@ -20,11 +20,11 @@ Technician-facing endpoints under `/api/mobile/*`. Bearer token auth. Parallel t
 ## Depends on it (reverse)
 - `App/services/api.ts` — wraps every `/api/mobile/*` endpoint with Bearer auth + auto-refresh
 - `App/hooks/useTickets.ts`, `useRealtimeSync.ts`, `useUnseenActivity.ts`, `useActivitySeen.ts`
-- **Analyst routers** `routers/tickets.py` and `routers/reports.py` import `_signed_url` from here — see [shared-candidates.md](../shared-candidates.md) §1.
+- **Analyst routers** `routers/tickets.py` and `routers/reports.py` import `_signed_urls_batch` from here — see [shared-candidates.md](../shared-candidates.md) §1. Top-level `_signed_url` import in `reports.py` was dead and is now ` _signed_urls_batch`.
 
 ## Key invariants
 - **Membership check is the data boundary.** Every ticket/report endpoint filters to the authenticated technician's assignments; the SSE stream is additionally projected to content-free nudges.
-- Mobile OAuth requires the API reachable over **HTTPS** (Chrome blocks `http://` LAN redirects mid-flow) and a real dev/prod build (Expo Go can't register the `spatiotemporal://` deep link). `_mobile_oauth_callback_url()` derives the callback from `Host` + `X-Forwarded-Proto` so any https front-end works.
+- Mobile OAuth requires the API reachable over **HTTPS** (Chrome blocks `http://` LAN redirects mid-flow) and a real dev/prod build (Expo Go can't register the `spatiotemporal://` deep link). `_mobile_oauth_callback_url()` derives the callback from **X-Forwarded-Host** (trusted-host allowlist, fail-closed to `MOBILE_OAUTH_REDIRECT_BASE`) so the browser never navigates to the shared `onrender.com` host — Chrome Safe Browsing blocks it and the flow hangs. EAS builds send the OAuth browser to the first-party Vercel proxy (`EXPO_PUBLIC_OAUTH_URL` → `…vercel.app` → `/api/*` rewrite → Render).
 - `state` in the URL **path** (`…/callback/{state}`), same as web OAuth — Supabase allowlist glob limitation.
 
 ## Open questions / debt

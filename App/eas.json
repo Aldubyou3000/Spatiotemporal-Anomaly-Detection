@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -10,7 +11,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://spatiotemporal-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://spatiotemporal-api.onrender.com",
+        "EXPO_PUBLIC_OAUTH_URL": "https://spatiotemporal-anomaly-detection.vercel.app"
       }
     },
     "preview": {
@@ -18,7 +20,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://spatiotemporal-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://spatiotemporal-api.onrender.com",
+        "EXPO_PUBLIC_OAUTH_URL": "https://spatiotemporal-anomaly-detection.vercel.app"
       }
     },
     "production": {
@@ -26,7 +29,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://spatiotemporal-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://spatiotemporal-api.onrender.com",
+        "EXPO_PUBLIC_OAUTH_URL": "https://spatiotemporal-anomaly-detection.vercel.app"
       }
     }
   }

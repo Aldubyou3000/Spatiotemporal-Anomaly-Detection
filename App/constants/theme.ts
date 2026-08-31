@@ -215,6 +215,4 @@ export const elevation = {
   },
 } as const;
 
-// ─── Hit target ──────────────────────────────────────────────────────────────
-// Minimum 44pt for accessible touch targets (iOS HIG / Material 48dp).
-export const minTouchTarget = 44;
+

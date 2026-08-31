@@ -41,6 +41,42 @@ Files/components with no inbound references from anything else in the map, or th
 **What**: Zone pipeline result visualizations. Need a grep to confirm which tab they're mounted from.
 **Action**: Likely mounted from `OverviewTab` or the zones page tab bar. Verify and record inbound refs in the web-zones page.
 
+### `web/src/components/ui/Card.tsx`
+**What**: Available primitive `Card`/`CardHeader`/`CardTitle`/`CardBody` (68 lines). Currently 0 inbound imports — all pages build cards inline with `div style={{background:"var(--surface)"…}}`. Not deleted; kept as a reusable primitive for future use.
+**Action**: If a new page needs a surface card, import from here instead of inlining. Remove only if the design system drops the pattern.
+
+### `web/src/components/ui/Skeleton.tsx` — `ReportSkeleton`/`AttachmentSkeleton`/`TableSkeleton`
+**What**: Three skeleton variants removed 2026-08-31 — never imported (only `TicketRowSkeleton`, `TechRowSkeleton`, `AuditRowSkeleton`, `DetailSkeleton` are live). See `web-pages-components.md` for the retained set.
+**Action**: Already pruned.
+
+### `web/src/components/ui/SentinelMark.tsx` — `SentinelChevronMark`
+**What**: Alternative geometric chevron mark kept "for reference" — never imported (only `SentinelMark` is live in `Sidebar`). Removed 2026-08-31.
+**Action**: Single canonical `SentinelMark` remains.
+
+### `web/src/hooks/useReports.ts` — `optimisticApprove`/`optimisticFollowUp`, `web/src/hooks/useTickets.ts` — `invalidateTechnicians`
+**What**: Hook helpers defined but never called (sidebar consumes `pending` but never calls the optimistic mutators; no caller for the technicians invalidator). Removed 2026-08-31.
+**Action**: Re-add only if a caller needs optimistic UI or technician-list invalidation.
+
+### `web/src/lib/api/*` — `reportsApi.get`/`photos`, `ticketsApi.update`, `techniciansApi.toggleActive`, `auditApi.verifyIntegrity` (+ `AuditChain*` types), `authApi.refresh`
+**What**: API wrappers with 0 callers (verified via `grep -R`). `verifyIntegrity` + chain types had no UI. Removed 2026-08-31; `technicians` toggle endpoint still exists server-side but is admin-only and not exposed in analyst UI.
+**Action**: Re-add a wrapper only when a page actually calls it.
+
+### `web/src/types/tickets.ts` — `TicketUpdate`
+**What**: Interface only consumed by dead `ticketsApi.update`. Removed alongside it 2026-08-31.
+**Action**: Re-declare if `PATCH /api/tickets/{id}` is re-exposed in the web UI.
+
+### `App/constants/*` — `Motion.easeIn`, `activityEvents.dateGroupLabel`, `theme.minTouchTarget`, `ticketStatus.DbStatus`
+**What**: Exports with 0 imports across `App/` (verified `grep`). Small tokens/types never wired. Removed 2026-08-31.
+**Action**: Re-add if a component needs the token.
+
+### `App/package.json` — `expo-blur`, `expo-print`, `expo-symbols`
+**What**: Deps with 0 JS imports and 0 `app.json` plugin refs. `buffer` was missing while `metro.config.js` shimmed it — added `buffer@^6.0.3`. `react-native-url-polyfill` was installed but never imported — now wired in `App/app/_layout.tsx:1`. Removed/pruned 2026-08-31.
+**Action**: Do not re-add without a JS import or plugin entry.
+
+### `api/app/zones/zone_a.py` — `import numpy as np`
+**What**: Import with 0 `np.` uses. Removed 2026-08-31 (algorithms untouched).
+**Action**: Re-add if Zone A ever needs NumPy directly.
+
 ---
 
 ## Map gaps (files with no page yet)

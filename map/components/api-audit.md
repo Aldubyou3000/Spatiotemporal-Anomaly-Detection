@@ -13,12 +13,11 @@ Append-only, SHA-256 hash-chained, tamper-evident audit log. Writes through the 
 ## Files
 | File | Role |
 |------|------|
-| `services/audit_service.py` | `AuditService` singleton instance `audit`; `AuditEvent` constant catalogue (all event names live here — import from here, never hardcode strings); `_writer` (the background queue consumer); `_chain_lock`/`_prev_hash` (chain state). |
+| `services/audit_service.py` | `AuditService` singleton instance `audit`; `AuditEvent` constant catalogue (all event names live here — import from here, never hardcode strings); `_writer` (the background queue consumer); `_chain_lock`/`_prev_hash` (chain state). Dead `datetime`/`timezone`/`settings` imports pruned. |
 | `routers/audit.py` | HTTP: paginated query, stats, integrity check, CSV export. |
 | `schemas/audit.py` | Pydantic models for log rows, stats, integrity result. |
 
 ## Depends on
-- `core/config.py` → `settings`
 - `services/events_service.py` → `publish_from_audit` (the single real-time hook)
 - `supabase-py` (service-role writes, bypass RLS)
 

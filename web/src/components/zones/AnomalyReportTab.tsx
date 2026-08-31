@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, Gauge, HelpCircle, MapPin, Plus, TrendingUp, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, BarChart3, Gauge, MapPin, Plus, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { StationChart, type NeighborSeries } from "./StationChart";

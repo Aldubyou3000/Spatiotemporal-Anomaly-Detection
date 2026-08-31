@@ -925,4 +925,4 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
   );
 }
 
-export { ArrowRight as MoveArrow };
+

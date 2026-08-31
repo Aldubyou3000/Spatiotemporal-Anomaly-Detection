@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Clock,
   Flag,
-  Loader2,
   MapPin,
   Search,
   Ticket,

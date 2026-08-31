@@ -7,23 +7,23 @@ The analyst-facing feature pages and their component building blocks. Pages comp
 |------|------|---------------|--------------------|
 | `zones/page.tsx` | CSV upload + pipeline results (tabs) | `ZonesContext` (local), `useTicketTechnicians` (workload) | `FileUpload`, `OverviewTab`, `StationMap`, `StationChart`, `DataTable`, `NeighborGroupsTab`, `AnomalyReportTab`, `DateComparisonChart` |
 | `tickets/page.tsx` | Split-view ticket board | `useTicketList`, `useTicketDetail`, `useTicketReport`, `useTicketAttachments` | `TicketDetailBody`, `TicketActionDock` |
-| `reports/page.tsx` | Inspection reports + approval | `useReports` (`optimisticApprove`), `useTicketDetail` | `TicketDetailBody` (shared with tickets), `ReviewPanel` |
+| `reports/page.tsx` | Inspection reports + approval | `useReports`, `useTicketDetail` | `TicketDetailBody` (shared with tickets), `ReviewPanel` |
 | `technicians/page.tsx` | Manage technician accounts | `useTechnicianProfiles` | Create-tech modal (`Modal` + `ConfirmDialog`) |
-| `audit/page.tsx` | Audit log + filters + integrity | `useAuditLogs`, `useAuditStats` | CSV export |
+| `audit/page.tsx` | Audit log + filters | `useAuditLogs` | CSV export |
 
 ## Components (`web/src/components/`)
 | Group | Files | Role |
 |-------|-------|------|
-| `ui/` | `Badge`, `Button`, `Card`, `ConfirmDialog`, `Input`, `Modal`, `Skeleton`, `Stat`, `Tabs`, `ThemeToggle`, `Toast` | Generic primitives — props-only, no API calls. All destructive/consequential actions must go through `ConfirmDialog`. Currently guarded: logout, ticket status advance, technician reassign, report approval. |
+| `ui/` | `Badge`, `Button`, `Card` (`CardHeader`/`CardTitle`/`CardBody` — available primitive, currently unused), `ConfirmDialog`, `Input`, `Modal`, `Skeleton` (`TicketRowSkeleton`, `TechRowSkeleton`, `AuditRowSkeleton`, `DetailSkeleton`), `Tabs`, `Toast`, `SentinelMark` (brand mark; chevron variant removed) | Generic primitives — props-only, no API calls. All destructive/consequential actions must go through `ConfirmDialog`. Currently guarded: logout, ticket status advance, technician reassign, report approval. |
 | `dashboard/` | `Sidebar`, `Header`, `PageTransition` | Shell chrome. Sidebar nav uses `.nav-item` utility class with `data-active` for brand highlight. |
 | `providers/` | `RealtimeProvider` | See [web-realtime.md](./web-realtime.md). |
-| `zones/` | `FileUpload`, `OverviewTab`, `StationMap` (free `tile.openstreetmap.org` light + `Esri World_Dark_Gray_Base` dark, no key; flagged `10px` red + dual halo `20/14px` vs typical `5px` dim, `station-label--flagged` red tint, `bringToFront()`), `StationChart`, `DataTable`, `NeighborGroupsTab`, `AnomalyReportTab`, `DateComparisonChart` | Pipeline result visualizations. `leaflet`/`react-leaflet` for the map; `recharts` for charts; `papaparse` for client-side CSV preview. |
+| `zones/` | `FileUpload`, `OverviewTab`, `StationMap` (free `tile.openstreetmap.org` light + `Esri World_Dark_Gray_Base` dark, no key; flagged `10px` red + dual halo `20/14px` vs typical `5px` dim, `station-label--flagged` red tint, `bringToFront()`), `StationChart`, `DataTable`, `NeighborGroupsTab`, `AnomalyReportTab`, `DateComparisonChart` | Pipeline result visualizations. `leaflet` for the map ( `react-leaflet` removed); `recharts` for charts. CSV preview is local (`lib/csv.ts`) — `papaparse` removed. |
 | `tickets/` | `TicketDetailBody` (**shared by tickets + reports pages**), `TicketActionDock` (collapsible bottom panel: assignment + review slot), `ReviewPanel` (approve/follow-up, mounted inside the dock), `TechnicianWorkloadBadge` | The most coupled component group. Portal-dropdown pattern lives here. |
 
 ## Depends on
 - `hooks/*` (pages), `lib/ticketStatus.ts`, `lib/technicianWorkload.ts`, `lib/csv.ts`
 - `types/*`
-- `leaflet`, `react-leaflet`, `recharts`, `papaparse`, `lucide-react`
+- `leaflet`, `recharts`, `lucide-react`
 - `ui/*` primitives
 
 ## Depends on it (reverse)

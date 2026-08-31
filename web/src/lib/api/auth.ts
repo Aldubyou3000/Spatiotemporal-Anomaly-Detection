@@ -16,7 +16,4 @@ export const authApi = {
 
   me: () =>
     apiClient.get<UserProfile>("/api/auth/me"),
-
-  refresh: () =>
-    apiClient.post<{ ok: boolean }>("/api/auth/refresh"),
 };

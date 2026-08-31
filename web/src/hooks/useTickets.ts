@@ -82,7 +82,3 @@ export function invalidateTicketLists() {
 export function invalidateReports() {
   return globalMutate((key: unknown) => Array.isArray(key) && typeof key[0] === "string" && (key[0] as string).startsWith("/api/reports"));
 }
-
-export function invalidateTechnicians() {
-  return globalMutate((key: unknown) => Array.isArray(key) && typeof key[0] === "string" && ((key[0] as string).startsWith("/api/technicians") || (key[0] as string).startsWith("/api/tickets/technicians")));
-}

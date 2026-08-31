@@ -12,11 +12,11 @@ Inspection report review surface for analysts. Submission happens via the mobile
 - `core/dependencies.py` → `require_analyst`, `get_supabase`
 - `services/audit_service.py` → `audit`
 - `services/reports_service.py` → `list_reports`, `get_report`, `approve_report`
-- `routers/mobile.py` → `_signed_url` (shared-candidate)
+- `routers/mobile.py` → `_signed_urls_batch` (shared-candidate; top-level `_signed_url` import was dead)
 - `schemas/reports.py` → `ReportApprove`
 
 ## Depends on it (reverse)
-- `web/src/lib/api/reports.ts` → `useReports.ts` (`optimisticApprove`)
+- `web/src/lib/api/reports.ts` → `useReports.ts`
 - `web/src/components/tickets/ReviewPanel.tsx` — the analyst approve/follow-up decision surface
 - Real-time: `report_approved` emits both `reports` and `tickets` signals (approving verifies the parent ticket)
 

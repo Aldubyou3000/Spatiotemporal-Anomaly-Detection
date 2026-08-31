@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { spacing, radius } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
 function Shimmer({ width, height, style }: { width: number | `${number}%`; height: number; style?: object }) {

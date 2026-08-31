@@ -39,67 +39,6 @@ function initials(name: string) {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-
-function StatCard({
-  label,
-  value,
-  icon,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  tone?: "neutral" | "success" | "warning" | "brand";
-}) {
-  const iconBg =
-    tone === "success" ? "color-mix(in oklab, var(--success) 12%, transparent)" :
-    tone === "brand"   ? "var(--brand-soft)" :
-    "var(--surface-sunken)";
-  const iconColor =
-    tone === "success" ? "var(--success)" :
-    tone === "brand"   ? "var(--brand)" :
-    "var(--text-muted)";
-
-  return (
-    <div
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--r-xl)",
-        padding: "16px 20px",
-        boxShadow: "var(--shadow-xs)",
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 14,
-      }}
-    >
-      <div
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: "var(--r-md)",
-          background: iconBg,
-          color: iconColor,
-          display: "grid",
-          placeItems: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 4px" }}>
-          {label}
-        </p>
-        <p style={{ fontSize: "var(--font-xl)", fontWeight: 600, color: "var(--text)", margin: 0, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Create Technician Modal ──────────────────────────────────────────────────
 
 function CreateModal({

@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import Icon from '@/components/Icon';
 import { Text } from '@/components/Themed';

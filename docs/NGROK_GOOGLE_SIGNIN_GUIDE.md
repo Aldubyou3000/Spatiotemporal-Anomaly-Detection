@@ -1,4 +1,15 @@
-# ngrok + Google Sign-In — Complete Setup Guide
+# ngrok + Google Sign-In — Local phone↔PC testing only
+
+> **Scope note (2026-08):** ngrok is now **only for local phone↔PC testing**. It does
+> **not** affect EAS builds (development/preview/production), which bake
+> `EXPO_PUBLIC_API_URL`/`EXPO_PUBLIC_OAUTH_URL` from `App/eas.json` and talk to the
+> deployed API. For EAS builds and production, Google sign-in runs through the
+> **first-party Vercel proxy** (`…vercel.app` → Render) instead, which avoids both the
+> ngrok interstitial **and** the Chrome Safe Browsing block on `onrender.com` that made
+> sign-in hang (see KNOWN_BUGS_AND_FIXES → "Google sign-in hangs forever on an EAS build").
+>
+> Use this guide when you want to test Google sign-in against your **local** FastAPI
+> over HTTPS. For a real dev/production APK, skip this and use the deployed flow.
 
 This guide gets mobile Google sign-in working with a **permanent** https URL that you set up **once**
 and never have to change again (unlike the old cloudflared tunnel that died on every restart).
@@ -177,13 +188,17 @@ npx expo start --dev-client -c
 
 ---
 
-## When you go live (future — not now)
+## When you go live
 
-ngrok is the **testing-phase** solution. When you deploy for real users:
-- API → **Railway** (must run ONE worker — the SSE broker is in-process). Add an `api/Procfile`,
-  set `DEV_MODE=false` + all prod env vars (or `assert_production_safe()` refuses to boot).
-- Web → **Vercel**.
-- App → **EAS production build** with the permanent Railway URL baked in.
+You stop using ngrok entirely. Production uses the **first-party Vercel proxy** for
+Google OAuth, not a tunnel:
+- API → **Render** (`spatiotemporal-api.onrender.com`), one worker (in-process SSE broker).
+- Web → **Vercel** (`spatiotemporal-anomaly-detection.vercel.app`). `web/next.config.ts`
+  rewrites `/api/*` → Render so OAuth/cookies are first-party on `vercel.app` — this is
+  also what keeps Chrome Safe Browsing away from the `onrender.com` host.
+- App → **EAS build** with `EXPO_PUBLIC_API_URL` = Render and `EXPO_PUBLIC_OAUTH_URL` =
+  Vercel (both already set in `App/eas.json`).
 
-At that point you stop using ngrok entirely — the Railway URL replaces it in all 3 config spots above.
-See `~/.claude/plans/i-wanna-integrate-proper-crystalline-spring.md` for the full deploy plan.
+The ngrok guide above is only for pointing a phone at your **local** PC API during
+development. See `~/.claude/plans/i-wanna-integrate-proper-crystalline-spring.md` for
+the full deploy plan.

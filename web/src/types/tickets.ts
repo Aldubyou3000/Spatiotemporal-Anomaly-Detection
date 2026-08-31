@@ -83,14 +83,6 @@ export interface TicketCreate {
   technician_ids: string[];  // replaces technician_id
 }
 
-export interface TicketUpdate {
-  status?: TicketStatus;
-  priority?: TicketPriority;
-  technician_id?: string;
-  title?: string;
-  description?: string;
-}
-
 export interface TicketAttachment {
   id: string;
   ticket_id: string;

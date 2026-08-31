@@ -8,15 +8,15 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 
 ## Active candidates
 
-### 1. Signed-URL helper (`_signed_url`)
+### 1. Signed-URL helper (`_signed_urls_batch` / `_signed_url`)
 **Appears in**:
-- `api/app/routers/mobile.py` (defined here)
-- `api/app/routers/tickets.py` — `from .mobile import _signed_url`
-- `api/app/routers/reports.py` — `from .mobile import _signed_url`
+- `api/app/routers/mobile.py` (defined here — ` _signed_urls_batch` + single `_signed_url`)
+- `api/app/routers/tickets.py` — `from .mobile import _signed_urls_batch` (was `_signed_url`, corrected 2026-08-31)
+- `api/app/routers/reports.py` — `from .mobile import _signed_urls_batch` (was top-level `_signed_url` dead import, fixed 2026-08-31)
 
-**Problem**: Two analyst-facing routers import a private helper from the technician router. Couples unrelated routers and creates a misleading "mobile owns this" signal.
+**Problem**: Two analyst-facing routers import a private helper from the technician router. Couples unrelated routers and creates a misleading "mobile owns this" signal. The `tickets` import was mixing top-level + lazy inner import; `reports` had a dead top-level `_signed_url` while using batch locally.
 
-**Extraction**: Move to `api/app/core/storage.py` (or `services/storage_service.py`) as a public `signed_url(...)`. Update the three import sites. The underscore-prefixed private name becoming public is the signal that it's shared.
+**Extraction**: Move to `api/app/core/storage.py` (or `services/storage_service.py`) as a public `signed_urls_batch(...)` / `signed_url(...)`. Update the three import sites. The underscore-prefixed private name becoming public is the signal that it's shared.
 
 ---
 
@@ -66,4 +66,4 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 
 ## Resolved
 
-(none yet — entries move here when extracted)
+*2026-08-31 dead-code pass* — not an extraction but a pruning: removed truly dead imports/exports that were inflating the candidate surface — `reports.py` dead `_signed_url`, `zones.py` dead `require_analyst`, `audit_service` dead `datetime`/`timezone`/`settings`, `events_service` dead `Any`, `zone_a` dead `numpy`, `web` dead `papaparse`/`next-themes`/`react-leaflet` deps, `App` dead `expo-blur`/`expo-print`/`expo-symbols` deps (+ wired `buffer` polyfill + `react-native-url-polyfill`). These are logged here so future lint doesn't re-flag them as candidates.

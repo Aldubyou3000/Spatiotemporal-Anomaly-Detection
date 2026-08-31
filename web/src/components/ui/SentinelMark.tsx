@@ -62,20 +62,4 @@ export function SentinelMark({ size = 16 }: { size?: number }) {
   );
 }
 
-/** Mini geometric mark from logo.html — alternative if you prefer the abstract chevron.
- *  Kept for reference; not used by default. Render with currentColor inside blue square.
- */
-export function SentinelChevronMark({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden style={{ display: "block" }}>
-      {/* Mirrors the logo.html 5-rect construction, compressed to 24×24 */}
-      <g transform="translate(12 12)">
-        <rect x={-6.6} y={-1.7} width={13.2} height={3.2} rx={0.65} transform="rotate(-45)" />
-        <rect x={-4.4} y={-1.7} width={8.8} height={3.2} rx={0.65} transform="translate(9.8 1.2) rotate(-45)" />
-        <rect x={-3.05} y={-1.7} width={6.1} height={3.2} rx={0.65} transform="translate(-2.1 3.9) rotate(-45)" />
-        <rect x={-3.05} y={-1.7} width={6.1} height={3.2} rx={0.65} transform="translate(2.2 3.9) rotate(45)" />
-        <rect x={-1.6} y={-1.7} width={3.2} height={3.2} rx={0.6} transform="translate(0 1.4) rotate(45)" />
-      </g>
-    </svg>
-  );
-}
+

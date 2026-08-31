@@ -96,7 +96,43 @@ technicians install.
 
 ---
 
-### Bug: `openAuthSessionAsync` hangs on Android and never resolves
+### Bug: Google sign-in hangs forever on an EAS build (dev & production)
+**Symptom:** Tapping "Continue with Google" opens the Chrome Custom Tab and hangs —
+no account picker, or a white/stuck page, then the app's 90 s guard reports "Google
+sign-in timed out." Password login is unaffected.
+
+**Root cause — the browser never reaches a clean HTTPS first-party origin:**
+- **EAS builds ignore `App/.env`.** Every EAS profile (development/preview/production)
+  bakes `EXPO_PUBLIC_API_URL=https://spatiotemporal-api.onrender.com`, so the app talks
+  to the deployed Render API, not the local ngrok tunnel. ngrok setup is irrelevant
+  for any EAS build.
+- **The OAuth browser flow ran directly on `onrender.com`, which Chrome Safe Browsing
+  flags.** Chrome refuses / hangs navigating to a flagged shared-hosting domain inside
+  a Custom Tab, so the redirect chain never reaches the `awscout://` deep link. The web
+  dashboard had the exact same problem and was fixed by proxying `/api/*` through
+  first-party `vercel.app` (see commit `ced2e88`), but mobile OAuth never got the same
+  treatment — `_mobile_oauth_callback_url()` read the plain `Host` header, which behind
+  the Vercel proxy is the backend `onrender.com` host, so the callback bounced straight
+  back onto the flagged domain.
+
+**Fix (industry-standard: first-party origin for the OAuth redirect):**
+1. API (`routers/mobile.py`) now derives the mobile callback from `X-Forwarded-Host`
+   (first-party proxy host) before falling back to `Host`, with a trusted-host
+   allowlist (fail-closed to `MOBILE_OAUTH_REDIRECT_BASE`). Same pattern the web flow
+   already used.
+2. The app now sends the OAuth browser to a separate first-party origin via
+   `EXPO_PUBLIC_OAUTH_URL` (defaults to `EXPO_PUBLIC_API_URL`). EAS profiles point it
+   at `https://spatiotemporal-anomaly-detection.vercel.app`; `App/.env` leaves it blank
+   so local tunnels still work.
+3. Production `api/.env` must set
+   `MOBILE_OAUTH_REDIRECT_BASE=https://spatiotemporal-anomaly-detection.vercel.app`
+   (the fail-closed fallback).
+
+**Prevention:** Any browser-facing OAuth redirect must land on a clean, first-party,
+HTTPS origin — never directly on a shared-hosting or LAN IP. ngrok is only for local
+phone→PC testing, not for EAS builds.
+
+---
 **Symptom:** On Android, after Google consent, `WebBrowser.openAuthSessionAsync` never resolves
 (the browser closes but the Promise stays pending forever). The app appears to hang.
 

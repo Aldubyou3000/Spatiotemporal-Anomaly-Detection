@@ -145,9 +145,9 @@ web/src/
 │   └── ZonesContext.tsx              ← Pipeline session state (file, result, progress…)
 │
 ├── hooks/                            ← SWR data-fetching hooks — pages use these, not lib/api directly
-│   ├── useTickets.ts                 ← useTicketList, useTicketDetail, useTicketReport, useTicketAttachments, invalidateTicketLists
+│   ├── useTickets.ts                 ← useTicketList, useTicketDetail, useTicketReport, useTicketAttachments, invalidateTicketLists, invalidateReports
 │   ├── useTechnicians.ts             ← useTicketTechnicians, useTechnicianProfiles
-│   ├── useReports.ts                 ← useReports (with optimisticApprove)
+│   ├── useReports.ts                 ← useReports
 │   ├── useAuditLogs.ts              ← useAuditLogs (paginated), useAuditStats
 │   └── useRealtimeSync.ts            ← Single EventSource → SWR cache invalidation (real-time)
 │

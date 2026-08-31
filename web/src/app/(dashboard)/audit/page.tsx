@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAuditLogs, useAuditStats } from "@/hooks/useAuditLogs";
+import { useAuditLogs } from "@/hooks/useAuditLogs";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { AuditRowSkeleton } from "@/components/ui/Skeleton";
 import { auditApi } from "@/lib/api/audit";
-import type { AuditLogEntry, AuditFilters, AuditStatEntry } from "@/lib/api/audit";
+import type { AuditLogEntry, AuditFilters } from "@/lib/api/audit";
 
 // ─── Event meta ───────────────────────────────────────────────────────────────
 
@@ -91,51 +91,6 @@ function formatTs(iso: string) {
     date: d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }),
     time: d.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
   };
-}
-
-// ─── Stat Card — kept for potential use but without scary fail rate ─────────
-
-function StatCard({ stat }: { stat: AuditStatEntry }) {
-  const meta = getEventMeta(stat.event);
-  const Icon = meta.icon;
-
-  return (
-    <div
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--r-lg)",
-        padding: "14px 16px",
-        boxShadow: "var(--shadow-xs)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <p style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", margin: 0 }}>
-          {meta.label}
-        </p>
-        <div
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: "var(--r-sm)",
-            background: toneBg(meta.tone),
-            color: toneColor(meta.tone),
-            display: "grid",
-            placeItems: "center",
-          }}
-        >
-          <Icon size={11} strokeWidth={2.2} />
-        </div>
-      </div>
-      <p style={{ fontSize: "var(--font-xl)", fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text)", margin: 0, lineHeight: 1, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
-        {stat.total.toLocaleString()}
-      </p>
-      <p style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", margin: 0 }}>{stat.total === 1 ? "record" : "records"}</p>
-    </div>
-  );
 }
 
 // ─── Expanded detail — simple, non-technical ─────────────────────────────────
@@ -325,7 +280,6 @@ export default function AuditPage() {
   const [outcomeFilter, setOutcomeFilter] = useState("");
 
   const { entries, total, isLoading: loading, error: fetchError, refresh } = useAuditLogs(filters, PAGE_SIZE, offset);
-  const { stats, isLoading: statsLoading } = useAuditStats();
   const error = fetchError?.message ?? null;
 
   function applyFilters(event: string, outcome: string, ip: string) {
@@ -373,9 +327,6 @@ export default function AuditPage() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
-  const criticalCount = entries.filter(
-    (e) => !e.success || ["login_locked"].includes(e.event)
-  ).length;
   const hasFilters = !!(eventFilter || outcomeFilter || query);
 
 
