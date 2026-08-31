@@ -152,7 +152,7 @@ async def process_zones(
 
 @router.get("/jobs/{job_id}")
 @limiter.limit("60/minute")
-def get_zones_job(job_id: str, _user: UserProfile = Depends(require_analyst_or_bearer)):
+def get_zones_job(request: Request, job_id: str, _user: UserProfile = Depends(require_analyst_or_bearer)):
     with _jobs_lock:
         job = _jobs.get(job_id)
         if not job:
