@@ -11,6 +11,7 @@ import {
 import { useReports } from "@/hooks/useReports";
 import { SentinelMark } from "@/components/ui/SentinelMark";
 
+
 interface NavItem {
   href: string;
   label: string;
@@ -116,17 +117,15 @@ export function Sidebar() {
         /* ── Collapsed layout ── */
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", padding: "12px 0", gap: 2 }}>
 
-          {/* Brand icon — Sentinel shield-radar */}
+          {/* Brand icon — CSS geometric mark (white bg blue shapes) */}
           <NavTooltip label="AWS Sentinel — Anomaly Detector">
             <div style={{
-              width: 32, height: 32, borderRadius: "var(--r-lg)", flexShrink: 0,
-              background: "linear-gradient(135deg, var(--brand) 0%, #6BA8F0 100%)",
+              width: 36, height: 28, flexShrink: 0,
               display: "grid", placeItems: "center",
-              color: "var(--brand-fg)",
-              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.22)",
+              color: "var(--brand)",
               marginBottom: 10,
             }}>
-              <SentinelMark size={18} />
+              <SentinelMark size={32} />
             </div>
           </NavTooltip>
 
@@ -183,37 +182,41 @@ export function Sidebar() {
         /* ── Expanded layout ── */
         <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "16px 12px", gap: 4 }}>
 
-          {/* Brand row — 2-line lockup: AWS SENTINEL / Anomaly Detector */}
+          {/* Brand row — geometric mark + wordmark (logo.html geometry, Geist type) */}
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
-            padding: "6px 6px 14px 6px",
+            padding: "10px 6px 16px 6px",
             borderBottom: "1px solid var(--divider)",
             marginBottom: 8,
             minWidth: 0,
           }}>
             <div style={{
-              width: 32, height: 32, borderRadius: "var(--r-lg)", flexShrink: 0,
-              background: "linear-gradient(135deg, var(--brand) 0%, #6BA8F0 100%)",
+              flexShrink: 0,
               display: "grid", placeItems: "center",
-              color: "var(--brand-fg)",
-              boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.22)",
+              color: "var(--brand)",
             }}>
-              <SentinelMark size={18} />
+              <SentinelMark size={40} />
             </div>
-            <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", gap: 1, lineHeight: 1.1 }}>
+            <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", gap: 3, lineHeight: 1 }}>
               <div style={{
-                fontSize: "10.5px", fontWeight: 700, letterSpacing: "0.09em",
-                color: "var(--text-muted)", textTransform: "uppercase",
+                fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
+                fontSize: "15.5px", fontWeight: 800, letterSpacing: "-0.02em",
+                color: "var(--text)", textTransform: "none",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                lineHeight: 1,
+                fontFeatureSettings: '"ss01", "cv01"',
               }}>
                 AWS Sentinel
               </div>
               <div style={{
-                fontSize: "13.5px", fontWeight: 650, letterSpacing: "-0.01em",
-                color: "var(--text)", whiteSpace: "nowrap",
-                overflow: "hidden", textOverflow: "ellipsis",
+                fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
+                fontSize: "9px", fontWeight: 600, letterSpacing: "0.13em",
+                color: "var(--text-muted)", textTransform: "uppercase",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                marginRight: "-0.13em",
+                lineHeight: 1,
               }}>
-                Anomaly Detector
+                ANOMALY DETECTOR
               </div>
             </div>
             <button

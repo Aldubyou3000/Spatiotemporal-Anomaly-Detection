@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="AWS Sentinel icon">
+  <!-- White background — inverted from blue/white to white/blue as requested -->
+  <rect width="32" height="32" rx="7" fill="white"/>
+  <!-- Geometric Sentinel mark in brand blue — matches AWScout_white.jpg (white bg blue shapes) -->
+  <g fill="#1E6FD9" transform="translate(16 16) scale(0.068) translate(-142.5 -94)">
+    <rect x="-78" y="-19" width="170" height="38" rx="7.5" ry="7.5" transform="translate(94 64) rotate(-45)"/>
+    <rect x="-44" y="-19" width="88" height="38" rx="7.5" ry="7.5" transform="translate(198 86) rotate(45)"/>
+    <rect x="-36" y="-19" width="72" height="38" rx="7.5" ry="7.5" transform="translate(110 135) rotate(-45)"/>
+    <rect x="-36" y="-19" width="72" height="38" rx="7.5" ry="7.5" transform="translate(160 135) rotate(45)"/>
+    <rect x="-19" y="-19" width="38" height="38" rx="7" ry="7" transform="translate(135 110) rotate(45)"/>
+  </g>
+</svg>

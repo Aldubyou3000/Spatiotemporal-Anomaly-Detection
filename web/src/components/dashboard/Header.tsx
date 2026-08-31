@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, ChevronRight, LogOut, Moon, Sun, User } from "lucide-react";
+import { ChevronDown, ChevronRight, LogOut, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -194,14 +194,6 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
                     {user?.email}
                   </p>
                 </div>
-                <button
-                  disabled
-                  className="menu-item menu-item--disabled"
-                  role="menuitem"
-                >
-                  <User size={14} style={{ flexShrink: 0 }} />
-                  Profile (coming soon)
-                </button>
                 <button
                   onClick={() => { setMenuOpen(false); setConfirmLogout(true); }}
                   className="menu-item menu-item--danger"

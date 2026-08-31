@@ -1,63 +1,52 @@
 "use client";
 
 /**
- * SentinelMark — brand icon for AWS Sentinel · Anomaly Detector
+ * SentinelMark — geometric brand mark for AWS Sentinel · Anomaly Detector
  *
- * Concept: Shield (Sentinel / guardian) + Radar pulse (spatiotemporal scan)
- *          + central anomaly dot with halo.
+ * Exact geometry from `logo.html` (root): four rotated bars + centre diamond
+ * forming the chevron/sentinel mark. Uses `currentColor` so the caller
+ * controls the colour via CSS `color` (typically `var(--brand)` — the app's
+ * blue theme token which flips between #1E6FD9 / #4D9CFF for light/dark).
  *
- * - Shield silhouette = sentinel watching over PAGASA AWS network
- * - Concentric quarter-arcs = radar sweep across neighbor groups (Zone B)
- * - Center dot + subtle outer halo = flagged anomaly (Zone C LOF)
- * - Diagonal sweep line = active scan direction
- *
- * Renders crisp at 14–20px inside the 30–32px blue gradient square.
- * Uses currentColor so it inherits "var(--brand-fg)" (white) on the gradient.
+ * ViewBox 0 0 285 188 is the canonical artboard from logo.html — keep the
+ * 285:188 (≈1.516) aspect or the diagonals shear. The component accepts a
+ * single `size` as logical **width** in px; height is derived to preserve
+ * aspect (consistent with logo.html's `width:285px; height:auto`).
  */
-export function SentinelMark({ size = 16 }: { size?: number }) {
+export function SentinelMark({
+  size = 32,
+  style,
+  className,
+}: {
+  size?: number;
+  style?: React.CSSProperties;
+  className?: string;
+}) {
+  const h = Math.round((size * 188) / 285);
   return (
     <svg
       width={size}
-      height={size}
-      viewBox="0 0 24 24"
+      height={h}
+      viewBox="0 0 285 188"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="AWS Sentinel mark"
       fill="none"
-      aria-hidden
-      style={{ display: "block" }}
+      style={{ display: "block", overflow: "visible", ...style }}
+      className={className}
     >
-      {/* Shield — bolder for 18px on blue gradient */}
-      <path
-        d="M12 2.7 18.95 5.55v5.65c0 3.95-1.75 6.9-6.95 10.25C6.8 18.1 5.05 15.15 5.05 11.2V5.55L12 2.7Z"
-        stroke="currentColor"
-        strokeWidth={1.85}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      {/* Radar arcs — 2 clean quarter-rings, solid white for legibility */}
-      <path
-        d="M14.95 7.95A4.7 4.7 0 0 1 16.55 11.15"
-        stroke="currentColor"
-        strokeWidth={1.65}
-        strokeLinecap="round"
-        opacity={0.92}
-      />
-      <path
-        d="M13.65 9.25A2.25 2.25 0 0 1 14.35 11.15"
-        stroke="currentColor"
-        strokeWidth={1.75}
-        strokeLinecap="round"
-      />
-      {/* Sweep line — short, crisp */}
-      <path
-        d="M12.95 12.05 16.9 16"
-        stroke="currentColor"
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        opacity={0.95}
-      />
-      {/* Center anomaly dot */}
-      <circle cx={12} cy={11.15} r={2.15} fill="currentColor" opacity={0.2} />
-      <circle cx={12} cy={11.15} r={1.35} fill="currentColor" />
-      <circle cx={12} cy={11.15} r={0.45} fill="white" opacity={0.9} />
+      <g fill="currentColor">
+        {/* Left long diagonal — 170×38 */}
+        <rect x="-78" y="-19" width="170" height="38" rx="7.5" ry="7.5" transform="translate(94 64) rotate(-45)" />
+        {/* Right short bar — 88×38 */}
+        <rect x="-44" y="-19" width="88" height="38" rx="7.5" ry="7.5" transform="translate(198 86) rotate(45)" />
+        {/* Chevron left */}
+        <rect x="-36" y="-19" width="72" height="38" rx="7.5" ry="7.5" transform="translate(110 135) rotate(-45)" />
+        {/* Chevron right */}
+        <rect x="-36" y="-19" width="72" height="38" rx="7.5" ry="7.5" transform="translate(160 135) rotate(45)" />
+        {/* Centre diamond */}
+        <rect x="-19" y="-19" width="38" height="38" rx="7" ry="7" transform="translate(135 110) rotate(45)" />
+      </g>
     </svg>
   );
 }
