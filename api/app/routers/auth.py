@@ -251,6 +251,20 @@ def me_endpoint(user: dict = Depends(get_current_user)):
     return user
 
 
+@router.get("/direct-token")
+def direct_token_endpoint(request: Request, user: dict = Depends(get_current_user)):
+    """Return current access_token for direct Bearer bypass (Google users).
+
+    The httpOnly cookie cannot be read by JS, but zones direct upload needs
+    a Bearer token to bypass Vercel 30s proxy. This endpoint lets the web
+    app seed sessionStorage after Google OAuth without a password login.
+    """
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No access token")
+    return {"access_token": token}
+
+
 @router.post("/logout")
 def logout_endpoint(
     request: Request,

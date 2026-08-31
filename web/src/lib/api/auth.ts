@@ -17,4 +17,10 @@ export const authApi = {
 
   me: () =>
     apiClient.get<UserProfile>("/api/auth/me"),
+
+  directToken: async () => {
+    const res = await apiClient.get<{ access_token: string }>("/api/auth/direct-token");
+    if (res.access_token) setDirectToken(res.access_token);
+    return res;
+  },
 };

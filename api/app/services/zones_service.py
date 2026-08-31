@@ -34,6 +34,33 @@ from ..schemas.zones import (
     StationStuckHealth,
 )
 
+import logging as _logging
+import os as _os
+
+try:
+    import psutil as _psutil  # type: ignore[import]
+except Exception:  # pragma: no cover
+    _psutil = None  # type: ignore[assignment]
+
+logger = _logging.getLogger("zones.service")
+
+def _log_mem(stage: str) -> None:
+    try:
+        if _psutil is not None:
+            rss = _psutil.Process().memory_info().rss / (1024 * 1024)  # type: ignore[union-attr]
+            logger.info("[zones][mem] %s rss=%.1f MB", stage, rss)
+            return
+    except Exception:
+        pass
+    try:
+        import resource as _res  # type: ignore[import]
+        rss = _res.getrusage(_res.RUSAGE_SELF).ru_maxrss / 1024  # type: ignore[attr-defined]
+        if _os.name == "posix" and rss > 1024 * 1024:
+            rss = rss / 1024
+        logger.info("[zones][mem] %s rss=%.1f MB", stage, rss)
+    except Exception:
+        pass
+
 REQUIRED_COLUMNS = {"station_id", "date", "latitude", "longitude"}
 
 # ── Station health thresholds (tunable; see StationHealth doc) ─────────
@@ -139,11 +166,15 @@ def _run_from_dataframe(
 ) -> ProcessResult:
     """Run Zone A→B→C on an already-parsed raw frame and project to a ProcessResult."""
     start = time.perf_counter()
+    _log_mem(f"start raw_df={len(raw_df)} rows cols={list(raw_df.columns)}")
+    logger.info("[zones] _run_from_dataframe start rows=%d hourly_dups=%d", len(raw_df), hourly_duplicates)
 
     raw_preview = _build_raw_preview(raw_df)
     raw_total_rows = int(len(raw_df))
+    _log_mem(f"after raw_preview={len(raw_preview)}/{raw_total_rows}")
 
     cleaned, quality_report_dict = process_zone_a(raw_df)
+    _log_mem(f"after Zone A cleaned={len(cleaned)}")
 
     # Guard: Zone A promises no NaN in rainfall, but a daily-format CSV with an
     # isolated single-day NaN can survive its gap logic. Drop any residual NaN

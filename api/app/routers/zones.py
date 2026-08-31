@@ -5,8 +5,12 @@ Accepts a CSV upload, runs Zone A → B → C in a worker thread (CPU-bound),
 and returns the structured result. Analyst-only.
 """
 import logging
+import threading
+import time
+import uuid
+from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from ..core.dependencies import require_analyst_or_bearer
 from ..core.limiter import limiter
@@ -19,6 +23,48 @@ logger = logging.getLogger("zones.router")
 router = APIRouter(prefix="/api/zones", tags=["zones"])
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
+# ── Async job store — in-process, single-worker (matches SSE broker)
+# job_id -> {status, result, error, created_at}
+_jobs: dict[str, dict[str, Any]] = {}
+_jobs_lock = threading.Lock()
+_JOB_TTL_SECONDS = 600  # 10 min
+_JOB_MAX = 50
+
+
+def _gc_jobs() -> None:
+    now = time.time()
+    with _jobs_lock:
+        expired = [jid for jid, j in _jobs.items() if now - j.get("created_at", 0) > _JOB_TTL_SECONDS]
+        for jid in expired:
+            _jobs.pop(jid, None)
+        # Hard cap
+        while len(_jobs) > _JOB_MAX:
+            _jobs.pop(next(iter(_jobs)), None)
+
+
+def _run_job(job_id: str, payload: list[tuple[str, bytes]]) -> None:
+    try:
+        logger.info("[zones] job %s start files=%d bytes=%d", job_id, len(payload), sum(len(b) for _, b in payload))
+        result = run_pipeline_multi(payload)
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "done"
+                _jobs[job_id]["result"] = result.model_dump() if hasattr(result, "model_dump") else result
+                _jobs[job_id]["error"] = None
+        logger.info("[zones] job %s done rows=%d", job_id, result.summary.total_rows if hasattr(result, "summary") else -1)
+    except ZoneProcessingError as exc:
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "error"
+                _jobs[job_id]["error"] = str(exc)
+        logger.warning("[zones] job %s 422 %s", job_id, exc)
+    except Exception as exc:
+        logger.exception("[zones] job %s failed", job_id)
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "error"
+                _jobs[job_id]["error"] = "The process could not process this file. Please check the file and try again."
+
 @router.post("/process", response_model=ProcessResult)
 @limiter.limit("10/minute")
 async def process_zones(
@@ -30,8 +76,9 @@ async def process_zones(
             "and/or a combined CSV (station_id, date, latitude, longitude, rainfall)."
         ),
     ),
+    async_mode: bool = Query(default=False, description="If true, returns 202 job_id and poll GET /api/zones/jobs/{id}"),
     _user: UserProfile = Depends(require_analyst_or_bearer),
-) -> ProcessResult:
+) -> Any:
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,6 +121,20 @@ async def process_zones(
             )
         payload.append((name, contents))
 
+    # ── Async mode — bypass Vercel 30s edge by returning 202 immediately
+    prefer_async = async_mode or request.headers.get("prefer", "").lower() == "respond-async"
+    if prefer_async:
+        _gc_jobs()
+        job_id = uuid.uuid4().hex
+        with _jobs_lock:
+            _jobs[job_id] = {"status": "processing", "result": None, "error": None, "created_at": time.time()}
+        # Run in background daemon thread (not threadpool, so it survives the 202)
+        t = threading.Thread(target=_run_job, args=(job_id, payload), daemon=True)
+        t.start()
+        # Return 202 with job_id — client will poll GET /api/zones/jobs/{job_id}
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"job_id": job_id, "status": "processing"})
+
     try:
         return await run_in_threadpool(run_pipeline_multi, payload)
     except ZoneProcessingError as exc:
@@ -87,3 +148,21 @@ async def process_zones(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="The process could not process this file. Please check the file and try again.",
         ) from exc
+
+
+@router.get("/jobs/{job_id}")
+@limiter.limit("60/minute")
+def get_zones_job(job_id: str, _user: UserProfile = Depends(require_analyst_or_bearer)):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found or expired")
+        # Return a copy
+        status_val = job["status"]
+        result = job.get("result")
+        error = job.get("error")
+    if status_val == "processing":
+        return {"job_id": job_id, "status": "processing"}
+    if status_val == "done":
+        return {"job_id": job_id, "status": "done", "result": result}
+    return {"job_id": job_id, "status": "error", "detail": error or "Processing failed"}

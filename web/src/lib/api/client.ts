@@ -214,6 +214,20 @@ export const apiClient = {
   upload: <T>(path: string, formData: FormData, options: RequestOptions & { timeoutMs?: number; signal?: AbortSignal | null } = {}) =>
     request<T>(path, { ...options, method: "POST", body: formData, timeoutMs: HEAVY_TIMEOUT_MS } as RequestInit & { timeoutMs?: number }, options.params),
 
+  /** Direct GET to Render — bypasses Vercel proxy for polling. */
+  getDirect: async <T>(path: string, opts: { timeoutMs?: number; signal?: AbortSignal | null } = {}): Promise<T> => {
+    const token = getDirectToken();
+    const url = new URL(path, DIRECT_BASE).toString();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetchWithTimeout(url, { method: "GET", headers, credentials: "omit", timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, signal: opts.signal });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ detail: "Request failed" }));
+      throw new Error(body?.detail ?? body?.message ?? "Request failed");
+    }
+    return res.json() as Promise<T>;
+  },
+
   /** Direct upload to Render — bypasses Vercel proxy (avoids 30s timeout for 4-file LOF). */
   uploadDirect: async <T>(path: string, formData: FormData, opts: { timeoutMs?: number; signal?: AbortSignal | null } = {}): Promise<T> => {
     const token = getDirectToken();
