@@ -41,6 +41,7 @@ class ExclusionDetails(BaseModel):
     zero_valid_stations: int = 0
     insufficient_readings_stations: int = 0
     multi_day_gaps: int = 0
+    incomplete_days: int = 0
     starts_with_nan: int = 0
     ends_with_nan: int = 0
     duplicates: int = 0
@@ -55,7 +56,7 @@ class QualityReport(BaseModel):
     total_input_stations: int
     stations_excluded: int
     rows_excluded: int
-    rows_filled: int = 0
+    rows_filled: int = Field(default=0, description="Single-hour estimates made before incomplete daily totals are excluded.")
     exclusion_details: ExclusionDetails
     summary_text: str
 
@@ -74,16 +75,7 @@ class ProcessSummary(BaseModel):
 
 
 class StationHealth(BaseModel):
-    """Per-station bias report card — plain mean ratios, not LOF.
-
-    Computed post-LOF from the same flagged daily frame + Zone B neighbor map.
-    Lets an analyst tell "one weird day" (weather) from "weird every rain day"
-    (gauge calibration / exposure) at a glance.
-
-    Now also carries isolated-spike evidence: a single impossible day (e.g. 775 mm
-    while neighbors saw 1 mm) elevates status even when the mean bias is normal.
-    See zones_service HEALTH_SPIKE_* thresholds.
-    """
+    """Review priority from rainy-day comparisons and flagged peaks, not sensor accuracy."""
 
     station_id: str
     latitude: float
@@ -96,13 +88,13 @@ class StationHealth(BaseModel):
     )
     rain_days: int = Field(description="Rain days where group median ≥ 10 mm.")
     top_rate: float | None = Field(
-        default=None, description="Fraction of rain days this station was the group's max (null if insufficient_data)."
+        default=None, description="Fraction of assessed rainy days strictly higher than all reporting neighbors; ties excluded."
     )
     times_flagged: int = Field(description="How many LOF flags this station has in this run.")
     median_group_size: int = Field(description="Median number of stations reporting on its rain days.")
     # Spike evidence — null if station has no flagged days
     max_ratio: float | None = Field(
-        default=None, description="Largest own/median(group) among this station's flagged days; null if no flags."
+        default=None, description="Largest own/median(neighbors) on flagged days with at least two neighbors and neighbor median >=10 mm; may be on a different date from peak_rainfall."
     )
     peak_rainfall: float | None = Field(
         default=None, description="Largest rainfall among flagged days (mm); null if no flags."
@@ -121,11 +113,7 @@ class DryStuckEvent(BaseModel):
 
 
 class StationStuckHealth(BaseModel):
-    """Per-station stuck-at-zero report — symmetric to StationHealth but for low side.
-
-    A gauge is not flagged for a single 0 on a rainy day (could be weather).
-    It is flagged only when 0 is a pattern over many rainy days.
-    """
+    """Low-reading review priority; events include individual low days even without an overall warning."""
 
     station_id: str
     latitude: float
@@ -134,7 +122,7 @@ class StationStuckHealth(BaseModel):
     bias_ratio: float | None = Field(default=None, description="Mean(station / group_median) over rain days; null if insufficient_data.")
     rain_days: int = Field(description="Rainy days where group median ≥ 10 mm.")
     zero_rate: float | None = Field(default=None, description="Fraction of rainy days where rainfall ≤ STUCK_ZERO_MM.")
-    max_zero_streak: int | None = Field(default=None, description="Longest run of consecutive rainy days at ≤ STUCK_ZERO_MM.")
+    max_zero_streak: int | None = Field(default=None, description="Longest run of successive assessed rainy days at <=1 mm; dates need not be consecutive calendar days.")
     events: list[DryStuckEvent] = Field(default_factory=list, description="All stuck days for this station.")
 
 

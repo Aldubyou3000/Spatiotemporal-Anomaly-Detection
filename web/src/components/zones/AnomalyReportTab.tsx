@@ -7,77 +7,8 @@ import { Badge } from "@/components/ui/Badge";
 import { StationChart, type NeighborSeries } from "./StationChart";
 import { DateComparisonChart, type DateComparisonBar } from "./DateComparisonChart";
 import type { ProcessResult, StationHealth, StationStuckHealth } from "@/types/zones";
+import { REVIEW_STATUS, highReview, lowReview } from "@/lib/stationReview";
 import { useTheme } from "@/context/ThemeContext";
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function healthTone(status: StationHealth["status"]): "success" | "warning" | "danger" | "neutral" {
-  if (status === "suspect") return "danger";
-  if (status === "watch") return "warning";
-  if (status === "normal") return "success";
-  return "neutral";
-}
-function stuckTone(status: StationStuckHealth["status"]): "success" | "warning" | "danger" | "neutral" {
-  if (status === "suspect") return "danger";
-  if (status === "watch") return "warning";
-  if (status === "normal") return "success";
-  return "neutral";
-}
-function humanHighReason(h: StationHealth | null, fallback?: { peak: number | null; ratio: number | null; peakDate: string | null }): { title: string; detail: string; tip?: string } | null {
-  if (!h) return null;
-  if (h.status === "insufficient_data") return { title: "Not enough data yet", detail: `Only ${h.rain_days} rainy days so far — need more rain to judge.`, tip: `Only ${h.rain_days} rainy days checked` };
-  const pct = h.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) : 0;
-  const absPct = Math.abs(pct);
-  const pctDir = pct > 0 ? "higher" : pct < 0 ? "lower" : "about the same as";
-  let _peak = h.peak_rainfall as number | null;
-  let _ratio = (h as any).max_ratio as number | null;
-  let _peakDate: any = (h as any).peak_date ?? null;
-  // Fallback to anomaly_summary peak when health is from stale pipeline (before spike fields)
-  if ((_peak == null || _ratio == null) && fallback) {
-    if (_peak == null && fallback.peak != null) {
-      _peak = fallback.peak;
-      _peakDate = fallback.peakDate ?? _peakDate;
-    }
-    if (_ratio == null && fallback.ratio != null) _ratio = fallback.ratio;
-  }
-  const isSpike =
-    (_peak != null && _peak >= 300) ||
-    (_ratio != null && _peak != null && _ratio >= 15 && _peak >= 30) ||
-    (_ratio != null && _peak != null && _ratio >= 8 && _peak >= 20) ||
-    (_peak != null && _peak >= 150);
-  const peak = _peak != null ? _peak.toFixed(1) : null;
-  const ratio = _ratio != null ? Number(_ratio).toFixed(1) : null;
-  const peakD = _peakDate ?? (h as any).peak_date ?? null;
-  const baseTip = `On ${h.rain_days} rainy days checked, this sensor averaged ${pct > 0 ? `about ${absPct}% ${pctDir}` : pct < 0 ? `about ${absPct}% ${pctDir}` : "about the same as"} its neighbors.`;
-  const spikeTip = peak ? `Peak flagged day ${peak} mm${peakD ? ` on ${peakD}` : ""}${ratio ? ` (${ratio}× neighbors)` : ""}. Average is ${h.bias_ratio?.toFixed(2) ?? "—"}×.` : baseTip;
-  if (h.status === "suspect") {
-    if (isSpike && (h.bias_ratio == null || h.bias_ratio <= 1.5)) {
-      return { title: "Needs attention — extreme spike", detail: `One flagged day hit ${peak} mm${peakD ? ` on ${peakD}` : ""}${ratio ? ` (${ratio}× neighbors)` : ""}. Not local rain — likely a sensor fault.`, tip: spikeTip };
-    }
-    if (isSpike) {
-      return { title: "Needs attention — reads high + spikes", detail: `About ${absPct}% ${pctDir} on average and hit ${peak} mm${ratio ? ` (${ratio}× neighbors)` : ""}. Needs calibration and site check.`, tip: spikeTip };
-    }
-    if (pct <= 0) {
-      return { title: "Needs attention — check flagged days", detail: `Flagged ${h.times_flagged} days but average is ${absPct}% ${pctDir} — not a high-bias pattern. Review flagged days for isolated spikes.`, tip: baseTip };
-    }
-    return { title: "Needs attention — reads high", detail: `About ${absPct}% ${pctDir} than nearby stations on rainy days. Likely needs calibration — flagged days may be inflated.`, tip: baseTip };
-  }
-  if (h.status === "watch") {
-    if (isSpike) return { title: "Monitor — extreme spike", detail: `One flagged day hit ${peak} mm${ratio ? ` (${ratio}× neighbors)` : ""}. Check sensor — may be clogged or tipping error.`, tip: spikeTip };
-    if (pct < 0) return { title: "Monitor — check flagged days", detail: `Average is ${absPct}% ${pctDir} — not consistently high. Flagged days still need review.`, tip: baseTip };
-    return { title: "Monitor — slightly high", detail: `A bit higher than neighbors. Keep an eye on it.`, tip: baseTip };
-  }
-  return { title: "Reliable — no pattern found", detail: "Matches neighbors most days. Any flagged days below still need review — tap to compare with neighbors.", tip: `${baseTip} No extreme spikes found.` };
-}
-function humanLowReason(s: StationStuckHealth | null): { title: string; detail: string; tip?: string } | null {
-  if (!s) return null;
-  if (s.status === "insufficient_data") return { title: "Not enough data yet", detail: `Only ${s.rain_days} rainy days so far — need more rain to judge.`, tip: `Only ${s.rain_days} rainy days checked` };
-  const pct = s.zero_rate != null ? Math.round(s.zero_rate * 100) : 0;
-  const streak = s.max_zero_streak ?? 0;
-  const tip = `On ${s.rain_days} rainy days, no reading on ${pct}% of them. Longest run without reading: ${streak} days.`;
-  if (s.status === "suspect") return { title: "Needs attention — often no reading", detail: `No reading on about ${pct}% of rainy days when neighbors recorded rain. May be blocked or offline.`, tip };
-  if (s.status === "watch") return { title: "Monitor — sometimes no reading", detail: `No reading on some rainy days. Some rain may have been missed.`, tip };
-  return { title: "Reliable — no pattern found", detail: "Responds when it rains. Flagged days still stand out and need review, but no ongoing pattern found.", tip };
-}
 
 interface AnomalyReportTabProps {
   result: ProcessResult;
@@ -117,7 +48,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
     return map;
   }, [result.flagged_data]);
 
-  // ── High = only high (is_low=false). Backend anomaly_summary is unified (high+single-day low); we filter here so High never shows silent.
+  // ── High = only high (is_low=false). Backend anomaly_summary is unified (high+single-day low); we filter here so High never shows low readings.
   const highOnlySummary = useMemo(() => {
     return result.anomaly_summary
       .map((s) => {
@@ -175,21 +106,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
 
   const hasHigh = highOnlySummary.length > 0;
   const hasLow = (result.dry_stuck_summary ?? []).length > 0;
-  if (!hasHigh && !hasLow) {
-    return (
-      <div style={{ paddingTop: 16 }}>
-        <div style={{ background: "var(--success-soft)", border: "1px solid color-mix(in oklab, var(--success) 30%, transparent)", borderRadius: "var(--r-xl)", padding: 20, display: "flex", alignItems: "flex-start", gap: 14 }}>
-          <div style={{ height: 36, width: 36, borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--success) 18%, transparent)", display: "grid", placeItems: "center", flexShrink: 0 }}>
-            <AlertTriangle size={16} strokeWidth={2.4} style={{ color: "var(--success)" }} />
-          </div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>No anomalies detected.</h3>
-            <p style={{ margin: "4px 0 0", fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>All readings were within the normal range for their neighbors. Nothing to review.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   const chartData = useMemo(
     () =>
@@ -197,7 +114,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
         date: row.date,
         rainfall: row.rainfall,
         is_anomaly: mode === "high" ? !!row.is_anomaly : false,
-        // Silent single-day lows stay in flagged_data but are NOT drawn in High; only pattern silent (is_dry_stuck) in Silent mode.
+        // Low readings single-day lows stay in flagged_data but are NOT drawn in High; low events (is_dry_stuck) in Low readings mode.
         is_low_anomaly: mode === "high" ? false : !!row.is_dry_stuck,
       })),
     [selectedTimeseries, mode],
@@ -247,7 +164,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
     if (mode === "low" && selectedDryStation && selectedStuck) {
       const pct = selectedStuck.zero_rate != null ? Math.round(selectedStuck.zero_rate * 100) : 0;
       const streak = selectedStuck.max_zero_streak ?? 0;
-      return { left: `${selectedDryStation.stuck_count} silent ${selectedDryStation.stuck_count === 1 ? "day" : "days"}`, right: `${pct}% at 0 on rainy days · longest run ${streak} days` };
+      return { left: `${selectedDryStation.stuck_count} low-reading ${selectedDryStation.stuck_count === 1 ? "day" : "days"}`, right: `${pct}% recorded 0–1 mm on assessed rainy days · longest run: ${streak} successive assessed rainy days` };
     }
     return { left: "", right: "" };
   }, [mode, selectedStation, selectedDryStation, selectedStuck, result.neighbors, rainByStationDate]);
@@ -271,19 +188,29 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
   const visibleEvents = filteredEvents;
 
   const activeStation = mode === "high" ? selectedStation : selectedDryStation;
-  const activeHealth = (() => {
-    if (mode !== "high") return humanLowReason(selectedStuck);
-    let fallback: any = undefined;
-    if (selectedHealth && (selectedHealth.peak_rainfall == null || (selectedHealth as any).max_ratio == null) && (selectedStation as any)?.events?.length) {
-      let maxEv: any = (selectedStation as any).events[0];
-      for (const ev of (selectedStation as any).events) if (ev.rainfall > maxEv.rainfall) maxEv = ev;
-      fallback = { peak: maxEv.rainfall as number, ratio: (selectedHealth as any)?.max_ratio ?? null, peakDate: maxEv.date as string };
-    }
-    return humanHighReason(selectedHealth, fallback);
-  })();
+  const activeHealth = mode === "high" ? highReview(selectedHealth) : lowReview(selectedStuck);
+
+  if (!hasHigh && !hasLow) {
+    return (
+      <div style={{ paddingTop: 16 }}>
+        <div style={{ background: "var(--success-soft)", border: "1px solid color-mix(in oklab, var(--success) 30%, transparent)", borderRadius: "var(--r-xl)", padding: 20, display: "flex", alignItems: "flex-start", gap: 14 }}>
+          <div style={{ height: 36, width: 36, borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--success) 18%, transparent)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <AlertTriangle size={16} strokeWidth={2.4} style={{ color: "var(--success)" }} />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>No anomalies detected.</h3>
+            <p style={{ margin: "4px 0 0", fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>No days met the anomaly rules. Days without enough nearby readings could not be assessed; this does not confirm sensor accuracy.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 14 }}>
+      <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+        Review the flagged days below. High and low readings are checked separately.
+      </p>
       {/* Mode toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         <button
@@ -311,11 +238,11 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
             background: mode === "low" ? "var(--teal-soft)" : "var(--surface)", color: mode === "low" ? "var(--teal-on)" : "var(--text-secondary)",
           }}
         >
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: mode === "low" ? "var(--teal)" : "var(--text-tertiary)", flexShrink: 0 }} /> Silent
+          <span style={{ width: 6, height: 6, borderRadius: 999, background: mode === "low" ? "var(--teal)" : "var(--text-tertiary)", flexShrink: 0 }} /> Low readings
           <span style={{ background: "var(--surface)", padding: "0 5px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", fontSize: 11 }}>{(result.dry_stuck_summary ?? []).length}</span>
         </button>
         <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-          {mode === "high" ? `${result.summary.total_high_anomalies ?? highOnlySummary.reduce((a, s) => a + s.anomaly_count, 0)} high` : `${(result.dry_stuck_summary ?? []).reduce((a, s) => a + s.stuck_count, 0)} total silent pattern events`}
+          {mode === "high" ? `${result.summary.total_high_anomalies ?? highOnlySummary.reduce((a, s) => a + s.anomaly_count, 0)} high` : `${(result.dry_stuck_summary ?? []).reduce((a, s) => a + s.stuck_count, 0)} low-reading days to review`}
         </span>
       </div>
 
@@ -325,33 +252,13 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
         <div style={{ display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", maxHeight: 440, paddingRight: 2, minHeight: 0 }}>
           {mode === "high" ? (
             highOnlySummary.length === 0 ? (
-              <div style={{ padding: "20px 14px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No high anomalies.<br /><span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>Check <b style={{ color: "var(--teal)" }}>Silent</b>.</span></div>
+              <div style={{ padding: "20px 14px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No high anomalies.<br /><span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>Check <b style={{ color: "var(--teal)" }}>Low readings</b>.</span></div>
             ) : (
               highOnlySummary.map((station) => {
                 const selected = station.station_id === selectedId;
                 const barPct = (station.anomaly_count / maxAnomalies) * 100;
                 const h = healthById.get(station.station_id) ?? null;
-                const pct = h?.bias_ratio != null ? Math.round((h.bias_ratio - 1) * 100) : 0;
-                const absPct = Math.abs(pct);
-                const pctDir = pct > 0 ? "higher" : pct < 0 ? "lower" : "same";
-                let peak = (h as any)?.peak_rainfall as number | null;
-                let ratio = (h as any)?.max_ratio as number | null;
-                // Fallback to anomaly_summary for stale health (before peak_rainfall existed)
-                if ((peak == null || ratio == null) && station.events.length > 0) {
-                  let maxEv: any = station.events[0];
-                  for (const ev of station.events) if (ev.rainfall > maxEv.rainfall) maxEv = ev;
-                  if (peak == null) peak = maxEv.rainfall as number;
-                  // ratio stays null if health didn't compute it — spike via peak alone still works
-                }
-                const isSpike = !!h && (
-                  (peak != null && peak >= 300) ||
-                  (ratio != null && peak != null && ratio >= 15 && peak >= 30) ||
-                  (ratio != null && peak != null && ratio >= 8 && peak >= 20) ||
-                  (peak != null && peak >= 150)
-                );
-                const avgLine = !h ? "" : h.rain_days < 5 ? `${h.rain_days} rainy days` : pct === 0 ? `Avg: about same as neighbors` : `Avg: ${absPct}% ${pctDir}`;
-                const peakLine = peak == null ? `No big spike` : isSpike ? `Peak: ${peak.toFixed(1)}mm · ${ratio != null ? ratio.toFixed(1) + "×" : ""} spike` : `Peak: ${peak.toFixed(1)}mm${ratio != null ? ` · ${ratio.toFixed(1)}×` : ""}`;
-                const badgeTitle = !h ? "" : h.status === "normal" ? `On ${h.rain_days} rainy days — reliable. ${avgLine}. ${peakLine}.` : h.status === "insufficient_data" ? `${h.rain_days} rainy days checked` : `On ${h.rain_days} rainy days: ${avgLine}. ${peakLine}.`;
+                const review = highReview(h);
                 return (
                   <button
                     key={station.station_id}
@@ -365,13 +272,13 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                   >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-sm)", fontWeight: 600, color: selected ? "var(--danger)" : "var(--text)", lineHeight: 1 }}>{station.station_id}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)" }}>{station.anomaly_count}×</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)" }}>{station.anomaly_count} days</span>
                     </div>
                     <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--danger)" : "color-mix(in oklab, var(--danger) 50%, transparent)", borderRadius: 99 }} /></div>
                     {h && (
-                      <span title={badgeTitle} style={{ display: "inline-flex" }}>
-                        <Badge tone={healthTone(h.status)} dot={h.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{h.status === "suspect" ? "Needs attention" : h.status === "watch" ? "Monitor" : h.status === "insufficient_data" ? "Not enough data" : "Reliable"}
+                      <span title={`${review.detail} ${review.tip}`} style={{ display: "inline-flex" }}>
+                        <Badge tone={REVIEW_STATUS[h.status].tone} dot={h.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{REVIEW_STATUS[h.status].label}
                         </Badge>
                       </span>
                     )}
@@ -381,7 +288,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
             )
           ) : (
             (result.dry_stuck_summary ?? []).length === 0 ? (
-              <div style={{ padding: "20px 14px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No silent gauges.<br /><span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>Gauges responded on rainy days.</span></div>
+              <div style={{ padding: "20px 14px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No flagged low readings.<br /><span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>No days met the low-reading flag rules.</span></div>
             ) : (
               (result.dry_stuck_summary ?? []).map((station) => {
                 const selected = station.station_id === selectedId;
@@ -400,13 +307,13 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                   >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-sm)", fontWeight: 600, color: selected ? "var(--teal)" : "var(--text)", lineHeight: 1 }}>{station.station_id}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)" }}>{station.stuck_count}×</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)" }}>{station.stuck_count} days</span>
                     </div>
                     <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--teal)" : "color-mix(in oklab, var(--teal) 50%, transparent)", borderRadius: 99 }} /></div>
                     {s && (
-                      <span title={s.status === "normal" ? `On ${s.rain_days} rainy days checked — no pattern of staying at zero. Flagged days still stand out.` : s.status === "insufficient_data" ? `${s.rain_days} rainy days checked` : `On ${s.rain_days} rainy days, stayed at 0 on ${s.zero_rate != null ? Math.round(s.zero_rate * 100) + "%" : ""} of them. Longest run: ${s.max_zero_streak} days.`} style={{ display: "inline-flex" }}>
-                        <Badge tone={stuckTone(s.status)} dot={s.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{s.status === "suspect" ? "Needs check" : s.status === "watch" ? "Watch" : s.status === "insufficient_data" ? "Need more rain" : "No drift"}
+                      <span title={`${lowReview(s).detail} ${lowReview(s).tip}`} style={{ display: "inline-flex" }}>
+                        <Badge tone={REVIEW_STATUS[s.status].tone} dot={s.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{REVIEW_STATUS[s.status].label}
                         </Badge>
                       </span>
                     )}
@@ -441,7 +348,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
               </div>
             </div>
 
-            {/* One-line reliability note — mode-specific so High/Silent stay consistent with the left list */}
+            {/* Station review note — mode-specific so High/Low readings stay consistent with the left list */}
             {activeHealth && (() => {
               const activeStatus = mode === "high" ? selectedHealth?.status : selectedStuck?.status;
               const isSuspect = activeStatus === "suspect";
@@ -451,7 +358,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
               const iconColor = isSuspect ? "var(--danger)" : isWatch ? "var(--warning)" : isNormal ? "var(--text-tertiary)" : "var(--text-tertiary)";
               const titleColor = isNormal ? "var(--text-secondary)" : "var(--text)";
               return (
-                <div title={(activeHealth as any).tip ?? undefined} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--divider)", background: bg }}>
+                <div title={(activeHealth as any).tip ?? undefined} style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", gap: 8, padding: "10px 14px", borderBottom: "1px solid var(--divider)", background: bg }}>
                   <Gauge size={12} strokeWidth={2.4} style={{ color: iconColor, flexShrink: 0 }} />
                   <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: titleColor, whiteSpace: "nowrap" }}>{activeHealth.title}</span>
                   <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>· {activeHealth.detail}</span>
@@ -471,7 +378,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                 <TrendingUp size={12} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
                 <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>Rainfall</span>
                 <span style={{ width: 6, height: 6, borderRadius: 999, background: mode === "high" ? "var(--danger)" : "var(--teal)", flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{mode === "high" ? "flagged days" : "silent days"}</span>
+                <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{mode === "high" ? "flagged days" : "low-reading days"}</span>
                 {hasNeighborData && (
                   <button type="button" onClick={() => setCompareNeighbors((v) => !v)} aria-pressed={compareNeighbors} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 8px", borderRadius: "var(--r-full)", cursor: "pointer", fontSize: 11, fontWeight: 500, border: `1px solid ${compareNeighbors ? "var(--brand)" : "var(--border)"}`, background: compareNeighbors ? "var(--brand-soft)" : "var(--surface)", color: compareNeighbors ? "var(--brand)" : "var(--text-secondary)" }}>
                     <Users size={11} strokeWidth={2.2} />{compareNeighbors ? "Hide neighbors" : "Compare"}
@@ -483,7 +390,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                 neighbors={compareNeighbors ? neighborSeries : []}
                 height={130}
                 anomalyColor={mode === "low" ? (isDark ? "#2DD4BF" : "#0D9488") : undefined}
-                anomalyLabel={mode === "low" ? "Silent" : "Anomaly"}
+                anomalyLabel={mode === "low" ? "Low readings" : "Anomaly"}
               />
             </div>
 
@@ -501,7 +408,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
             {/* Flagged dates — fixed-height scroll + filter, no long list, no 25 clicks for 100+ */}
             <div style={{ padding: "8px 14px 12px", borderTop: comparisonBars.length ? "none" : "1px solid var(--divider)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>{mode === "high" ? "Flagged dates" : "Silent dates"}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>{mode === "high" ? "Flagged dates" : "Low-reading dates"}</span>
                 <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>· {sortedEvents.length} total</span>
                 {filter && (
                   <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>· {filteredEvents.length} matching</span>
@@ -568,7 +475,7 @@ export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabPro
                   const rightLabel = isLowEvent
                     ? `median ${median?.toFixed(1) ?? (event as any).group_median?.toFixed(1) ?? "—"} mm`
                     : isHighMode
-                      ? (times ? `${times} neighbors` : `· LOF ${event.lof_score?.toFixed(1) ?? "—"}`)
+                      ? (times ? `${times} nearby typical rainfall` : (median === 0 ? "Nearby typical rainfall: 0 mm" : "Nearby comparison unavailable"))
                       : `median ${event.group_median?.toFixed(1) ?? "—"} mm`;
                   const tone = isLowEvent ? "teal" : isHighMode ? "danger" : "teal";
                   return (

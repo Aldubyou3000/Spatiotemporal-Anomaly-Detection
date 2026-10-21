@@ -70,8 +70,8 @@ HEALTH_SUSPECT_RATIO = 1.50  # >1.50× → suspect
 HEALTH_SUSPECT_TOP_RATE = 0.70  # or top on >70% of rain days → suspect (was 60% — too easy to hit by chance with 4 stations)
 HEALTH_RAIN_FLOOR_MM = 10.0  # only days where group median ≥ this count as "rain days"
 
-# ── Isolated-spike thresholds (catches "usually fine but one impossible day") ─
-# A sensor can be reliable on average yet have a single physically impossible spike
+# ── Isolated-spike thresholds (catches "small average difference but one large flagged day") ─
+# A sensor can be reliable on average yet have a single large flagged spike
 # (e.g. 775 mm while neighbors saw 1–3 mm). Mean bias hides this; max-ratio / peak catches it.
 # These are checked against *flagged* days only, with a relaxed quorum (≥2 neighbors)
 # so the evidence is not discarded when one neighbor is missing that day (your screenshots).
@@ -161,6 +161,71 @@ def run_pipeline_multi(
     )
 
 
+def _clean_daily_readings(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Enforce daily completeness around the frozen Zone A implementation."""
+    raw = raw_df.copy()
+    rain_col = "rainfall" if "rainfall" in raw.columns else "rainfall_mm"
+    raw["date"] = pd.to_datetime(raw["date"], errors="coerce")
+    raw = raw[raw["date"].notna()].sort_values(["station_id", "date"])
+    duplicates = int(raw.duplicated(["station_id", "date"]).sum())
+    raw = raw.drop_duplicates(["station_id", "date"], keep="first").reset_index(drop=True)
+    raw[rain_col] = pd.to_numeric(raw[rain_col], errors="coerce")
+    present = raw[rain_col].notna()
+    if ((~np.isfinite(raw.loc[present, rain_col])) | (raw.loc[present, rain_col] < 0)).any():
+        raise ZoneProcessingError("Rainfall must be finite and non-negative before daily aggregation.")
+
+    raw["_day"] = raw["date"].dt.normalize()
+    raw["_hour"] = raw["date"].dt.floor("h")
+    raw["_hourly"] = raw["date"].ne(raw["_day"]).groupby(raw["station_id"]).transform("any")
+    stations = raw.groupby("station_id", sort=False)
+    # Only a real one-hour gap with valid measurements exactly one hour either side is recoverable.
+    filled = (
+        raw["_hourly"] & ~present
+        & stations[rain_col].shift().notna() & stations[rain_col].shift(-1).notna()
+        & raw["date"].sub(stations["date"].shift()).eq(pd.Timedelta(hours=1))
+        & stations["date"].shift(-1).sub(raw["date"]).eq(pd.Timedelta(hours=1))
+    )
+    coverage = raw.loc[present | filled].groupby(["station_id", "_day"]).agg(
+        readings=("_hour", "size"), hours=("_hour", "nunique"), hourly=("_hourly", "any"),
+    )
+    usable_days = coverage[~coverage["hourly"] | (coverage["readings"].eq(24) & coverage["hours"].eq(24))]
+    counts = usable_days.groupby(level="station_id").size().reindex(raw["station_id"].unique(), fill_value=0)
+    usable_stations = counts[counts.ge(2)].index
+    if len(usable_stations) == 0:
+        raise ZoneProcessingError(
+            "No station has at least two usable days. Hourly data needs all 24 hours per day; "
+            "only isolated single-hour gaps can be interpolated."
+        )
+
+    try:
+        cleaned, report = process_zone_a(raw)
+    except ValueError as exc:
+        raise ZoneProcessingError(str(exc)) from exc
+    keys = pd.MultiIndex.from_frame(cleaned[["station_id", "date"]])
+    complete = keys.isin(usable_days.index)
+    incomplete_days = int((~complete).sum())
+    keep = complete & cleaned["station_id"].isin(usable_stations) & cleaned[rain_col].notna()
+    cleaned = cleaned.loc[keep].copy().reset_index(drop=True)
+    estimated_days = pd.MultiIndex.from_frame(raw.loc[filled, ["station_id", "_day"]])
+    cleaned["interpolated_flag"] = keys[keep].isin(estimated_days)
+
+    report["rows_filled"] = int(filled.sum())
+    report["rows_excluded"] = report["total_input_rows"] - len(cleaned)
+    report["stations_excluded"] = int(counts.lt(2).sum())
+    report["exclusion_details"].update(
+        incomplete_days=incomplete_days,
+        zero_valid_stations=int(counts.eq(0).sum()),
+        insufficient_readings_stations=int(counts.eq(1).sum()),
+        hourly_duplicates=duplicates,
+    )
+    report["summary_text"] = (
+        f"Output: {len(cleaned)} daily rows from {cleaned['station_id'].nunique()} station(s). "
+        f"Filled {report['rows_filled']} single-hour gaps before daily exclusions. "
+        f"Excluded {incomplete_days} incomplete daily totals and {report['stations_excluded']} station(s)."
+    )
+    return cleaned, report
+
+
 def _run_from_dataframe(
     raw_df: pd.DataFrame, hourly_duplicates: int = 0
 ) -> ProcessResult:
@@ -173,16 +238,8 @@ def _run_from_dataframe(
     raw_total_rows = int(len(raw_df))
     _log_mem(f"after raw_preview={len(raw_preview)}/{raw_total_rows}")
 
-    cleaned, quality_report_dict = process_zone_a(raw_df)
+    cleaned, quality_report_dict = _clean_daily_readings(raw_df)
     _log_mem(f"after Zone A cleaned={len(cleaned)}")
-
-    # Guard: Zone A promises no NaN in rainfall, but a daily-format CSV with an
-    # isolated single-day NaN can survive its gap logic. Drop any residual NaN
-    # rows here so sklearn LOF (which raises on NaN) never sees them. Hourly
-    # uploads are unaffected — those days already vanished at the hourly stage.
-    _rain_col_cleaned = "rainfall" if "rainfall" in cleaned.columns else "rainfall_mm"
-    if _rain_col_cleaned in cleaned.columns and bool(cleaned[_rain_col_cleaned].isna().any()):  # type: ignore[attr-defined]
-        cleaned = cleaned[cleaned[_rain_col_cleaned].notna()].copy().reset_index(drop=True)  # type: ignore[attr-defined]
 
     neighbors_dict = zone_b_haversine_grouping(cleaned)  # type: ignore[arg-type]
     flagged, anomaly_dict = zone_c_lof_anomaly_detection(
@@ -393,17 +450,16 @@ def _compute_station_health(
     station / group_median. The mean of those ratios is `bias_ratio`.
     Classification (bias):
       rain_days < 5                  → insufficient_data
-      bias_ratio > 1.50 or top>60%   → suspect
+      bias_ratio > 1.50 or strictly highest on >70%   → suspect
       bias_ratio > 1.15              → watch
       else                           → normal
 
-    Isolated-spike override (catches "usually fine but one impossible day"):
+    Isolated-spike override (catches "small average difference but one large flagged day"):
       Any flagged day with peak ≥300 mm → suspect
       Any flagged day ≥15× median and ≥30 mm → suspect
       Any flagged day ≥8× median and ≥20 mm, or peak ≥150 mm → watch
-    Spike check uses a relaxed quorum (≥2 group members) and ignores the
-    10 mm median floor, so a 775 mm vs 1 mm day is not discarded when a
-    neighbor is missing (your Napindan screenshots). Spike status wins over
+    Absolute peaks need no neighbor ratio. Ratios require at least two
+    neighbors and their median >=10 mm; dry-neighbor ratios are ignored. Spike status wins over
     bias status (suspect > watch > normal). If spike fires, the Health
     record also carries peak_rainfall / peak_date / max_ratio for the UI.
     """
@@ -466,7 +522,8 @@ def _compute_station_health(
             if own_val is None or group_median < 1e-9:
                 continue
             ratios.append(own_val / group_median)  # type: ignore[operator]
-            if own_val == max(group_vals):
+            # Ties are agreement, not evidence that a station consistently reads high.
+            if own_val > max(day_map[g] for g in neighbor_ids if g in day_map):
                 top_hits += 1
 
         rain_days = len(ratios)
@@ -487,7 +544,7 @@ def _compute_station_health(
             else:
                 bias_status = "normal"
 
-        # ── Spike status (single impossible day) — uses flagged days only ──
+        # ── Spike status (single large flagged day) — uses flagged days only ──
         # Compute max_ratio / peak_rain for this station from its LOF-flagged days.
         # Relaxed quorum (≥2) so a day isn't hidden when one neighbor is missing,
         # and no 10 mm median floor — 775 mm vs 1 mm must still count.
@@ -559,7 +616,7 @@ def _compute_station_health(
                 spike_status = "watch"
 
         # ── Final status: spike wins over bias ───────────────────────────
-        # insufficient_data is overridden if a spike proves the gauge is faulty
+        # A flagged spike can warrant review even with too few rainy days for a bias assessment.
         rank = {"suspect": 3, "watch": 2, "normal": 1, "insufficient_data": 0}
         bias_rank = rank.get(bias_status, 0)
         spike_rank = rank.get(spike_status, 0) if spike_status else 0
@@ -651,7 +708,7 @@ def _compute_stuck_at_zero(
         zero_stuck_dates: list[Any] = []
         events: list[DryStuckEvent] = []
 
-        # Iterate chronologically so streak is calendar streak over rainy days
+        # The run counts assessed rainy days; skipped dates do not establish calendar continuity.
         for d in station_dates:
             day_map = date_groups.get(d, {})
             group_vals = [day_map[g] for g in group_ids if g in day_map]
@@ -771,13 +828,14 @@ def _normalize_quality_report(report: dict[str, Any], hourly_duplicates: int = 0
             zero_valid_stations=int(details.get("zero_valid_stations", 0)),
             insufficient_readings_stations=int(details.get("insufficient_readings_stations", 0)),
             multi_day_gaps=int(details.get("multi_day_gaps", 0)),
+            incomplete_days=int(details.get("incomplete_days", 0)),
             starts_with_nan=int(details.get("starts_with_nan", 0)),
             ends_with_nan=int(details.get("ends_with_nan", 0)),
             duplicates=int(details.get("duplicates", 0)),
             multi_hour_gaps=int(details.get("multi_hour_gaps", 0)),
             hourly_starts_with_nan=int(details.get("hourly_starts_with_nan", 0)),
             hourly_ends_with_nan=int(details.get("hourly_ends_with_nan", 0)),
-            hourly_duplicates=int(hourly_duplicates),
+            hourly_duplicates=int(hourly_duplicates) + int(details.get("hourly_duplicates", 0)),
         ),
         summary_text=str(report.get("summary_text", "")),
     )

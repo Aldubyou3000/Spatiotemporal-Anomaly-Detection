@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Clock, Database, AlertTriangle, Gauge, HelpCircle, MapPin, CheckCircle2, XCircle, ChevronDown, ChevronUp, Layers, Flag, TrendingUp, Zap } from "lucide-react";
+import { Clock, Database, AlertTriangle, Gauge, HelpCircle, MapPin, CheckCircle2, XCircle, ChevronDown, ChevronUp, Layers, Flag } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
-import type { ProcessResult, StationHealth, StationStuckHealth, StationAnomalySummary } from "@/types/zones";
+import { REVIEW_STATUS, overallReviewStatus, highReview, lowReview } from "@/lib/stationReview";
+import type { ProcessResult, HealthStatus, QualityReport } from "@/types/zones";
 
 const StationMap = dynamic(() => import("./StationMap").then((m) => m.StationMap), {
   ssr: false,
@@ -18,7 +19,7 @@ const StationMap = dynamic(() => import("./StationMap").then((m) => m.StationMap
 
 // ─── Info Tooltip ─────────────────────────────────────────────────────────────
 // Portalled + viewport-clamped so it never clips inside cards with overflow:hidden
-// (Sensor Reliability, Data Quality) or near the viewport edge (right-aligned help icons).
+// (Station Review Summary, Data Quality) or near the viewport edge (right-aligned help icons).
 function InfoTip({ text }: { text: string }) {
   const [pos, setPos] = useState<{ x: number; y: number; h: number } | null>(null);
   function handleMouseEnter(e: React.MouseEvent<HTMLSpanElement>) {
@@ -31,7 +32,7 @@ function InfoTip({ text }: { text: string }) {
     const half = W / 2;
     const margin = 10;
     // Clamp horizontal so 230px tooltip never spills off-screen; keeps right-edge
-    // help icons (Sensor Reliability > Key > ?) fully readable.
+    // help icons (Station Review Summary > Key > ?) fully readable.
     const minLeft = margin + half;
     const maxLeft = window.innerWidth - margin - half;
     const left = Math.max(minLeft, Math.min(pos.x, maxLeft));
@@ -137,77 +138,6 @@ function InlineTip({ tip, children }: { tip: string; children: React.ReactNode }
   );
 }
 
-// Badge with portalled tooltip — the badge itself is the hover target (no separate ? icon).
-function KeyBadge({
-  tone,
-  dot,
-  tip,
-  children,
-}: {
-  tone: "danger" | "warning" | "success" | "neutral";
-  dot?: boolean;
-  tip: string;
-  children: React.ReactNode;
-}) {
-  const [pos, setPos] = useState<{ x: number; y: number; h: number } | null>(null);
-  function handleMouseEnter(e: React.MouseEvent<HTMLSpanElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    setPos({ x: r.left + r.width / 2, y: r.top, h: r.height });
-  }
-  const portal = (() => {
-    if (!pos || typeof document === "undefined" || typeof window === "undefined") return null;
-    const W = 230;
-    const half = W / 2;
-    const margin = 10;
-    const minLeft = margin + half;
-    const maxLeft = window.innerWidth - margin - half;
-    const left = Math.max(minLeft, Math.min(pos.x, maxLeft));
-    const estH = 56;
-    const showBelow = pos.y < estH + 12;
-    const top = showBelow ? pos.y + pos.h + 8 : pos.y - 8;
-    const transform = showBelow ? "translate(-50%, 0)" : "translate(-50%, -100%)";
-    return createPortal(
-      <span
-        style={{
-          position: "fixed",
-          left,
-          top,
-          transform,
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--r-lg)",
-          padding: "8px 12px",
-          fontSize: "var(--font-xs)",
-          fontWeight: 400,
-          color: "var(--text)",
-          lineHeight: 1.6,
-          whiteSpace: "normal",
-          width: W,
-          maxWidth: `calc(100vw - ${margin * 2}px)`,
-          boxShadow: "var(--shadow-lg)",
-          zIndex: 9999,
-          pointerEvents: "none",
-          letterSpacing: "0.01em",
-        }}
-      >
-        {tip}
-      </span>,
-      document.body,
-    );
-  })();
-  return (
-    <span style={{ display: "inline-flex" }} onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <Badge tone={tone} dot={dot} style={{ fontSize: 11, padding: "0 7px", height: 19, cursor: "help" }}>
-        {children}
-      </Badge>
-      {portal}
-    </span>
-  );
-}
-
-// ─── Quality Report Card — collapsed by default ───────────────────────────
-import type { QualityReport } from "@/types/zones";
-
 interface IssueRowProps {
   label: string;
   value: number;
@@ -229,6 +159,7 @@ function QualityReportCard({
     qr.exclusion_details.hourly_ends_with_nan +
     qr.exclusion_details.hourly_duplicates;
   const dailyTotal =
+    (qr.exclusion_details.incomplete_days ?? 0) +
     qr.exclusion_details.multi_day_gaps +
     qr.exclusion_details.starts_with_nan +
     qr.exclusion_details.ends_with_nan +
@@ -238,9 +169,9 @@ function QualityReportCard({
     qr.exclusion_details.zero_valid_stations;
 
   const totalExclusions = hourlyTotal + dailyTotal + stationTotal;
-  const allClean = totalExclusions === 0 && qr.stations_excluded === 0;
+  const allClean = totalExclusions === 0 && qr.stations_excluded === 0 && qr.rows_filled === 0;
 
-  const hasGaps = qr.exclusion_details.multi_hour_gaps > 0 || qr.exclusion_details.hourly_starts_with_nan > 0;
+  const hasGaps = hourlyTotal > 0 || dailyTotal > 0;
   const summaryText = allClean
     ? "All stations passed quality checks — nothing dropped."
     : [
@@ -265,7 +196,8 @@ function QualityReportCard({
     {
       section: "Daily",
       rows: [
-        { label: "Missing 2+ days", value: qr.exclusion_details.multi_day_gaps, unit: "rows", desc: "Not used — gap too long", tip: "Daily rows inside 2+ consecutive missing days are not used." },
+        { label: "Incomplete day", value: qr.exclusion_details.incomplete_days ?? 0, unit: "rows", desc: "Not used — incomplete daily total", tip: "Hourly days need one usable reading for each of all 24 hours after allowed single-hour interpolation. Partial daily totals are excluded before detection." },
+        { label: "Missing 2+ days", value: qr.exclusion_details.multi_day_gaps, unit: "rows", desc: "Additional daily gaps removed", tip: "Additional daily rows removed after hourly cleaning. Fully missing days can already have disappeared during hourly cleaning; zero here does not mean all calendar days were recorded." },
         { label: "Missing at start", value: qr.exclusion_details.starts_with_nan, unit: "rows", desc: "Missing at beginning", tip: "Leading missing daily rows are not used." },
         { label: "Missing at end", value: qr.exclusion_details.ends_with_nan, unit: "rows", desc: "Missing at end", tip: "Trailing missing daily rows are not used." },
         { label: "Duplicate day", value: qr.exclusion_details.duplicates, unit: "rows", desc: "Same station + day twice — kept first", tip: "Extra entries for the same station on the same day were removed." },
@@ -275,7 +207,7 @@ function QualityReportCard({
       section: "Station",
       rows: [
         { label: "Less than 2 usable days", value: qr.exclusion_details.insufficient_readings_stations, unit: "stations", desc: "Too few usable days — station not included", tip: "This station had fewer than 2 usable daily readings after cleaning." },
-        { label: "No usable readings", value: qr.exclusion_details.zero_valid_stations, unit: "stations", desc: "No usable data — station not included", tip: "This station had zero usable readings." },
+        { label: "No usable readings", value: qr.exclusion_details.zero_valid_stations, unit: "stations", desc: "No usable daily data — station not included", tip: "This station had no usable daily totals after completeness checks." },
       ],
     },
   ];
@@ -303,7 +235,7 @@ function QualityReportCard({
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: expanded ? "1px solid var(--border)" : "none" }}>
         <Database size={14} strokeWidth={2.2} style={{ color: allClean ? "var(--success)" : hasGaps ? "var(--warning)" : "var(--text-secondary)", flexShrink: 0 }} />
         <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Data Quality</span>
-        <InfoTip text="Whether your CSV passed checks before detection. Most runs are clean — expand for the few rows dropped or filled." />
+        <InfoTip text="Cleaning before detection. Hourly daily totals need all 24 hours after allowed interpolation. Filled-hour counts include estimates in days that were later excluded; expand for dropped hourly rows, incomplete days, and excluded stations." />
         <span style={{ marginLeft: 8, fontSize: "var(--font-xs)", color: allClean ? "var(--success)" : "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
           {summaryText}
         </span>
@@ -332,322 +264,74 @@ function QualityReportCard({
   );
 }
 
-// ── Unified Sensor Reliability — merges Station Health + Stuck at Zero ────
-// Intensity is encoded once and reused: suspect=danger, watch=warning,
-// consistent=success, need_more=neutral — same hues drive the card dots,
-// the badges, and the map halo so the analyst learns one palette.
-
-type UnifiedStatus = "suspect" | "watch" | "normal" | "insufficient_data";
-
-function SensorReliabilityCard({
-  station_health,
-  station_stuck_health,
-  anomaly_summary,
-}: {
-  station_health: StationHealth[];
-  station_stuck_health: StationStuckHealth[];
-  anomaly_summary?: StationAnomalySummary[];
-}) {
-  const [showHealthy, setShowHealthy] = useState(false);
-
-  const merged = useMemo(() => {
-    const byId = new Map<string, { high?: StationHealth; low?: StationStuckHealth; lat: number; lon: number }>();
-    for (const h of station_health) {
-      const cur = byId.get(h.station_id) ?? { lat: h.latitude, lon: h.longitude };
-      cur.high = h;
-      cur.lat = h.latitude; cur.lon = h.longitude;
-      byId.set(h.station_id, cur);
-    }
-    for (const s of station_stuck_health) {
-      const cur = byId.get(s.station_id) ?? { lat: s.latitude, lon: s.longitude };
-      cur.low = s;
-      cur.lat = s.latitude; cur.lon = s.longitude;
-      byId.set(s.station_id, cur);
-    }
-
-    function overall(high?: StationHealth, low?: StationStuckHealth): UnifiedStatus {
-      const hs = high?.status;
-      const ls = low?.status;
-      if (hs === "suspect" || ls === "suspect") return "suspect";
-      if (hs === "watch" || ls === "watch") return "watch";
-      if (hs === "insufficient_data" || ls === "insufficient_data") return "insufficient_data";
-      return "normal";
-    }
-
-    // Fallback for stale pipeline results (before peak_rainfall/max_ratio existed)
-    const anomalyMap = new Map<string, StationAnomalySummary>();
-    for (const s of anomaly_summary ?? []) anomalyMap.set(s.station_id, s);
-
-    const rows = Array.from(byId.entries()).map(([station_id, v]) => {
-      const status = overall(v.high, v.low);
-      const high = v.high;
-      const low = v.low;
-      // Simple, human wording. One headline + one short line. Extra numbers live in the
-      // hover tooltip title so the card stays scannable but still complete on hover.
-      let reason = "";
-      let detail = "";
-      let badgeLabel: string;
-      let badgeTone: "danger" | "warning" | "success" | "neutral" = "neutral";
-      let tip = "";
-      if (status === "suspect" || status === "watch") {
-        const highBad = high && (high.status === "suspect" || high.status === "watch");
-        const lowBad = low && (low.status === "suspect" || low.status === "watch");
-        if (highBad && lowBad) {
-          const hp = high!.bias_ratio != null ? `about ${Math.round((high!.bias_ratio - 1) * 100)}% higher` : "reads high";
-          const lp = low!.zero_rate != null ? `no reading ${Math.round(low!.zero_rate * 100)}% of the time` : `no-reading streak ${low!.max_zero_streak}`;
-          reason = status === "suspect" ? "Needs attention — mixed signals" : "Monitor — mixed signals";
-          detail = status === "suspect"
-            ? `This sensor ${hp} yet also had ${lp}. Likely a sensor fault, not just weather.`
-            : `This sensor ${hp} and had ${lp} when neighbors recorded rain. Worth a site check.`;
-          badgeLabel = status === "suspect" ? "Needs attention" : "Monitor";
-          badgeTone = status === "suspect" ? "danger" : "warning";
-          tip = `On ${high!.rain_days} rainy days checked, this sensor averaged ${high!.bias_ratio?.toFixed(2) ?? "—"}× nearby stations and had ${lp}.`;
-        } else if (highBad) {
-          // Single-line, simple wording — but spike-aware with stale-data fallback
-          let _peak = high!.peak_rainfall as number | null;
-          let _ratio = (high as any).max_ratio as number | null;
-          let _peakDate: any = (high as any).peak_date ?? null;
-          if ((_peak == null || _ratio == null) && anomalyMap.size > 0) {
-            const summary = anomalyMap.get(high!.station_id);
-            if (summary && summary.events.length > 0) {
-              let maxEv: any = summary.events[0];
-              for (const ev of summary.events) if (ev.rainfall > maxEv.rainfall) maxEv = ev;
-              if (_peak == null) {
-                _peak = maxEv.rainfall as number;
-                _peakDate = (maxEv as any).date ?? _peakDate;
-              }
-            }
-          }
-          const isSpike =
-            (_peak != null && _peak >= 300) ||
-            (_ratio != null && _peak != null && _ratio >= 15 && _peak >= 30) ||
-            (_ratio != null && _peak != null && _ratio >= 8 && _peak >= 20) ||
-            (_peak != null && _peak >= 150);
-          const isBiasHigh = high!.bias_ratio != null && high!.bias_ratio > 1.5;
-          const pct = high!.bias_ratio != null ? Math.round((high!.bias_ratio - 1) * 100) : 0;
-          const absPct = Math.abs(pct);
-          const pctDir = pct > 0 ? "higher" : pct < 0 ? "lower" : "about the same as";
-          const peak = _peak != null ? _peak.toFixed(1) : null;
-          const ratio = _ratio != null ? _ratio.toFixed(1) : null;
-          const peakD = _peakDate ?? (high as any).peak_date ?? null;
-          if (high!.status === "suspect") {
-            if (isSpike && !isBiasHigh) {
-              reason = "Needs attention — extreme spike";
-              detail = `One flagged day hit ${peak} mm${peakD ? ` on ${peakD}` : ""}${ratio ? ` (${ratio}× neighbors)` : ""}. Not local rain — likely a sensor fault.`;
-              badgeLabel = "Needs attention";
-              badgeTone = "danger";
-            } else if (isSpike && isBiasHigh) {
-              reason = "Needs attention — reads high + spikes";
-              detail = `About ${absPct}% ${pctDir} on average and hit ${peak} mm${ratio ? ` (${ratio}× neighbors)` : ""}. Needs calibration and site check.`;
-              badgeLabel = "Needs attention";
-              badgeTone = "danger";
-            } else {
-              if (pct <= 0) {
-                reason = "Needs attention — check flagged days";
-                detail = `Flagged ${high!.times_flagged} days but average is ${absPct}% ${pctDir} — review flagged days individually.`;
-              } else {
-                reason = "Needs attention — reads high most days";
-                detail = `Averages ${absPct}% ${pctDir} than nearby stations — not just one wet day. Likely needs calibration.`;
-              }
-              badgeLabel = "Needs attention";
-              badgeTone = "danger";
-            }
-          } else {
-            // watch
-            if (isSpike) {
-              reason = "Monitor — one big spike";
-              detail = `Average ${pct === 0 ? "matches neighbors" : `${absPct}% ${pctDir}`} — but one day hit ${peak} mm. Worth a site check.`;
-              badgeLabel = "Monitor";
-              badgeTone = "warning";
-            } else {
-              if (pct < 0) {
-                reason = "Monitor — check flagged days";
-                detail = `Average is ${absPct}% ${pctDir} — flagged days still need review, but no consistent high bias.`;
-              } else {
-                reason = "Monitor — slightly high on average";
-                detail = `Averages ${absPct}% ${pctDir} — keep an eye on it.`;
-              }
-              badgeLabel = "Monitor";
-              badgeTone = "warning";
-            }
-          }
-          (high as any)._isSpike = isSpike;
-          tip = isSpike
-            ? `Peak flagged day ${peak} mm on ${peakD ?? "a flagged day"} (${ratio ?? "—"}× neighbors). Compared on ${high!.rain_days} rainy days — average is ${high!.bias_ratio?.toFixed(2) ?? "—"}×.`
-            : `Compared on ${high!.rain_days} rainy days. Usually ${pct > 0 ? `${absPct}% ${pctDir}` : pct < 0 ? `${absPct}% ${pctDir}` : "about the same as"} its 3 neighbors.`;
-        } else if (lowBad) {
-          const pct = low!.zero_rate != null ? Math.round(low!.zero_rate * 100) : 0;
-          const streak = low!.max_zero_streak ?? 0;
-          const days = low!.rain_days ?? 0;
-          if (low!.status === "suspect") {
-            reason = "Needs attention — often no reading";
-            detail = `No reading on about ${pct}% of rainy days when neighbors recorded rain. May be blocked or offline.`;
-            badgeLabel = "Needs attention";
-            badgeTone = "danger";
-          } else {
-            reason = "Monitor — sometimes no reading";
-            detail = `No reading on some rainy days when neighbors recorded rain.`;
-            badgeLabel = "Monitor";
-            badgeTone = "warning";
-          }
-          tip = `On ${days} rainy days checked, no reading on ${pct}% of them. Longest run without reading: ${streak} days.`;
-        } else {
-          reason = "";
-          detail = "";
-          badgeLabel = "";
-          tip = "";
-        }
-      } else if (status === "normal") {
-        reason = "Reliable — no pattern found";
-        detail = "Matches neighbors most days. Any flagged days below are smaller spikes — tap chart to compare with neighbors.";
-        badgeLabel = "Reliable";
-        badgeTone = "success";
-        tip = `Checked on ${high?.rain_days ?? low?.rain_days ?? 0} rainy days — no ongoing bias or extreme spikes. Biggest flagged ${high?.peak_rainfall ?? "—"} mm.`;
-      } else {
-        const days = (high?.rain_days ?? low?.rain_days ?? 0);
-        reason = "Not enough rainy days yet";
-        detail = `Only ${days} rainy days so far — need more rain to judge.`;
-        badgeLabel = "Not enough data";
-        badgeTone = "neutral";
-        tip = `Only ${days} rainy days checked — not enough to judge.`;
-        if (high) {
-          (high as any)._avgLine = `Only ${days} rainy days`;
-          (high as any)._avgSub = `Need ~5+ rainy days to judge`;
-          (high as any)._peakLine = high.peak_rainfall != null ? `${(high.peak_rainfall as number).toFixed(1)} mm — not enough context` : `No flagged day yet`;
-          (high as any)._peakSub = `More rain needed to tell if this is a spike`;
-          (high as any)._isSpike = false;
-        }
-      }
-      return { station_id, lat: v.lat, lon: v.lon, high, low, status, reason, detail, badgeLabel, badgeTone, tip };
-    });
-
-    const order: Record<UnifiedStatus, number> = { suspect: 0, watch: 1, insufficient_data: 2, normal: 3 };
-    rows.sort((a, b) => order[a.status] - order[b.status] || a.station_id.localeCompare(b.station_id));
-    return rows;
-  }, [station_health, station_stuck_health, anomaly_summary]);
-
-  const needsReview = merged.filter((r) => r.status === "suspect" || r.status === "watch");
-  const normalRows = merged.filter((r) => r.status === "normal");
-  const insufficientRows = merged.filter((r) => r.status === "insufficient_data");
-  const healthyCount = normalRows.length + insufficientRows.length;
-  const visibleHealthy = showHealthy ? [...normalRows, ...insufficientRows] : [];
-
-  const hasAny = merged.length > 0;
-
-  function dotColor(s: UnifiedStatus): string {
-    if (s === "suspect") return "var(--danger)";
-    if (s === "watch") return "var(--warning)";
-    if (s === "normal") return "var(--success)";
-    return "var(--text-tertiary)";
-  }
+// ── Station review: keep daily flags separate from the overall warning ──────
+function StationReviewCard({ result }: { result: ProcessResult }) {
+  const rows = useMemo(() => {
+    const highs = new Map((result.station_health ?? []).map((h) => [h.station_id, h]));
+    const lows = new Map((result.station_stuck_health ?? []).map((h) => [h.station_id, h]));
+    const highCounts = new Map((result.anomaly_summary ?? []).map((s) => [s.station_id, s.events.filter((e) => !e.is_low).length]));
+    const lowCounts = new Map((result.dry_stuck_summary ?? []).map((s) => [s.station_id, s.stuck_count]));
+    const ids = new Set(result.flagged_data.map((r) => r.station_id));
+    for (const id of highs.keys()) ids.add(id);
+    for (const id of lows.keys()) ids.add(id);
+    const order = { suspect: 0, watch: 1, insufficient_data: 2, normal: 3 };
+    return [...ids].map((id) => {
+      const high = highs.get(id);
+      const low = lows.get(id);
+      const status = overallReviewStatus(high?.status, low?.status);
+      return { id, high, low, status, highCount: highCounts.get(id) ?? high?.times_flagged ?? 0, lowCount: lowCounts.get(id) ?? low?.events.length ?? 0 };
+    }).sort((a, b) => order[a.status] - order[b.status] || a.id.localeCompare(b.id));
+  }, [result]);
+  const [showOthers, setShowOthers] = useState(false);
+  const warnings = rows.filter((r) => r.status === "watch" || r.status === "suspect").length;
+  const limited = rows.filter((r) => r.status === "insufficient_data").length;
+  const primary = rows.filter((r) => r.status !== "normal");
+  const others = primary.length ? rows.filter((r) => r.status === "normal") : [];
+  const visible = primary.length ? [...primary, ...(showOthers ? others : [])] : rows;
 
   return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-        <span style={{ width: 22, height: 22, borderRadius: 6, background: needsReview.length > 0 ? "var(--warning-soft)" : "var(--success-soft)", border: `1px solid ${needsReview.length > 0 ? "var(--warning)" : "var(--success)"}`, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <Gauge size={12} strokeWidth={2.4} style={{ color: needsReview.length > 0 ? "var(--warning-on)" : "var(--success-on)" }} />
-        </span>
-        <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Sensor Reliability</span>
-        <InfoTip text="We check two things separately: 1) Does this sensor usually read higher or lower than its 3 nearest neighbors on rainy days? 2) Was there one single day where it reported way more (or way less) than neighbors? A single big difference can be a storm; higher every day means the sensor needs fixing. Details below separate Average from Biggest day." />
-        <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-          {hasAny ? (needsReview.length > 0 ? `${needsReview.length} need review · ${normalRows.length} reliable` : `All ${merged.length} reliable`) + (insufficientRows.length ? ` · ${insufficientRows.length} not enough data` : "") : "no stations graded"}
-        </span>
+    <section aria-label="Station Review Summary" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+        <Gauge size={15} style={{ color: "var(--text-secondary)" }} />
+        <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Station Review Summary</span>
+        <InfoTip text="Checks for repeated high or low readings and large flagged readings. These are reasons to review a station, not proof of a sensor fault." />
+        <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>{warnings} warnings{limited > 0 ? ` · ${limited} with limited data` : ""}</span>
       </div>
-
-      {/* Key — each color badge is now the hover target. No separate (?) icon. */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          rowGap: 6,
-          padding: "8px 14px",
-          borderBottom: "1px solid var(--divider)",
-          background: "var(--surface-alt)",
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-          Key
-        </span>
-        <span style={{ width: 1, height: 14, background: "var(--border)", flexShrink: 0 }} />
-        <KeyBadge tone="danger" dot tip="Needs attention if either: usually reads much higher than neighbors on most rainy days, OR had one day with way more rain than neighbors (like 300mm+ when neighbors saw almost nothing). That one day is likely a sensor fault, not real rain.">
-          <Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />
-          Needs attention
-        </KeyBadge>
-        <KeyBadge tone="warning" tip="Monitor if a bit higher than neighbors on average, or had one fairly large spike. Worth keeping an eye on, but not urgent.">
-          <Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />
-          Monitor
-        </KeyBadge>
-        <KeyBadge tone="success" tip="Reliable means: matches nearby stations on average, AND never had a huge single-day spike. Any flagged days were smaller and could be normal heavy local rain — tap the chart to compare.">
-          <Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />
-          Reliable
-        </KeyBadge>
-        <KeyBadge tone="neutral" tip="Fewer than ~8 rainy days checked — not enough data to judge.">
-          <Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />
-          Not enough data
-        </KeyBadge>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 16px", background: "var(--surface-alt)", borderBottom: "1px solid var(--divider)" }}>
+        <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-muted)" }}>KEY</span>
+        {Object.entries(REVIEW_STATUS).map(([status, item]) => <Badge key={status} tone={item.tone} title={status === "normal" ? "No repeated warning found. Individual flagged days still need review." : status === "insufficient_data" ? "Too few rainy days to assess this station." : status === "suspect" ? "Review larger differences or stronger patterns." : "Keep an eye on smaller differences."}>{item.label}</Badge>)}
       </div>
-
-      {!hasAny ? (
-        <div style={{ padding: "14px 16px", fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>No reliability data for this run.</div>
-      ) : (
-        <>
-          {/* Needs review — always visible, one concise line per gauge */}
-          {needsReview.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {needsReview.slice(0, 12).map((r) => (
-                <div key={r.station_id} title={r.tip} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 14px", borderBottom: "1px solid var(--divider)" }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 99, background: dotColor(r.status), marginTop: 6, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{r.station_id}</span>
-                      <Badge tone={r.badgeTone} dot={r.status === "suspect"} style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}><Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{r.badgeLabel}</Badge>
-                    </div>
-                    <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: r.status === "suspect" ? "var(--danger)" : "var(--warning-on)", marginTop: 3 }}>{r.reason}</div>
-                    <div style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.5, marginTop: 2 }}>{r.detail}</div>
-                  </div>
-                </div>
-              ))}
-              {needsReview.length > 12 && <div style={{ padding: "8px 14px", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>+{needsReview.length - 12} more need review</div>}
+      {rows.length === 0 && <p style={{ padding: "0 16px", fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>No stations to assess.</p>}
+      {visible.map((r) => {
+        const badge = REVIEW_STATUS[r.status];
+        const high = highReview(r.high);
+        const low = lowReview(r.low);
+        const highWarning = r.high?.status === "suspect" || r.high?.status === "watch";
+        const lowWarning = r.low?.status === "suspect" || r.low?.status === "watch";
+        const detail = [highWarning ? high.detail : "", lowWarning ? low.detail : ""].filter(Boolean).join(" ")
+          || (r.status === "insufficient_data" ? "More rainy-day readings are needed to assess this station." : "No repeated warning found. Review any flagged days.");
+        return (
+          <div key={r.id} title={`${high.tip} ${low.tip}`} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 16px", borderBottom: "1px solid var(--divider)" }}>
+            <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "var(--r-full)", background: r.status === "suspect" ? "var(--danger)" : r.status === "watch" ? "var(--warning)" : "var(--text-tertiary)", marginTop: 6, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>{r.id}</span>
+                <Badge tone={badge.tone}>{badge.label}</Badge>
+                <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>{r.highCount} high · {r.lowCount} low days</span>
+              </div>
+              <div style={{ marginTop: 4, fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.5 }}>{detail}</div>
             </div>
-          ) : (
-            <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, background: "color-mix(in oklab, var(--success) 6%, var(--surface))", borderBottom: healthyCount > 0 ? "1px solid var(--border)" : "none" }}>
-              <CheckCircle2 size={13} style={{ color: "var(--success)", flexShrink: 0 }} />
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--success)", fontWeight: 500 }}>All sensors look consistent — no ongoing bias or extreme spikes. Flagged days below still need review; tap to compare.</span>
-            </div>
-          )}
-
-          {/* Healthy / not enough — collapsed */}
-          {healthyCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowHealthy((v) => !v)}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", background: "var(--surface-alt)", border: "none", borderTop: needsReview.length === 0 ? "none" : "1px solid var(--border)", cursor: "pointer", fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-secondary)", fontFamily: "inherit" }}
-            >
-              {showHealthy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {showHealthy ? "Hide" : "Show"} {healthyCount} {healthyCount === 1 ? "other" : "others"} — {normalRows.length} reliable{insufficientRows.length ? ` · ${insufficientRows.length} not enough data` : ""}
-            </button>
-          )}
-          {showHealthy && visibleHealthy.length > 0 && (
-            <div style={{ borderTop: "1px solid var(--divider)", background: "var(--surface-alt)" }}>
-              {visibleHealthy.map((r) => (
-                <div key={r.station_id} title={r.tip} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid var(--divider)" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: 99, background: dotColor(r.status), flexShrink: 0 }} />
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{r.station_id}</span>
-                  <Badge tone={r.badgeTone} style={{ fontSize: 11 }}><Gauge size={10} strokeWidth={2} style={{ marginRight: 3, verticalAlign: "-1px" }} />{r.badgeLabel}</Badge>
-                  <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", marginLeft: "auto", maxWidth: 360, textAlign: "right", lineHeight: 1.4 }}>{r.detail}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
+          </div>
+        );
+      })}
+      {others.length > 0 && <button type="button" aria-expanded={showOthers} onClick={() => setShowOthers((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "9px 16px", background: "var(--surface-alt)", color: "var(--text-secondary)", border: "none", borderBottom: "1px solid var(--divider)", cursor: "pointer", font: "inherit", fontSize: "var(--font-xs)", textAlign: "left" }}>
+        {showOthers ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        {showOthers ? "Hide" : "Show"} {others.length} other {others.length === 1 ? "station" : "stations"} · no overall warning
+      </button>}
+      <div style={{ padding: "8px 16px", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>Flagged days still need review in Anomaly Report.</div>
+    </section>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface OverviewTabProps {
   result: ProcessResult;
@@ -658,18 +342,12 @@ export function OverviewTab({ result }: OverviewTabProps) {
 
   const stationPoints = useMemo(() => {
     // Sensor status per station — same rule as the card, so dot + badge share one hue.
-    const healthById = new Map<string, string>();
+    const healthById = new Map<string, HealthStatus>();
     for (const h of result.station_health ?? []) healthById.set(h.station_id, h.status);
-    const stuckById = new Map<string, string>();
+    const stuckById = new Map<string, HealthStatus>();
     for (const s of result.station_stuck_health ?? []) stuckById.set(s.station_id, s.status);
-    function gaugeFor(id: string): "suspect" | "watch" | "consistent" | "need_more" | null {
-      const hs = healthById.get(id);
-      const ls = stuckById.get(id);
-      if (hs === "suspect" || ls === "suspect") return "suspect";
-      if (hs === "watch" || ls === "watch") return "watch";
-      if (hs === "insufficient_data" || ls === "insufficient_data") return "need_more";
-      if (hs === "normal" || ls === "normal") return "consistent";
-      return null;
+    function gaugeFor(id: string): "suspect" | "watch" | "normal" | "insufficient_data" {
+      return overallReviewStatus(healthById.get(id), stuckById.get(id));
     }
     const totals = new Map<string, { lat: number; lon: number; readings: number; anomalies: number }>();
     for (const row of flagged_data) {
@@ -741,13 +419,13 @@ export function OverviewTab({ result }: OverviewTabProps) {
               <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{stationPoints.length} stations</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>
-              <InlineTip tip="No flagged days — this station tracked its 3 nearest neighbors. Dots are green; sensor reliability in the popup may still show Monitor/Needs attention.">
+              <InlineTip tip="No flagged days — this station tracked its 3 nearest neighbors. Dots are green; station review summary in the popup may still show Monitor/Needs attention.">
                 <span style={{ display: "flex", alignItems: "center", gap: 4, cursor: "help" }}>
                   <span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--success)", flexShrink: 0 }} />
                   Typical
                 </span>
               </InlineTip>
-              <InlineTip tip="At least one flagged day vs neighbors on that day — red dot with halo. Check Sensor Reliability and Anomaly Report for details.">
+              <InlineTip tip="At least one flagged day vs neighbors on that day — red dot with halo. Check Station Review Summary and Anomaly Report for details.">
                 <span style={{ display: "flex", alignItems: "center", gap: 4, cursor: "help" }}>
                   <span style={{ height: 7, width: 7, borderRadius: "50%", background: "var(--danger)", flexShrink: 0 }} />
                   Flagged
@@ -814,7 +492,7 @@ export function OverviewTab({ result }: OverviewTabProps) {
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               {[
                 { label: "Review flagged stations", tip: "Open Anomaly Report for the per-date comparison." },
-                { label: "Check sensor reliability", tip: "One unusual day is weather; a repeated pattern suggests a sensor issue." },
+                { label: "Read the station summary", tip: "Review repeated differences and large flagged readings, then check local weather and station conditions." },
                 { label: "Create a ticket", tip: "Technicians see it on their phones immediately." },
               ].map(({ label, tip }, idx, arr) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: idx !== arr.length - 1 ? "1px solid var(--divider)" : "none" }}>
@@ -829,7 +507,7 @@ export function OverviewTab({ result }: OverviewTabProps) {
       <style>{`@media (max-width: 900px) { .overview-main { grid-template-columns: 1fr !important; } }`}</style>
 
       {/* ── Row 4: Sensor reliability (unified) ── */}
-      <SensorReliabilityCard station_health={result.station_health ?? []} station_stuck_health={result.station_stuck_health ?? []} anomaly_summary={result.anomaly_summary ?? []} />
+      <StationReviewCard result={result} />
 
       {/* ── Row 5: Data quality (collapsed) ── */}
       <QualityReportCard quality_report={quality_report} />

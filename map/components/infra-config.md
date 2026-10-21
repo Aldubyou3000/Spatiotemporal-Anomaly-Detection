@@ -44,7 +44,7 @@ Note: `api/.env.example` was deleted in the working tree (per `git status`) — 
 - Web: `npx tsc --noEmit` or `npm run build` (also catches type errors).
 - API: no dedicated lint; Pydantic v2 validates schemas at runtime.
 - App: Expo bundler checks TS on `npm start`.
-- **No automated test suites** in any component — all testing is manual.
+- API daily-quality regression suite: from the repository root, `api/.venv/Scripts/python.exe -m unittest discover -s api/tests -v`. Uses stdlib unittest, with independent validation of the tracked HMDAS CSV dataset; no database or running server required. Web/App otherwise rely on type checks and manual testing.
 
 ## Open questions / debt
 - `*.log` not in `.gitignore` → `api/uvicorn.log` ships in the repo.

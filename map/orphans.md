@@ -33,10 +33,6 @@ Files/components with no inbound references from anything else in the map, or th
 
 ## Apparent orphans (need verification before action)
 
-### `api/app/services/hmdas_converter.py`
-**What**: PAGASA/HMDAS → CSV reformatter. Imported only by `zones_service.py` (via `parse_csv_to_dataframe` path) — needs a grep check to confirm whether `zones.py` router actually invokes it on the HMDAS upload branch.
-**Action**: Confirm the multi-file upload path in `routers/zones.py` → `zones_service.run_pipeline_multi` routes HMDAS files through the converter. If wired, it's not an orphan — note the path in the zones component page.
-
 ### `web/src/components/zones/DateComparisonChart.tsx`, `NeighborGroupsTab.tsx`, `StationChart.tsx`
 **What**: Zone pipeline result visualizations. Need a grep to confirm which tab they're mounted from.
 **Action**: Likely mounted from `OverviewTab` or the zones page tab bar. Verify and record inbound refs in the web-zones page.
@@ -91,6 +87,9 @@ These exist in the code but have no dedicated component page. Add pages when the
 ## Not orphans (external entry points — listed for clarity)
 
 These have no inbound *code* references because they are entry points themselves:
+- `api/tests/test_station_review.py` — unittest discovery entry point for summary rules.
+- `web/tests/station-review.test.cjs` — Node entry point; renders the actual overview/report and tests shared review wording.
+- `api/tests/test_zones_quality.py` — discovered by `python -m unittest discover -s api/tests -v`; includes a four-file HMDAS conversion/pipeline integration check.
 - `api/app/main.py` (FastAPI app object — imported by uvicorn, not by repo code)
 - `web/src/app/layout.tsx`, `web/src/app/page.tsx` (Next.js file-route entry points)
 - `App/app/_layout.tsx`, `App/app/(tabs)/*`, `App/app/report.tsx`, `App/app/ticket/[id].tsx` (Expo Router entry points)
@@ -99,6 +98,9 @@ These have no inbound *code* references because they are entry points themselves
 ---
 
 ## Resolved
+
+### `api/app/services/hmdas_converter.py`
+**Resolved**: Confirmed 2026-10-22: zones router → `run_pipeline_multi` → `convert_uploads` → `_clean_daily_readings`. Covered end-to-end by the real-dataset unittest; not an orphan.
 
 ### `Procfile` (repo root)
 **What**: Heroku-style procfile that ran `prototypes/streamlit_app.py` via Streamlit.
@@ -111,3 +113,5 @@ These have no inbound *code* references because they are entry points themselves
 ### `App/components/GoogleIcon.tsx`, `web/src/components/ui/Select.tsx`
 **What**: Added in `bf810a8` / `19527f3` push. `GoogleIcon` used by `web/src/app/(auth)/login/page.tsx` (inline SVG now extracted), `Select` used by `web/src/app/(dashboard)/zones/page.tsx` and tickets pages.
 **Resolved**: No longer orphans — now referenced inbound from dashboard pages. Remove from orphans watchlist.
+
+*2026-10-22 pipeline activity*: `PipelineDiagram.tsx` has an inbound import from the Zones page; not an orphan. Removed the old inline diagram and progress ticker.

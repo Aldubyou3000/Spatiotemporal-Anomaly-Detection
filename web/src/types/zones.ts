@@ -36,6 +36,7 @@ export interface ExclusionDetails {
   zero_valid_stations: number;
   insufficient_readings_stations: number;
   multi_day_gaps: number;
+  incomplete_days?: number;
   starts_with_nan: number;
   ends_with_nan: number;
   duplicates: number;
@@ -77,7 +78,7 @@ export interface StationHealth {
   status: HealthStatus;
   bias_ratio: number | null;
   rain_days: number;
-  top_rate: number | null;
+  top_rate: number | null; // Strictly highest on assessed rainy days; ties excluded.
   times_flagged: number;
   median_group_size: number;
   // Spike evidence — null if no flagged days (new, optional for back-compat)
@@ -100,7 +101,7 @@ export interface StationStuckHealth {
   bias_ratio: number | null;
   rain_days: number;
   zero_rate: number | null;
-  max_zero_streak: number | null;
+  max_zero_streak: number | null; // Successive assessed rainy days, possibly separated by dry days or gaps.
   events: DryStuckEvent[];
 }
 

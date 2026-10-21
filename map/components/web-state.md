@@ -7,7 +7,7 @@ The data layer for the analyst dashboard: React Context for cross-navigation sta
 |---------|-------|-------|
 | `AuthContext.tsx` | `user`, `loading`, `logout()` — redirects to `/login` on failure | Outermost in dashboard layout |
 | `ThemeContext.tsx` | `theme`, `setTheme()` — persisted to `localStorage`, written to `data-theme` on `<html>` | |
-| `ZonesContext.tsx` | All pipeline state: `file`, `contamination`, `running`, `progress`, `activeStage`, `result`, `error`, `configOpen`, `resetSession()` | **Local computation, not server data** — do not SWR-ify |
+| `ZonesContext.tsx` | Pipeline files, `running`, persistent request `abortRef`, `result`, `error`, `configOpen`, and `resetSession()` | **Local computation, not server data** — do not SWR-ify |
 
 ## SWR hooks (`web/src/hooks/`)
 One file per domain. Cache keys are the contract — matchers in `useRealtimeSync` mirror them.
@@ -36,6 +36,8 @@ One file per domain (`auth`, `zones`, `tickets`, `reports`, `technicians`, `audi
 ## Types (`web/src/types/`)
 TypeScript interfaces mirroring backend Pydantic schemas (`auth`, `tickets`, `reports`, `technicians`, `zones`). Shared across components, hooks, and api.
 
+`zones.ExclusionDetails.incomplete_days` is optional on the web (defaults to zero in the view) for older API results; the backend schema defaults it to zero. `QualityReport.rows_filled` counts hourly estimates before daily exclusion, not retained daily rows. See [api-zones.md](./api-zones.md).
+
 ## Canonical presentation (`web/src/lib/`)
 | File | Role |
 |------|------|
@@ -59,3 +61,9 @@ TypeScript interfaces mirroring backend Pydantic schemas (`auth`, `tickets`, `re
 
 ## Open questions / debt
 - `useRealtimeSync` debounces the `audit` resource ~1.5s client-side to absorb bursts. Other resources are not debounced — a rapid burst of ticket updates could trigger many revalidations. Currently fine given low concurrency.
+
+## Station review presentation helper (2026-10-22)
+`lib/stationReview.ts` owns the four review status labels/tones, overall high/low priority, and short visible guidance with detailed evidence in tooltips. Used by overview, report, and map; normal is neutral and missing assessments are insufficient. Existing API status strings are preserved, so no response migration is required. `types/zones.ts` documents strictly-highest frequency and assessed-rainy-day runs. Frontend checks: `node tests/station-review.test.cjs` from web/.
+
+## Pipeline activity (2026-10-22)
+Removed simulated `progress`, `activeStage`, and unused `finalizing` state. The server returns a finished result rather than per-step progress, so PipelineDiagram uses a timed visual A→B→C sequence with continuous activity on only the active card; final results remain response-driven. `abortRef` lives in ZonesProvider so Stop still targets the request after navigating away and back. Reset/provider unmount abort and clear it. Page success/error/finally handlers check controller identity so cancelled requests cannot alter a later run. New runs clear the previous result immediately.

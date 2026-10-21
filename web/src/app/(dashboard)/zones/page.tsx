@@ -34,6 +34,7 @@ import { byWorkload } from "@/lib/technicianWorkload";
 import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { Header } from "@/components/dashboard/Header";
 import { Select } from "@/components/ui/Select";
+import { PipelineDiagram } from "@/components/zones/PipelineDiagram";
 import { FileUpload } from "@/components/zones/FileUpload";
 import { DataTable } from "@/components/zones/DataTable";
 import type { FilterField } from "@/components/zones/DataTable";
@@ -444,138 +445,6 @@ function CreateTicketModal({
   );
 }
 
-// ─── Pipeline Diagram ─────────────────────────────────────────────────────────
-
-function PipelineDiagram({
-  running, activeStage, progress, finalizing, result,
-}: {
-  running: boolean;
-  activeStage: 0 | 1 | 2;
-  progress: number;
-  finalizing: boolean;
-  result: ProcessResult | null;
-}) {
-  const stages = [
-    {
-      key: "a", idx: 0 as const,
-      title: "Zone A", subtitle: "Data Cleaning",
-      desc: "Validation & daily totals",
-      tip: "Prepares your CSV: checks dates and rainfall, builds daily totals, and handles tiny gaps automatically.",
-      icon: <CheckCircle2 size={16} strokeWidth={1.75} />,
-      color: "var(--success)", soft: "var(--success-soft)", on: "var(--success-on)",
-      count: result ? result.cleaned_data.length : null,
-    },
-    {
-      key: "b", idx: 1 as const,
-      title: "Zone B", subtitle: "Spatial Grouping",
-      desc: "Nearby station groups",
-      tip: "Stations are grouped so each reading is compared to its nearby neighbors that same day.",
-      icon: <Clock size={16} strokeWidth={1.75} />,
-      color: "var(--warning)", soft: "var(--warning-soft)", on: "var(--warning-on)",
-      count: result ? result.neighbors.length : null,
-    },
-    {
-      key: "c", idx: 2 as const,
-      title: "Zone C", subtitle: "Anomaly Detection",
-      desc: "Per-day comparison",
-      tip: "Each day's readings are compared within their local group; notably higher values are flagged for review.",
-      icon: <MapPin size={16} strokeWidth={1.75} />,
-      color: "var(--danger)", soft: "var(--danger-soft)", on: "var(--danger-on)",
-      count: result ? result.flagged_data.filter((r) => r.is_anomaly).length : null,
-    },
-  ];
-
-  const hasResult = result !== null;
-
-  // Per-stage progress: each stage owns 1/3 of total progress (0-33, 33-66, 66-100)
-  function stageProgress(idx: number): number {
-    const lo = idx * 33.33;
-    const hi = (idx + 1) * 33.33;
-    if (progress <= lo) return 0;
-    if (progress >= hi) return 100;
-    return ((progress - lo) / (hi - lo)) * 100;
-  }
-
-  return (
-    <div style={{ padding: "20px 24px 24px" }}>
-      {/* Desktop: 3-column grid with connectors. Mobile: stacked single column */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignItems: "stretch" }}>
-        {stages.map((s, i) => {
-          const isDone  = hasResult || finalizing || (running && activeStage > s.idx);
-          const isActive = running && !finalizing && activeStage === s.idx;
-          const isIdle  = !running && !hasResult && !finalizing;
-          const barWidth = isActive ? stageProgress(s.idx) : isDone ? 100 : 0;
-
-          return (
-            <div key={s.key} style={{ display: "contents" }}>
-              <div style={{
-                padding: "16px 18px",
-                borderRadius: "var(--r-lg)",
-                background: isDone ? s.soft : isActive ? "var(--surface-sunken)" : "var(--surface-alt)",
-                border: `1px solid ${isActive || isDone ? s.color : "var(--border)"}`,
-                transition: "background .25s ease, border-color .25s ease",
-                position: "relative", overflow: "hidden",
-              }}>
-                {/* Row 1 */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {/* Icon chip */}
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 8,
-                      background: isDone || isActive ? s.color : "var(--surface-sunken)",
-                      color: isDone || isActive ? "white" : "var(--text-muted)",
-                      display: "grid", placeItems: "center",
-                      flexShrink: 0,
-                      transition: "background .25s ease, color .25s ease",
-                    }}>
-                      {isDone ? <CheckCircle2 size={14} strokeWidth={2.5} /> : s.icon}
-                    </div>
-                    <div style={{ lineHeight: 1.2 }}>
-                      <div style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 5 }}>
-                        {s.title}
-                        <InfoTip text={s.tip} />
-                      </div>
-                      <div style={{ fontSize: "var(--font-xs)", color: isActive || isDone ? s.color : "var(--text-muted)", transition: "color .25s ease" }}>{s.subtitle}</div>
-                    </div>
-                  </div>
-                  {/* Count badge */}
-                  <span style={{
-                    fontSize: "var(--font-xs)", fontWeight: 500,
-                    color: isDone ? s.on : "var(--text-tertiary)",
-                    background: isDone ? s.soft : "transparent",
-                    padding: isDone ? "1px 7px" : "0",
-                    borderRadius: "var(--r-sm)",
-                    fontVariantNumeric: "tabular-nums",
-                    transition: "color .25s ease, background .25s ease",
-                    border: isDone ? `1px solid ${s.color}33` : "1px solid transparent",
-                  }}>
-                    {s.count != null ? s.count.toLocaleString() : "—"}
-                  </span>
-                </div>
-
-                {/* Row 2 — description */}
-                <div style={{ fontSize: "var(--font-sm)", color: isIdle ? "var(--text-tertiary)" : "var(--text-secondary)", lineHeight: 1.4, transition: "color .25s ease" }}>
-                  {s.desc}
-                </div>
-
-                {/* Progress bar */}
-                {(isActive || isDone) && (
-                  <div style={{
-                    position: "absolute", left: 0, bottom: 0, height: 2,
-                    width: `${barWidth}%`,
-                    background: s.color,
-                    transition: "width .3s ease-out",
-                  }} />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ZonesPage() {
@@ -584,9 +453,7 @@ export default function ZonesPage() {
   const {
     files, setFiles,
     running, setRunning,
-    activeStage, setActiveStage,
-    progress, setProgress,
-    finalizing, setFinalizing,
+    abortRef,
     result, setResult,
     error, setError,
     configOpen, setConfigOpen,
@@ -596,7 +463,6 @@ export default function ZonesPage() {
   const [createStation, setCreateStation] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Any file-set change invalidates a previous pipeline result — keep the
   // session coherent when files are added/removed individually after a run.
@@ -605,29 +471,18 @@ export default function ZonesPage() {
     if (result) {
       setResult(null);
       setError(null);
-      setProgress(0);
-      setActiveStage(0);
-      setFinalizing(false);
       setConfigOpen(true);
     }
   }
   const pipelineRef = useRef<HTMLDivElement | null>(null);
 
   function handleCancel() {
-    if (tickerRef.current) clearInterval(tickerRef.current);
-    tickerRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
     setRunning(false);
-    setProgress(0);
-    setActiveStage(0);
-    setFinalizing(false);
     setError(null);
     setConfirmCancel(false);
   }
-
-  // Abort controller for in-flight zones processing (so Stop actually cancels the poll)
-  const abortRef = useRef<AbortController | null>(null);
 
   async function handleProcess() {
     if (files.length === 0 || running) return;
@@ -636,10 +491,8 @@ export default function ZonesPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
+    setResult(null);
     setError(null);
-    setActiveStage(0);
-    setProgress(0);
-    setFinalizing(false);
 
     // Smoothly scroll to the pipeline so the user sees progress immediately
     requestAnimationFrame(() => {
@@ -652,29 +505,9 @@ export default function ZonesPage() {
       });
     });
 
-    // Start the animation ticker — smooth 60fps-ish but deliberately slower so
-    // "Finalizing" doesn't appear in <5s while the real LOF + cold start takes 40-90s.
-    // We clamp at 92% until the server responds, then snap to 100% on done.
-    let p = 0;
-    tickerRef.current = setInterval(() => {
-      // Slow ramp: 0.35 avg per tick => ~20s to reach 92% (matches real 4-file timing)
-      p += 0.25 + Math.random() * 0.5;
-      const clamped = Math.min(92, p);
-      setProgress(clamped);
-      if      (clamped >= 30 && clamped < 62) setActiveStage(1);
-      else if (clamped >= 62)                  setActiveStage(2);
-
-      // Don't auto-finalize at 92% — wait for server. Finalizing is set on success/final poll tick.
-    }, 80);
-
     try {
       const data = await zonesApi.process(files, { signal: controller.signal });
-      if (controller.signal.aborted) return;
-      if (tickerRef.current) clearInterval(tickerRef.current);
-      tickerRef.current = null;
-      setProgress(100);
-      setActiveStage(2);
-      setFinalizing(false);
+      if (controller.signal.aborted || abortRef.current !== controller) return;
       setResult(data);
       setConfigOpen(false);
       const anomalies = data.flagged_data.filter((r) => r.is_anomaly).length;
@@ -685,15 +518,7 @@ export default function ZonesPage() {
         description: `${filePrefix}${data.cleaned_data.length.toLocaleString()} daily readings from ${stationCount} station(s) · ${anomalies.toLocaleString()} anomal${anomalies === 1 ? "y" : "ies"} flagged.`,
       });
     } catch (err) {
-      if (controller.signal.aborted) {
-        if (tickerRef.current) clearInterval(tickerRef.current);
-        tickerRef.current = null;
-        setFinalizing(false);
-        setRunning(false);
-        return;
-      }
-      if (tickerRef.current) clearInterval(tickerRef.current);
-      tickerRef.current = null;
+      if (controller.signal.aborted || abortRef.current !== controller) return;
       let msg = err instanceof Error ? err.message : "Failed to process file.";
       // Friendly cold-start hint: the 90s client timeout + 1 retry can still trip on a
       // just-woken Render instance (50s boot + 40s LOF >90s window). The server's async
@@ -707,10 +532,12 @@ export default function ZonesPage() {
         msg = msg + " All files were sent; if only one station appears, check that the other CSVs are valid HMDAS or combined files (station_id, date, rainfall).";
       }
       setError(msg);
-      setFinalizing(false);
       toast.error("Process failed", { description: msg });
     } finally {
-      if (!controller.signal.aborted) setRunning(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setRunning(false);
+      }
     }
   }
 
@@ -871,25 +698,21 @@ export default function ZonesPage() {
                     fontSize: "var(--font-xs)",
                     fontWeight: 600,
                     letterSpacing: "0.02em",
-                    color: finalizing ? "var(--text-secondary)" : "var(--success-on)",
+                    color: "var(--text-secondary)",
                     padding: "4px 10px",
                     borderRadius: "var(--r-full)",
-                    background: finalizing ? "var(--surface-sunken)" : "var(--success-soft)",
-                    border: finalizing ? "1px solid var(--border)" : "1px solid transparent",
+                    background: "var(--surface-sunken)",
+                    border: "1px solid var(--border)",
                     transition: "all .2s ease",
                   }}
                 >
-                  {finalizing ? (
-                    <Loader2 size={11} strokeWidth={2.5} style={{ color: "var(--text-muted)", animation: "spin 600ms linear infinite" }} />
-                  ) : (
-                    <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--success)", animation: "live-pulse 2s ease-out infinite", flexShrink: 0 }} />
-                  )}
-                  {finalizing ? "Finalizing…" : "Running"}
+                  <Loader2 size={11} strokeWidth={2.5} className="pipeline-spinner" />
+                  Processing…
                 </span>
               )}
             </div>
           </div>
-          <PipelineDiagram running={running} activeStage={activeStage} progress={progress} finalizing={finalizing} result={result} />
+          <PipelineDiagram running={running} result={result} renderTip={(text) => <InfoTip text={text} />} />
         </div>
 
         {/* Results */}

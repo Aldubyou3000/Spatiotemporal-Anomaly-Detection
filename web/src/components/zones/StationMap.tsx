@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef } from "react";
 import L, { type Map as LeafletMap, type CircleMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { REVIEW_STATUS } from "@/lib/stationReview";
+import type { HealthStatus } from "@/types/zones";
 import { useTheme } from "@/context/ThemeContext";
 
-type GaugeStatus = "suspect" | "watch" | "consistent" | "need_more" | null;
+type GaugeStatus = HealthStatus | null;
 
 interface StationPoint {
   station_id: string;
@@ -13,7 +15,7 @@ interface StationPoint {
   longitude: number;
   anomaly_count: number;
   total_readings: number;
-  /** Same intensity that colors the Sensor Reliability badges — keeps map + card in sync. */
+  /** Same intensity that colors the Station Review Summary badges — keeps map + card in sync. */
   gaugeStatus?: GaugeStatus;
 }
 
@@ -110,7 +112,7 @@ export function StationMap({ stations, className, height = 480, style }: Station
     stations.forEach((station) => {
       const isAnomalous = station.anomaly_count > 0;
       // Map is anomaly-first: dot color = flagged vs typical.
-      // Sensor reliability stays in the popup as secondary context (dot + text), not the dot fill.
+      // Station review summary stays in the popup as secondary context (dot + text), not the dot fill.
       const status = (station as { gaugeStatus?: GaugeStatus }).gaugeStatus ?? null;
       const baseColor = isAnomalous ? getCssVar("--danger") || "#DC2626" : getCssVar("--success") || "#16A34A";
 
@@ -147,13 +149,13 @@ export function StationMap({ stations, className, height = 480, style }: Station
         fillOpacity: isAnomalous ? 1 : 0.62,
       }).addTo(map);
 
-      const gaugeLabel = status === "suspect" ? "Sensor needs attention" : status === "watch" ? "Monitor sensor" : status === "consistent" ? "Sensor reliable" : status === "need_more" ? "Not enough data" : "—";
-      const gaugeDesc = status === "suspect" ? "often much higher or often no reading vs neighbors" : status === "watch" ? "a bit off vs neighbors" : status === "consistent" ? "matches neighbors over time" : "";
+      const gaugeLabel = status ? REVIEW_STATUS[status].label : "Not assessed";
+      const gaugeDesc = status === "suspect" ? "Review the flagged readings and station conditions" : status === "watch" ? "Review differences from nearby stations" : status === "normal" ? "Flagged days still need review; accuracy is not confirmed" : "More assessed rainy days are needed";
       const statusHue: Record<NonNullable<GaugeStatus>, string> = {
         suspect: getCssVar("--danger") || "#DC2626",
         watch: getCssVar("--warning") || "#D97706",
-        consistent: getCssVar("--success") || "#16A34A",
-        need_more: getCssVar("--text-tertiary") || "#A1A9B4",
+        normal: getCssVar("--text-secondary") || "#6B7280",
+        insufficient_data: getCssVar("--text-tertiary") || "#A1A9B4",
       };
       const gaugeTint = status ? statusHue[status] : getCssVar("--text-tertiary") || "#6B7280";
       marker.bindPopup(

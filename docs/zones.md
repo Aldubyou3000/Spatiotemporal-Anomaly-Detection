@@ -10,7 +10,7 @@ Execution order is always **Zone A → Zone B → Zone C**.
 **File:** `api/app/zones/zone_a.py`
 **Entry point:** `process_zone_a(raw_data)`
 
-Transforms raw hourly station data into a clean daily dataset ready for spatial analysis. Applies an aggressive exclusion policy: when data quality is uncertain, the row or station is dropped rather than estimated.
+Transforms raw hourly station data into daily rainfall. The reference algorithm is frozen. Both API upload paths call it through `services/zones_service.py::_clean_daily_readings`, which enforces complete daily totals and corrects its quality reporting before Zones B/C.
 
 ### Processing steps (in order)
 
@@ -26,10 +26,22 @@ Transforms raw hourly station data into a clean daily dataset ready for spatial 
 | 8 | **Quality report** — returns a dict with full exclusion statistics and a human-readable summary string |
 
 ### Key rules
-- Single-hour gaps can be interpolated; single-**day** gaps that survive to the daily stage remain NaN (rare edge case).
-- A station needs **at least 2 valid readings** to pass through.
+- Hourly input needs **24 usable readings in 24 distinct hourly slots per calendar day**. Partial days are excluded, including when a timestamp is absent entirely. Extra readings in one hour cannot replace another missing hour.
+- An isolated missing hourly row is recoverable only if valid readings exist exactly one hour before and after it. No interpolation across longer or irregular time gaps.
+- A station needs **at least 2 usable daily totals after completeness filtering**, not two hourly records.
 - No extrapolation: NaN values at the start or end of a series are always excluded, never estimated.
-- Output is guaranteed to contain **no NaN rainfall values**.
+- Already-daily station input (all timestamps at midnight) retains its supplied daily totals; missing daily values are excluded, not interpolated. Hourly completeness cannot be inferred from a pre-aggregated daily total.
+- Hourly/daily detection is per station; one daily-format station can be uploaded alongside hourly stations.
+- Negative or infinite rainfall is rejected before summation, so a positive daily sum cannot hide a negative hourly value.
+- Pipeline output contains **no missing rainfall values**. Direct calls to the frozen Zone A function do not carry the service's completeness guarantees.
+
+### Quality reporting and verification
+- `exclusion_details.incomplete_days`: daily rows produced by Zone A that are excluded for lacking a complete usable total.
+- `rows_filled`: number of permitted single-hour estimates made **before** daily exclusions. Includes estimates in days later excluded; it is not the number of retained interpolated days.
+- `rows_excluded`: difference between the report's post-aggregation input daily-row count and final retained daily-row count. It does not count fully missing calendar days that vanished during hourly cleaning.
+- Station exclusion counters are recalculated after completeness checks. Timestamp duplicates are reported for both single-combined and multi-file uploads.
+- The hourly gap and additional daily-gap counters still come from the frozen algorithm. A zero additional daily-gap count does not establish complete calendar coverage; hourly cleaning can already have removed all readings for a day.
+- Regression suite: from the repository root, run `api/.venv/Scripts/python.exe -m unittest discover -s api/tests -v`. It includes independent CSV/Decimal recalculation of the four supplied HMDAS files: **3,029 complete daily totals**, **319 partial daily totals excluded**, **127 hourly gaps filled**. This verifies cleaning arithmetic and completeness, not LOF accuracy or sensor health.
 
 ### Inputs required
 ```
@@ -139,3 +151,19 @@ flagged daily DataFrame + anomaly summary
 ```
 
 The pipeline is CPU-bound. The API calls it via `run_in_threadpool` to avoid blocking the FastAPI event loop.
+
+
+## Station Review Summary (after Zone C)
+
+This is a separate screening summary, not a sensor accuracy score or a confirmed fault diagnosis. Daily high flags still come from Zone C; individual low-reading events are retained even when the station has no overall warning. The UI uses compact station rows with both flag counts and short guidance. Warning/limited-data rows remain visible; other stations can be expanded. Detailed comparisons and rainy-day coverage are available in tooltips.
+
+A station's comparison group is itself plus its three Zone B neighbors. Average and frequency checks use days when all four report and the group median is at least 10 mm. At least five such days are needed. `bias_ratio` is the mean of daily station/group-median ratios, not a ratio of total rainfall. `top_rate` counts days strictly higher than every neighbor: tied highest values do not count.
+
+- High review: Monitor when `bias_ratio >1.15`; Needs attention when `bias_ratio >1.50` or `top_rate >0.70`.
+- Flagged peaks can raise a warning even with fewer assessed rainy days: >=300 mm, or >=15x neighbors with >=30 mm, means Needs attention; >=150 mm, or >=8x with >=20 mm, means Monitor. Neighbor ratios require at least two reporting neighbors and their median >=10 mm. Absolute peaks require no ratio. Peak rainfall/date and maximum ratio can describe different events, so the UI does not combine them into a single event claim.
+- Low review: recorded 0–1 mm on an assessed rainy day creates an individual low-reading event. This is not a missing measurement. Monitor when mean ratio <0.80, low-day fraction >0.30, or the low-reading run >=3 assessed rainy days. Needs attention when mean ratio <0.50, or low-day fraction >0.70 together with a run >=5. Runs count successive assessed rainy days; skipped dates do not prove consecutive calendar days.
+- Overall priority is the stronger high/low warning. Otherwise either missing/insufficient assessment means Not enough data; only two normal assessments produce No overall warning. Normal uses a neutral badge. No overall warning never clears individual daily flags.
+
+The overview, report, and map share labels in `web/src/lib/stationReview.ts`: Needs attention, Monitor, No overall warning, and Not enough data. The report calls near-zero events Low readings. Daily comparison labels show a rainfall multiple when possible, Nearby typical rainfall: 0 mm when the neighbor median is zero, or comparison unavailable if no neighbor readings exist; they no longer switch to a raw LOF score.
+
+Verification: `api/.venv/Scripts/python.exe -m unittest discover -s api/tests -v` includes station-summary regressions and actual-data cleaning checks. From `web/`, run `node tests/station-review.test.cjs` for shared wording and rendered overview/report cases, then `node node_modules/typescript/bin/tsc --noEmit --incremental false`. No database migration is needed. Rerun the pipeline after updating to recalculate old summaries.

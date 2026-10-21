@@ -67,3 +67,7 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 ## Resolved
 
 *2026-08-31 dead-code pass* — not an extraction but a pruning: removed truly dead imports/exports that were inflating the candidate surface — `reports.py` dead `_signed_url`, `zones.py` dead `require_analyst`, `audit_service` dead `datetime`/`timezone`/`settings`, `events_service` dead `Any`, `zone_a` dead `numpy`, `web` dead `papaparse`/`next-themes`/`react-leaflet` deps, `App` dead `expo-blur`/`expo-print`/`expo-symbols` deps (+ wired `buffer` polyfill + `react-native-url-polyfill`). These are logged here so future lint doesn't re-flag them as candidates.
+
+*2026-10-22 station review* — resolved the review status labels/tones repeated across OverviewTab, AnomalyReportTab, and StationMap with `web/src/lib/stationReview.ts`. Overview/report also share evidence wording. No additional rule-of-3 hits introduced.
+
+*2026-10-22 pipeline activity* — rechecked: no new behavior repeated in three places. Activity is centralized in PipelineDiagram and its CSS; request cancellation is owned by ZonesProvider.
