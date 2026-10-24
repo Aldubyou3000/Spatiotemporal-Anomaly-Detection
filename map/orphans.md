@@ -4,38 +4,13 @@ Files/components with no inbound references from anything else in the map, or th
 
 ---
 
-## Confirmed dead / stale (action recommended)
+## Previously reported stale files
 
-### `start.sh` (repo root)
-**What**: Shell script that runs `prototypes/streamlit_app.py` via Streamlit.
-**Why orphaned**: The Streamlit app was the pre-migration frontend. Migration is complete (per TECHSTACK.md), and **`prototypes/` no longer exists in the repo**. The file references a path that is gone.
-**Action**: Delete, or repoint it at the FastAPI launch command. Keeping it misleads new contributors and breaks `./start.sh`.
-
-### `api/debug_tickets.py`
-**What**: Standalone repro script that exercises `tickets_service` against live Supabase.
-**Why orphaned**: Not imported by anything; not referenced in docs. Developer-only scratch tool.
-**Action**: Keep (useful), but move under `api/scripts/` or add to `.gitignore` if it's not meant to ship. Low priority.
-
-### `api/=4.0.0`
-**What**: A literally-named file `=4.0.0` in `api/` (157 bytes). Almost certainly the result of a botched `pip install foo >=4.0.0` that the shell interpreted as a redirect target.
-**Why orphaned**: No meaning, not imported, not a config file.
-**Action**: Delete. (Verify content first — but it's almost certainly pip output.)
-
-### `api/uvicorn.log`
-**What**: Stale server log captured to disk.
-**Action**: Delete and add `*.log` to `.gitignore` (currently not ignored).
-
-### `test.md` (repo root, tracked, empty)
-**What**: Empty tracked file.
-**Action**: Delete unless it has intended purpose.
+Checked 2026-10-24: `start.sh`, `api/debug_tickets.py`, `api/=4.0.0`, `api/uvicorn.log`, and root `test.md` are absent. Earlier deletion/move recommendations no longer apply. No files were deleted during this map refresh.
 
 ---
 
 ## Apparent orphans (need verification before action)
-
-### `web/src/components/zones/DateComparisonChart.tsx`, `NeighborGroupsTab.tsx`, `StationChart.tsx`
-**What**: Zone pipeline result visualizations. Need a grep to confirm which tab they're mounted from.
-**Action**: Likely mounted from `OverviewTab` or the zones page tab bar. Verify and record inbound refs in the web-zones page.
 
 ### `web/src/components/ui/Card.tsx`
 **What**: Available primitive `Card`/`CardHeader`/`CardTitle`/`CardBody` (68 lines). Currently 0 inbound imports — all pages build cards inline with `div style={{background:"var(--surface)"…}}`. Not deleted; kept as a reusable primitive for future use.
@@ -79,7 +54,7 @@ Files/components with no inbound references from anything else in the map, or th
 
 These exist in the code but have no dedicated component page. Add pages when they become edit targets:
 - `api/app/routers/events.py`, `mobile_events.py` — covered briefly under [api-realtime.md](./components/api-realtime.md); could be split if either grows.
-- `App/components/*` (19 files) — covered collectively under [mobile-shell.md](./components/mobile-shell.md); split when one becomes a frequent edit target.
+- `App/components/*` — covered collectively under [mobile-shell.md](./components/mobile-shell.md); split when one becomes a frequent edit target.
 - `docs/migrations/*` — covered under [db-schema.md](./components/db-schema.md).
 
 ---
@@ -87,6 +62,10 @@ These exist in the code but have no dedicated component page. Add pages when the
 ## Not orphans (external entry points — listed for clarity)
 
 These have no inbound *code* references because they are entry points themselves:
+- `web/tests/anomaly-review.test.cjs` — Node entry point for review identity, queue/high-low selection, pending navigation, immutable exports and spreadsheet text escaping. New `lib/anomalyReview.ts` and report CSS module are imported by live provider/page/report code, not orphans.
+- `api/scripts/reset_ticketing.py` and `docs/RESET_TICKETING.sql` — local untracked manual reset tools, not dead application modules. They can delete ticketing data; not executed or audited in this refresh.
+- `USB_SETUP_GUIDE.md` — local untracked transfer/setup documentation; not imported by the application.
+- `test-data/synthetic-30-days/generate.py` — manual fixture builder; reads the editable daily plan and writes four HMDAS CSVs plus an independent scenario answer key. Documented in that folder's README.
 - `api/tests/test_station_review.py` — unittest discovery entry point for summary rules.
 - `web/tests/station-review.test.cjs` — Node entry point; renders the actual overview/report and tests shared review wording.
 - `api/tests/test_zones_quality.py` — discovered by `python -m unittest discover -s api/tests -v`; includes a four-file HMDAS conversion/pipeline integration check.
@@ -98,6 +77,9 @@ These have no inbound *code* references because they are entry points themselves
 ---
 
 ## Resolved
+
+### Zone result visualization references (2026-10-24)
+The Zones page imports/renders `NeighborGroupsTab`; `AnomalyReportTab` imports/renders both `StationChart` and `DateComparisonChart`. Removed their unverified-orphan warning. See [web-pages-components.md](./components/web-pages-components.md).
 
 ### `api/app/services/hmdas_converter.py`
 **Resolved**: Confirmed 2026-10-22: zones router → `run_pipeline_multi` → `convert_uploads` → `_clean_daily_readings`. Covered end-to-end by the real-dataset unittest; not an orphan.
@@ -115,3 +97,8 @@ These have no inbound *code* references because they are entry points themselves
 **Resolved**: No longer orphans — now referenced inbound from dashboard pages. Remove from orphans watchlist.
 
 *2026-10-22 pipeline activity*: `PipelineDiagram.tsx` has an inbound import from the Zones page; not an orphan. Removed the old inline diagram and progress ticker.
+
+## History references checked (2026-10-25)
+New history API/schema/service are wired through main.py and zones/tickets integration. History pages are Next.js route entry points. History components, API/types/hook and extracted ZoneResults/CreateTicketModal/InfoTip have active imports; none are new orphan candidates. Existing report/ticket and mobile reference paths are retained.
+
+Manual-save references (2026-10-25): RunSaveController is mounted by the dashboard layout; SaveRunModal is private to it; useSaveHistoryRun is consumed by that controller. RunSaveStatus remains mounted by Zones with props-only actions. No new orphan or removed important caller.

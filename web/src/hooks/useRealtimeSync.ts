@@ -35,7 +35,7 @@ function apiBase(): string {
 const AUDIT_DEBOUNCE_MS = 1500;
 
 interface RealtimeSignal {
-  resource: "tickets" | "reports" | "technicians" | "audit";
+  resource: "tickets" | "reports" | "technicians" | "audit" | "history";
   action?: string;
   id?: string | null;
   ts?: number;
@@ -58,13 +58,15 @@ const isArrayKeyWithPrefix =
 
 // Maps a signal resource → which SWR keys to revalidate. Mirrors the existing
 // key conventions (e.g. invalidateTicketLists in useTickets.ts).
+const historyKey: KeyMatcher = (key) => isArrayKeyWithPrefix("/api/history")(key) && !(key as string[])[0].endsWith("/results");
 const RESOURCE_MATCHERS: Record<RealtimeSignal["resource"], KeyMatcher> = {
   // "/api/tickets" prefix covers ticket lists ["/api/tickets",{…}], the open
   // detail ["/api/tickets/<id>"], its /report + /attachments, and the
   // technicians summary ["/api/tickets/technicians"].
-  tickets: isArrayKeyWithPrefix("/api/tickets"),
+  tickets: (key) => isArrayKeyWithPrefix("/api/tickets")(key) || historyKey(key),
   // useReports() key ["/api/reports"] also drives the sidebar pending badge.
-  reports: isArrayKeyWithPrefix("/api/reports"),
+  reports: (key) => isArrayKeyWithPrefix("/api/reports")(key) || historyKey(key),
+  history: historyKey,
   technicians: isArrayKeyWithPrefix("/api/technicians", "/api/tickets/technicians"),
   audit: isArrayKeyWithPrefix("/api/audit"),
 };

@@ -114,6 +114,10 @@ export interface StationDryStuckSummary {
 }
 
 export interface ProcessResult {
+  run_id?: string | null;
+  history_saved?: boolean;
+  history_error?: string | null;
+  history_title?: string | null;
   summary: ProcessSummary;
   quality_report: QualityReport;
   cleaned_data: DailyReading[];

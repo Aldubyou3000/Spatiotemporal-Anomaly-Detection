@@ -12,6 +12,7 @@ export interface ConfirmDialogProps {
   isDangerous?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  extraAction?: React.ReactNode;
 }
 
 export function ConfirmDialog({
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   isDangerous = false,
   onConfirm,
   onCancel,
+  extraAction,
 }: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
 
@@ -105,6 +107,7 @@ export function ConfirmDialog({
           background: "var(--surface-alt)",
           display: "flex",
           justifyContent: "flex-end",
+          flexWrap: "wrap",
           gap: 8,
         }}>
           <button
@@ -156,6 +159,7 @@ export function ConfirmDialog({
           >
             {confirmLabel}
           </button>
+          {extraAction}
         </div>
       </div>
     </div>

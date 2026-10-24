@@ -36,3 +36,6 @@ Append-only, SHA-256 hash-chained, tamper-evident audit log. Writes through the 
 ## Open questions / debt
 - Chain state is in-memory (`_prev_hash`) and rehydrated from the DB on startup. If two workers ever run (multi-worker upgrade), they would each maintain their own `_prev_hash` and fork the chain. Tied to the one-worker constraint.
 - `audit.log()` is fire-and-forget — a background-writer failure logs but does not surface to the caller. Acceptable for audit (the mutation already succeeded) but means a silently-dropped audit row is possible.
+
+## History events (2026-10-25)
+processing_run_saved and processing_review_saved use audit.log and its existing SSE producer. The web Audit page includes readable labels and filter choices for both. Review records include previous revision metadata; original detection output remains untouched.

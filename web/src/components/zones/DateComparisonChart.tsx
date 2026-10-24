@@ -29,11 +29,13 @@ interface DateComparisonChartProps {
   mode?: "high" | "low";
 }
 
+export function comparisonRainfallLabel(rainfall: number | null): string {
+  return rainfall === null ? "No reading" : rainfall.toFixed(1);
+}
+
 /**
  * Single-date comparison: one short bar per station (selected + neighbours).
- * Stations on the x-axis (≤4 labels → no crowding), rainfall on the y-axis.
- * Lets an analyst read a flagged spike against its neighbours on that exact day
- * — a lone tall bar = likely sensor fault; several tall bars = real regional event.
+ * Compares same-day readings; zero and missing rainfall have distinct labels.
  */
 export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateComparisonChartProps) {
   const { theme } = useTheme();
@@ -64,6 +66,7 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
         // recharts can't plot null heights; map "no data" to 0 but flag it for labels/tooltip.
         value: b.rainfall ?? 0,
         noData: b.rainfall === null,
+        label: comparisonRainfallLabel(b.rainfall),
       })),
     [bars],
   );
@@ -102,11 +105,11 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
           formatter={(_value, _name, item) => {
             const p = item?.payload as { value: number; noData: boolean; isSelected: boolean; isAnomaly: boolean };
             if (p?.noData) return ["no data that day", ""];
-            const tag = p?.isSelected ? (p.isAnomaly ? " (anomaly)" : " (this station)") : "";
+            const tag = p?.isSelected ? (p.isAnomaly ? " (system flagged)" : " (this station)") : "";
             return [`${p.value.toFixed(1)} mm${tag}`, ""];
           }}
         />
-        <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false} activeBar={false}>
+        <Bar dataKey="value" minPointSize={2} radius={[4, 4, 0, 0]} isAnimationActive={false} activeBar={false}>
           {data.map((b) => (
             <Cell
               key={b.stationId}
@@ -117,13 +120,11 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
             />
           ))}
           <LabelList
-            dataKey="value"
+            dataKey="label"
             position="top"
             content={(props) => {
-              const { x, y, width, value, index } = props as { x: number; y: number; width: number; value: number; index: number; payload: { noData: boolean } };
-              const isNoData = (props as unknown as { payload: { noData: boolean } }).payload?.noData;
-              // Use the actual bar value from props, not stale data[index], to avoid off-by-one when Recharts reorders
-              const text = isNoData ? "—" : Number(value).toFixed(1);
+              const { x, y, width, value } = props as { x: number; y: number; width: number; value: string };
+              const isNoData = value === "No reading";
               const cx = x + width / 2;
               // Clamp above the plot edge so the tallest bar's label is never clipped.
               const ly = Math.max(y - 5, 10);
@@ -136,7 +137,7 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
                   fontFamily="var(--font-jetbrains)"
                   fill={isNoData ? neutralColor : "var(--text-secondary)"}
                 >
-                  {text}
+                  {value}
                 </text>
               );
             }}

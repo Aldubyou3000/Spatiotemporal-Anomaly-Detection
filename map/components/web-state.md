@@ -7,7 +7,7 @@ The data layer for the analyst dashboard: React Context for cross-navigation sta
 |---------|-------|-------|
 | `AuthContext.tsx` | `user`, `loading`, `logout()` — redirects to `/login` on failure | Outermost in dashboard layout |
 | `ThemeContext.tsx` | `theme`, `setTheme()` — persisted to `localStorage`, written to `data-theme` on `<html>` | |
-| `ZonesContext.tsx` | Pipeline files, `running`, persistent request `abortRef`, `result`, `error`, `configOpen`, and `resetSession()` | **Local computation, not server data** — do not SWR-ify |
+| `ZonesContext.tsx` | Pipeline files, `running`, persistent request `abortRef`, `result`, run-scoped analyst `reviews` / `setReview`, `error`, `configOpen`, and `resetSession()` | **Local computation, not server data** — do not SWR-ify; replacing/resetting a result atomically clears reviews |
 
 ## SWR hooks (`web/src/hooks/`)
 One file per domain. Cache keys are the contract — matchers in `useRealtimeSync` mirror them.
@@ -30,7 +30,7 @@ One file per domain (`auth`, `zones`, `tickets`, `reports`, `technicians`, `audi
 - `reports.ts` — `list`, `approve`.
 - `technicians.ts` — `list`, `create`.
 - `audit.ts` — `list`, `stats`, `exportUrl` (chain `verifyIntegrity` removed — no UI consumer).
-- `zones.ts` — `process()` uses `uploadDirect` with `Authorization: Bearer` to `https://spatiotemporal-api.onrender.com` when on Vercel + `direct_access_token` exists (bypasses Vercel 30s proxy timeout for 4-file 25-45s LOF).
+- `zones.ts` — async upload for all selected files, then `pollJob`: up to 120 attempts, a 1.5-second delay plus request time per attempt (not a hard 180-second deadline). On Vercel, `ensureDirectToken()` requests `/api/auth/direct-token` when necessary, then uses Bearer direct upload/polling; cookie/proxy and legacy sync fallbacks remain. Polling retries transient failures; a missing job surfaces as an error. See [api-zones.md](./api-zones.md).
 - `cn.ts` — classname joiner.
 
 ## Types (`web/src/types/`)
@@ -66,4 +66,24 @@ TypeScript interfaces mirroring backend Pydantic schemas (`auth`, `tickets`, `re
 `lib/stationReview.ts` owns the four review status labels/tones, overall high/low priority, and short visible guidance with detailed evidence in tooltips. Used by overview, report, and map; normal is neutral and missing assessments are insufficient. Existing API status strings are preserved, so no response migration is required. `types/zones.ts` documents strictly-highest frequency and assessed-rainy-day runs. Frontend checks: `node tests/station-review.test.cjs` from web/.
 
 ## Pipeline activity (2026-10-22)
-Removed simulated `progress`, `activeStage`, and unused `finalizing` state. The server returns a finished result rather than per-step progress, so PipelineDiagram uses a timed visual A→B→C sequence with continuous activity on only the active card; final results remain response-driven. `abortRef` lives in ZonesProvider so Stop still targets the request after navigating away and back. Reset/provider unmount abort and clear it. Page success/error/finally handlers check controller identity so cancelled requests cannot alter a later run. New runs clear the previous result immediately.
+Removed simulated provider `progress`, provider `activeStage`, and unused `finalizing` state; `activeStage` is local to PipelineDiagram. The API exposes job status/final results, not per-zone progress, so the diagram uses a timed visual A→B→C sequence with continuous activity on only the active card. Final completion is response-driven. `abortRef` lives in ZonesProvider so Stop still targets browser requests after navigation; it does not cancel the API job. Reset/provider unmount abort and clear it. Page success/error/finally handlers check controller identity so cancelled requests cannot alter a later run. New runs clear the previous result immediately.
+
+## Human review state and downloads (2026-10-24)
+- `lib/anomalyReview.ts` owns station/date JSON keys, `AnomalyReview` / `AnomalyReviews`, decision labels, high/low queue selection, next-pending navigation, and `exportReviewedReadings`. It never changes rainfall, LOF, or system flags.
+- Reviews record `anomaly` / `not_anomaly`, optional note, reviewer ID/name, and UTC timestamp. Absent review means `needs_review` only for a flagged reading; export uses `not_flagged` for other rows, which is not a sensor-accuracy assertion.
+- ZonesProvider stores `{result, reviews}` together; `setResult` and Reset clear reviews atomically. `setReview` accepts only flagged keys in the current result. Data survives dashboard navigation, not refresh/logout/provider unmount. No database writes, shared review history, retraining or audit events were added.
+- A browser beforeunload handler warns while reviews exist; the Zones page confirms before changing files or rerunning, and its Reset dialog names review loss. Download is the retention mechanism. The repeated run-retention paragraph in the report was removed at the user's request; the guards remain.
+- Results CSV exports all station-days with review columns. The collapsed flagged-only table exports both high/low cases with the same metadata, including dismissed and pending rows. Cleaned CSV remains unchanged. `lib/csv.ts` now escapes formula-like text (including analyst notes) and carriage returns while keeping numeric rainfall numeric.
+- Checks: `node tests/anomaly-review.test.cjs` and `node tests/station-review.test.cjs` from web/. The latter renders the real report with CSS modules stubbed only for server rendering.
+- Report-local Undo state survives automatic advancement. Its button is beside the decision buttons (or completion actions), replacing the former banner above the panel. It restores the exact prior review record (or clears it), returns to that station/day and direction, and resets text/station filters so the restored reading is visible. No additional persistence was added.
+- The report's local `showHistory` selects one graph without changing the selected station-day, reviews or export data. Restored local `reviewFilter` handles Needs review / Reviewed / All independently from High / Low; advancing resumes Needs review, and Undo returns to the appropriate review tab.
+
+## Persistent History (2026-10-25; supersedes session-only review retention above)
+The active pipeline result remains local in ZonesContext, but successful API responses now reference a permanent saved run. lib/api/history.ts and hooks/useHistory.ts provide SWR list/detail/result/review/ticket queries. Both Zones and reopened saved results use useHistoryReviews; server revision, actor and time govern saves. Failed/stale writes leave decisions intact, reload reviews and show an error; controls advance/toast only after acknowledgment. A saving lock blocks duplicate writes and beforeunload protects in-flight saves. Undo checks the applied revision before reversing it and records a new server-authenticated change. Results exports wait for saved reviews to load/save. Legacy results without run_id retain the local fallback; new unsaved results stay downloadable and offer server-side retry, with review/ticket creation unavailable until saved. Reset/file changes/rerun warn about unsaved results; saved runs remain in History.
+
+History retry safety: setResult accepts an optional expectedRunId; a late Retry saving response cannot resurrect a reset run or replace a newer run. A regression check covers both cases.
+
+Concurrent confirmation fix: ReviewActions captures the note and save handler at confirmation opening. Its handler retains the SWR revision snapshot; a live update while the dialog is open cannot upgrade that baseline and overwrite another analyst silently. Dirty note drafts survive incoming saved-note changes. history-render.test.cjs reproduces the two-render confirmation race.
+
+## Manual save coordination (2026-10-25)
+ZonesContext now holds saveRequest/leaveRequest plus requestSave/guardUnsaved/cancel methods. A single RunSaveController under ToastProvider coordinates title entry and Save/Discard/Keep working; useSaveHistoryRun performs explicit API mutation, blocks double saves, keeps failures visible and invalidates History only on success. Save before ticket creation resumes the original action only after acknowledgment. Existing run-ID guard prevents late responses replacing another run. Unsaved resets/reruns/file changes and internal anchor navigation are guarded centrally; beforeunload remains native. Saved results continue using server-backed useHistoryReviews; new unsaved runs remain previews until saved.

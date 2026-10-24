@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Activity,
+  Activity, History,
   PanelLeftClose, PanelLeftOpen, ShieldCheck, Ticket, Users,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
@@ -80,6 +80,7 @@ export function Sidebar() {
 
   const nav: NavItem[] = [
     { href: "/zones",       label: "Zones",       icon: Activity },
+    { href: "/history",     label: "History",     icon: History },
     { href: "/tickets",     label: "Tickets",     icon: Ticket, count: pendingCount },
     { href: "/technicians", label: "Technicians", icon: Users },
     { href: "/audit",       label: "Audit Log",   icon: ShieldCheck },

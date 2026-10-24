@@ -337,14 +337,10 @@ export default function TechniciansPage() {
     );
   }
 
-  const activeCount = technicians.filter((t) => t.is_active).length;
-
   return (
     <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
       <Header
         title="Technicians"
-        description={`${activeCount} active · ${technicians.length} total`}
-        live
         actions={
           <Button size="sm" onClick={() => setShowCreate(true)}>
             <Plus size={14} strokeWidth={2.4} />

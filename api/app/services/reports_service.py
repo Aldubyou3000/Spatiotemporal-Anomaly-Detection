@@ -83,13 +83,14 @@ def get_report(sb: Client, report_id: str) -> dict | None:
     return _shape(rows[0])
 
 
-def approve_report(sb: Client, report_id: str, data: ReportApprove) -> dict | None:
+def approve_report(sb: Client, report_id: str, data: ReportApprove, analyst_id: str) -> dict | None:
     from fastapi import HTTPException, status as http_status
 
     now = _now()
     patch = {
         "analyst_approved": True,
         "analyst_approved_at": now,
+        "approved_by": analyst_id,
     }
     if data.analyst_notes is not None:
         patch["analyst_notes"] = data.analyst_notes

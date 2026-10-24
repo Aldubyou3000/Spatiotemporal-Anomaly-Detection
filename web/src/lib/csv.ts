@@ -7,8 +7,9 @@ export function toCsv<T extends Record<string, unknown>>(rows: T[]): string {
   const headers = Object.keys(rows[0]);
   const escape = (v: unknown): string => {
     if (v === null || v === undefined) return "";
-    const s = typeof v === "string" ? v : String(v);
-    if (s.includes(",") || s.includes("\n") || s.includes('"')) {
+    // Analyst notes and other text must not execute as spreadsheet formulas.
+    const s = typeof v === "string" ? (/^\s*[=+@-]|^[\t\r]/.test(v) ? `'${v}` : v) : String(v);
+    if (s.includes(",") || s.includes("\n") || s.includes("\r") || s.includes('"')) {
       return `"${s.replace(/"/g, '""')}"`;
     }
     return s;

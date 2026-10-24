@@ -170,6 +170,8 @@ def publish(event: dict) -> None:
 
 # Maps an audit event name -> the data resource(s) it should invalidate.
 _AUDIT_RESOURCE_MAP: dict[str, tuple[str, ...]] = {
+    "processing_run_saved":   ("history",),
+    "processing_review_saved": ("history",),
     # Tickets
     "ticket_created":         ("tickets",),
     "ticket_updated":         ("tickets",),

@@ -26,3 +26,6 @@ Inspection report review surface for analysts. Submission happens via the mobile
 
 ## Open questions / debt
 - The `approve` mutation updates two tables (report + ticket) — confirm it's atomic or wrapped in a transaction-equivalent at the Supabase level (PostgREST does not provide multi-table transactions). If a partial failure is possible, the report could be marked approved while the ticket stays `pending_review`. Worth a code review.
+
+## Approval attribution (2026-10-25)
+approve_report now takes the authenticated analyst_id from its router and writes approved_by (migration 0008). History uses that profile join for new approvals and shows the latest submitted report even while a follow-up round is awaiting submission. Older unknown approvers remain unknown; no inspection-date field was invented.

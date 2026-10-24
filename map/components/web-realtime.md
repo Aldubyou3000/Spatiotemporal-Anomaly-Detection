@@ -28,3 +28,6 @@ The browser half of the SSE contract. Mounts exactly one `EventSource` to `GET /
 ## Open questions / debt
 - Reconnection behavior relies on the browser's default `EventSource` retry. If the API is down, the dashboard silently goes stale until reconnect. No user-visible "disconnected" indicator exists.
 - Only the `audit` resource is debounced. A sustained burst of ticket mutations would revalidate ticket lists on every signal.
+
+## History integration (2026-10-25)
+Added history resource matching /api/history except immutable /results keys. Ticket and report signals also refresh History list/detail/linked-ticket data and saved reviews. The existing single EventSource remains the only transport.

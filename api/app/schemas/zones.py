@@ -137,6 +137,10 @@ class StationDryStuckSummary(BaseModel):
 
 
 class ProcessResult(BaseModel):
+    run_id: str | None = None
+    history_saved: bool = False
+    history_error: str | None = None
+    history_title: str | None = None
     summary: ProcessSummary
     quality_report: QualityReport
     cleaned_data: list[DailyReading]

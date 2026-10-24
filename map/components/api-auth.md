@@ -4,7 +4,7 @@ Password + Google OAuth (server-side PKCE) for the **web** analyst dashboard. Mo
 
 ## What it does
 - `POST /api/auth/login` — verify credentials against Supabase Auth, enforce `lockout`, issue cookie triplet + CSRF **and** return `access_token`/`refresh_token` in JSON for the web’s `sessionStorage` `direct_access_token` (used by `zones` direct bypass). Also logs `LOGIN_SUCCESS`/`LOGIN_FAILED`/`LOGIN_LOCKED`.
-- `GET /api/auth/me` — current profile (via cookie or `Bearer` via `get_current_user_or_bearer` for diagnostics).
+- `GET /api/auth/me` — current profile via cookie (`get_current_user`). `GET /api/auth/direct-token` also requires that cookie and returns its access token so Google OAuth users can seed the direct-upload token store.
 - `POST /api/auth/logout`, `POST /api/auth/refresh` — rotate tokens; refresh rotates the refresh token itself (anti-reuse); `logout` also clears `direct_access_token` on the web.
 - Google OAuth: `GET /api/auth/oauth/google/start` → 302 to Google; `GET /api/auth/oauth/google/callback/{state}` → exchange, enforce analyst role, set cookies, redirect to `WEB_APP_URL` (`/zones`). Web flow now goes through `vercel.app/api/...` rewrite so `OAUTH_REDIRECT_BASE` is `https://spatiotemporal-anomaly-detection.vercel.app` (first-party).
 
@@ -24,10 +24,10 @@ Password + Google OAuth (server-side PKCE) for the **web** analyst dashboard. Mo
 
 ## Key invariants
 - `state` lives in the URL **path** (`…/callback/{state}`), never a query param — Supabase's `…/callback/**` allowlist glob doesn't reliably span a literal `?`. Same rule applies to mobile OAuth.
-- The PKCE verifier is held **server-side** keyed by `state`; the client never sees it.
+- The PKCE verifier is held **server-side** keyed by `state`; the client never sees it. `_oauth_state_put/pop` prefer Supabase `oauth_states` (migration 0007), then fall back to `api/.oauth_states.json` and process memory. TTL is 600 seconds; fallback stores are capped at 1,000 entries. Failed state lookups have a per-IP cooldown.
 - Refresh tokens rotate on every use → old refresh tokens are immediately invalid.
 - CSRF: double-submit cookie pattern. The `csrf_token` cookie is readable; mutations must echo it in `X-CSRF-Token`. Login itself is CSRF-exempt (no prior session).
 
 ## Open questions / debt
-- The verifier→state map is in-memory (per the PKCE design comment) → restarting the API mid-OAuth-flow invalidates in-flight sign-ins. Acceptable for current scale.
+- OAuth state is no longer memory-only. Database-backed state survives worker restarts; the local file fallback is intended for development reloads and is ignored by Git. Deployment filesystem persistence and live migration application have not been checked; do not treat that fallback as durable deployment storage.
 - `assert_production_safe()` blocks `WEB_APP_URL` on `http://` when OAuth is enabled — easy to forget when flipping `DEV_MODE`.

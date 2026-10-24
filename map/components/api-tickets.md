@@ -38,3 +38,6 @@ The most surface-heavy backend domain: full ticket CRUD plus multi-technician as
 - The cross-router `_signed_url` import is the top shared-candidate (see [shared-candidates.md](../shared-candidates.md) §1).
 - PDF generation runs inline in the router (not in a service or threadpool) — for very large tickets this could block the event loop; currently acceptable because ticket data is small.
 - `ticket_viewed` audit event exists in the catalogue but does not map to a real-time signal (view-only, no state change).
+
+## Processing-run links (2026-10-25)
+Migration 0008 adds optional run_id/reading_date. TicketCreate validates the station belongs to the saved run and any supplied date is a flagged reading; dates without a run are rejected. Both selects return the link and list_tickets accepts a run filter for History. Existing tickets are not inferred/backfilled. Web Tickets supports ?ticket=<id> and a source-run link. Migration must precede deployment because selects use the new columns.

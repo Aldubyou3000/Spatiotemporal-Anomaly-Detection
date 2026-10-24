@@ -10,6 +10,23 @@ Root-level deploy/config surface: how the three processes are launched, what env
 - Optional 4th terminal: `ngrok http 8000` for mobile Google OAuth (HTTPS callback required). Guide at `docs/NGROK_GOOGLE_SIGNIN_GUIDE.md`.
 - Deployed: Vercel Hobby `web` + Render Free `api` (see overview). 4-file pipeline direct-bypasses Vercel via `Bearer` to avoid 30s edge timeout.
 
+### Windows: website only (two terminals)
+Use the actual checkout at `C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection`, not the Desktop copy shown in the failed startup screenshot. Paste each command on its own line. Calling the virtual environment's Python directly avoids needing PowerShell activation.
+
+Terminal 1 — API:
+```powershell
+cd C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Terminal 2 — dashboard:
+```powershell
+cd C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\web
+npm run dev
+```
+
+Open `http://localhost:3000`; keep both terminals open and use Ctrl+C in each to stop. Expo and ngrok are unnecessary for the local website. Ngrok is needed for the documented mobile Google OAuth dev flow. `No module named 'app'` usually means uvicorn started outside `api/`; a missing `api` path means the wrong checkout. The virtual environment interpreter exists here; these commands were documented, not run during this map refresh. Another PC needs its own virtual environment/dependencies.
+
 ## Environment files
 | File | Holds | Owner |
 |------|-------|-------|
@@ -27,11 +44,12 @@ Note: `api/.env.example` was deleted in the working tree (per `git status`) — 
 | File | Status | Note |
 |------|--------|------|
 | `.mcp.json` | Active | Supabase MCP (http) + Railway MCP (stdio) for the dev agent |
-| `start.sh` | **Stale — see [orphans.md](../orphans.md)** | References deleted `prototypes/streamlit_app.py` |
+| `start.sh` | **Absent** (checked 2026-10-24) | Earlier map described a stale Streamlit launcher; no longer present |
 | `Procfile` | **Deleted** (2026-08-21) | Was stale; referenced non-existent `prototypes/streamlit_app.py` |
-| `.gitignore` | Active | Does **not** ignore `*.log` (so `api/uvicorn.log` is tracked) |
+| `.gitignore` | Active | Does **not** ignore `*.log`; `api/uvicorn.log` is currently absent. Ignores `api/.oauth_states.json`. |
 | `skills-lock.json`, `.claude/`, `.obsidian/` | Tooling state | Claude Code / Obsidian — not application code |
-| `REDESIGN_PLAN.md`, `test.md` | Scratch / planning | `test.md` is empty and tracked (orphan) |
+| `REDESIGN_PLAN.md` | Scratch / planning | Earlier `test.md` is currently absent |
+| `USB_SETUP_GUIDE.md`, `api/scripts/reset_ticketing.py`, `docs/RESET_TICKETING.sql` | Local, untracked tools/docs | Transfer instructions and explicitly invoked ticket reset tools; not application startup dependencies. Reset tools were not executed or audited in this refresh. |
 
 ## Dependency manifests
 | Surface | File | Pins to know |
@@ -45,9 +63,20 @@ Note: `api/.env.example` was deleted in the working tree (per `git status`) — 
 - API: no dedicated lint; Pydantic v2 validates schemas at runtime.
 - App: Expo bundler checks TS on `npm start`.
 - API daily-quality regression suite: from the repository root, `api/.venv/Scripts/python.exe -m unittest discover -s api/tests -v`. Uses stdlib unittest, with independent validation of the tracked HMDAS CSV dataset; no database or running server required. Web/App otherwise rely on type checks and manual testing.
+- Web checks: from `web/`, `node tests/station-review.test.cjs` (thirteen rendering/wording/chart-label checks) and `node tests/anomaly-review.test.cjs` (five review/export checks). Synthetic fixture regeneration/self-check: from the root, `api/.venv/Scripts/python.exe test-data/synthetic-30-days/generate.py`; this overwrites generated fixture files but does not run the detector. The earlier 2026-10-24 map-only refresh ran no application checks; the subsequent human-review implementation ran both web suites, TypeScript and an isolated synthetic browser preview.
 
 ## Open questions / debt
-- `*.log` not in `.gitignore` → `api/uvicorn.log` ships in the repo.
-- `api/=4.0.0` stray file (pip-output artifact) — see [orphans.md](../orphans.md).
-- No CI workflow directory in scope (`.github/` exists but contents not audited in this pass — worth a look).
+- `*.log` is not ignored, but the previously mapped `api/uvicorn.log` and `api/=4.0.0` artifacts are absent; do not schedule deletion based on old map entries.
+- `.github/` exists but contains no files in this checkout (checked 2026-10-24); no CI workflow was found.
 - `web/.env.local.example` is not present either; the only env documentation lives in README/CLAUDE.
+
+## History setup and verification (2026-10-25)
+Apply docs/migrations/0008_processing_history.sql before deploying API and web together; see docs/PROCESSING_HISTORY.md. No env/dependency/launch changes. Backend tests include test_history.py; frontend adds history.test.cjs (save/concurrency/undo behavior) and history-render.test.cjs (real page rendering). Production build attempt hit sandbox spawn EPERM; automatic approval for an outside-sandbox retry could not complete due account usage limit. Browser visual check was unavailable because local browser use is disabled in Work settings.
+
+Final History verification: the approved retry and final production rebuild both passed after usage resumed. TypeScript passed; 39 backend and 27 frontend checks passed. Browser settings still prevent visual QA; SQL migration/live Supabase round trip remain unverified.
+
+## Manual save update (2026-10-25)
+Migration 0009_history_titles.sql must follow 0008 before deploying updated API/web. Processing no longer needs History tables until the analyst explicitly saves. Full setup/preview retention behavior is documented in docs/PROCESSING_HISTORY.md. Local browser preview remains disabled by Work settings.
+
+## Supabase MCP connection (2026-10-25)
+User installed/authorized the Supabase plugin in Codex. MCP project listing and a read-only History SQL query succeeded against `Spatiotemporal Anomaly Detection` (`dygsorinzcxaolapswal`), matching the API's configured Supabase host. This connection uses the plugin; no `.mcp.json` or Codex configuration file was changed. History tables/view are live; this check does not establish a full save/review/ticket workflow test.

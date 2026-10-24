@@ -7,6 +7,7 @@ Technician-facing endpoints under `/api/mobile/*`. Bearer token auth. Parallel t
 - Mobile OAuth: `GET /api/mobile/auth/oauth/google/start?return_url=…` → 302; `GET /api/mobile/auth/oauth/google/callback/{state}` → deep-links tokens back via `spatiotemporal://`.
 - Tickets: `GET /api/mobile/tickets` (own only), `GET /api/mobile/tickets/{id}`, `PATCH .../status`, attachments, `report-id`, `follow-up-context`, `pdf`.
 - Reports: `POST /api/mobile/reports` (submit), `GET .../photos`, `POST .../photos` (upload).
+- Photo upload computes SHA-256, reuses an existing same-report photo when the hash matches, and stores `content_hash` for new uploads (migration 0006). If the column is unavailable, it falls back without deduplication. See [db-schema.md](./db-schema.md).
 - Activity: `GET /api/mobile/activity` (technician's own audit feed, ticket events only).
 - SSE: `GET /api/mobile/events` — content-free nudges (see [api-realtime.md](./api-realtime.md)).
 

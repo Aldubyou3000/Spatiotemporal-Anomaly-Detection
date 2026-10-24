@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from .core.config import settings
 from .core.limiter import limiter
-from .routers import audit, auth, events, mobile, mobile_events, reports, technicians, tickets, zones
+from .routers import audit, auth, events, history, mobile, mobile_events, reports, technicians, tickets, zones
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -76,6 +76,7 @@ async def security_headers(request: Request, call_next):
 
 app.include_router(auth.router)
 app.include_router(zones.router)
+app.include_router(history.router)
 app.include_router(tickets.router)
 app.include_router(reports.router)
 app.include_router(technicians.router)

@@ -36,3 +36,6 @@ In-process async pub/sub broker feeding two Server-Sent Events endpoints (web co
 ## Open questions / debt
 - The drop-oldest queue policy means a slow client can miss intermediate signals — acceptable because signals are idempotent ("latest state wins" via revalidation), but worth understanding before debugging "why didn't the dashboard update instantly."
 - `_AUDIT_RESOURCE_MAP` and the web key matchers in `useRealtimeSync.ts` are coupled by convention. If a new resource is added to the map but not to the matcher, the signal fires but nothing happens on the client. There's no compile-time check.
+
+## History signals (2026-10-25)
+processing_run_saved and processing_review_saved map to the analyst-only history resource through the existing audit hook. Mobile projection remains tickets/reports only. Web also revalidates history metadata/tickets on ticket/report signals; immutable result snapshots are excluded.

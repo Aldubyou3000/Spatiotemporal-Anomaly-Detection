@@ -22,7 +22,8 @@ grep "^## \[" map/log.md | tail -5
 - [api-app.md](./components/api-app.md) — `app/main.py`: FastAPI app, router wiring, middleware, startup/shutdown, the production-safe guard.
 - [api-core.md](./components/api-core.md) — `app/core/`: config, auth dependencies, JWT/fingerprint crypto, lockout, DB error translation. The lowest layer.
 - [api-auth.md](./components/api-auth.md) — `routers/auth.py` + `services/auth_service.py`: web password + Google OAuth (server-side PKCE), httpOnly cookies, CSRF.
-- [api-zones.md](./components/api-zones.md) — `routers/zones.py` + `services/zones_service.py` + `hmdas_converter.py` + frozen `zones/`: the CSV→clean→group→LOF pipeline.
+- [api-zones.md](./components/api-zones.md) — CSV→complete daily totals→three geographic neighbors→same-day high LOF / low rules; async jobs, restart-related job loss, station review, and editable synthetic fixture.
+- [api-history.md](./components/api-history.md) — Saved processing runs, versioned analyst decisions, ticket/inspection links, manual saves/titles, migrations 0008–0009 and retention boundaries.
 - [api-tickets.md](./components/api-tickets.md) — `routers/tickets.py` + `services/tickets_service.py`: ticket CRUD, multi-tech assignment, follow-up, cancel, attachments, PDF.
 - [api-reports.md](./components/api-reports.md) — `routers/reports.py` + `services/reports_service.py`: analyst report review + approve (verifies parent ticket).
 - [api-technicians.md](./components/api-technicians.md) — `routers/technicians.py` + `services/technicians_service.py`: analyst-only technician account management.
@@ -32,16 +33,16 @@ grep "^## \[" map/log.md | tail -5
 
 ### Web frontend (`web/`)
 - [web-shell.md](./components/web-shell.md) — `app/` + `middleware.ts`: route groups, dashboard layout provider stack, cookie route guard, CSRF double-submit.
-- [web-state.md](./components/web-state.md) — `context/`, `hooks/`, `lib/api/`, `types/`, `lib/ticketStatus.ts`: SWR data layer + canonical presentation. **Pages use hooks, never `lib/api/` directly.**
+- [web-state.md](./components/web-state.md) — Context/SWR/API/types, canonical presentation, run-scoped analyst review state and review-aware CSV exports.
 - [web-realtime.md](./components/web-realtime.md) — `components/providers/RealtimeProvider.tsx` + `hooks/useRealtimeSync.ts`: the single `EventSource` → SWR `globalMutate` matcher bridge.
-- [web-pages-components.md](./components/web-pages-components.md) — `(dashboard)/*` pages + `components/` (ui, dashboard, zones, tickets, providers): feature pages and props-only building blocks.
+- [web-pages-components.md](./components/web-pages-components.md) — Dashboard pages and building blocks; compact anomaly review queue/detail, retained history/comparisons/tickets/table, themed responsive styling.
 
 ### Mobile app (`App/`)
 - [mobile-shell.md](./components/mobile-shell.md) — `app/`, `context/AppContext.tsx`, `services/api.ts`, `hooks/`, `lib/`, `constants/`: Expo shell. **Uses React Query 5 (not SWR).** Persisted cache, Bearer auth, `react-native-sse` real-time.
 
 ### Cross-cutting
-- [db-schema.md](./components/db-schema.md) — `docs/migrations/` + Supabase: tables referenced in code, the 5 hand-applied SQL migrations, RLS/app-layer role agreement.
-- [infra-config.md](./components/infra-config.md) — Root configs, env files, launch order, dependency pins, `.mcp.json`, type-check/test commands.
+- [db-schema.md](./components/db-schema.md) — `docs/migrations/` + Supabase: tables referenced in code, nine hand-applied SQL migrations, RLS/app-layer role agreement; live application unverified.
+- [infra-config.md](./components/infra-config.md) — Root configs, env files, Windows two-server website startup, full launch order, dependency pins, `.mcp.json`, type-check/test commands.
 
 ---
 

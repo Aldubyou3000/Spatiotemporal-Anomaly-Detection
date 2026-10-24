@@ -8,6 +8,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { PageTransition } from "@/components/dashboard/PageTransition";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
+import { RunSaveController } from "@/components/history/RunSaveController";
 
 function shouldRetryOnError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -38,6 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }}>
           <RealtimeProvider>
             <ToastProvider>
+              <RunSaveController />
               <div className="h-screen flex bg-bg text-text relative overflow-hidden">
                 <div aria-hidden className="fixed inset-0 grid-bg opacity-40 pointer-events-none" />
                 <Sidebar />

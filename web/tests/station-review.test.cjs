@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 const React = require("react");
-const { renderToStaticMarkup } = require("react-dom/server");
+const { renderToStaticMarkup: renderMarkup } = require("react-dom/server");
 
 // Use the installed compiler to exercise the actual TS helpers and components without a test dependency.
 const cache = new Map();
@@ -18,11 +18,16 @@ function load(source) {
   const compiled = ts.transpileModule(fs.readFileSync(file, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true, target: ts.ScriptTarget.ES2017 },
   }).outputText;
-  const localRequire = (name) => name === "next/dynamic" ? () => () => null
+  const localRequire = (name) => name.endsWith(".css") ? {} : name === "next/dynamic" ? () => () => null
     : name.startsWith("@/") ? load(name.slice(2))
     : name.startsWith(".") ? load(path.relative(path.resolve(__dirname, "../src"), path.resolve(path.dirname(file), name))) : require(name);
   new Function("require", "module", "exports", compiled)(localRequire, mod, mod.exports);
   return mod.exports;
+}
+
+function renderToStaticMarkup(element) {
+  const { ToastProvider } = load("components/ui/Toast");
+  return renderMarkup(React.createElement(ToastProvider, null, element));
 }
 
 const { REVIEW_STATUS, overallReviewStatus, highReview, lowReview } = load("lib/stationReview");
@@ -74,18 +79,107 @@ test("overview reports limited data without an all-reliable success message", ()
   assert.doesNotMatch(html, /All .*reliable|All sensors look consistent/);
 });
 
-test("anomaly report explains zero-neighbor rainfall instead of switching to a huge LOF number", () => {
+test("review workspace keeps zero-neighbor evidence, decisions and optional history without the station banner", () => {
   const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
   const { ThemeProvider } = load("context/ThemeContext");
   const result = fixture();
   result.neighbors = { ExampleStation: ["B", "C", "D"].map((neighbor_id) => ({ neighbor_id, distance_km: 1 })) };
   result.anomaly_summary[0].events = [{ date: "2023-01-01", rainfall: 70, lof_score: -30623.9, is_low: false }];
   result.flagged_data = ["ExampleStation", "B", "C", "D"].map((station_id) => ({ station_id, date: "2023-01-01", rainfall: station_id === "ExampleStation" ? 70 : 0, is_anomaly: station_id === "ExampleStation" }));
-  const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(AnomalyReportTab, { result })));
+  const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(AnomalyReportTab, { result, reviews: {}, reviewer: { id: "u1", full_name: "Analyst One", username: "one" }, onReview: () => {}, onCreateTicket: () => {} })));
   assert.match(html, /Nearby typical rainfall: 0 mm/);
-  assert.match(html, /No overall warning for high readings/);
-  assert.match(html, /Review the flagged days below/);
-  assert.doesNotMatch(html, /LOF -30623|Reliable|No drift/);
+  assert.match(html, /Mark as anomaly/);
+  assert.match(html, /Mark as not anomaly/);
+  assert.match(html, /Skip for now/);
+  assert.match(html, /Review flagged readings/);
+  assert.match(html, /How would you mark this reading/);
+  assert.match(html, /Same-day rainfall/);
+  assert.match(html, /aria-label="Show rainfall history"/);
+  assert.equal((html.match(/recharts-responsive-container/g) ?? []).length, 1, "only one chart is displayed at a time");
+  assert.doesNotMatch(html, /Compare nearby stations, then record your decision|Reviews apply to this run/);
+  assert.match(html, /Create ticket/);
+  assert.match(html, /Needs review/);
+  assert.doesNotMatch(html, /No overall warning for high readings|LOF -30623|Reliable|No drift/);
+});
+
+test("review progress counts both high and low readings, independently of the selected direction", () => {
+  const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+  const { ThemeProvider } = load("context/ThemeContext");
+  const result = fixture();
+  result.neighbors = {};
+  result.flagged_data = [
+    { station_id: "A", date: "2023-01-01", rainfall: 50, is_anomaly: true },
+    { station_id: "B", date: "2023-01-01", rainfall: 0, is_low_anomaly: true },
+  ];
+  const reviews = { '["B","2023-01-01"]': { status: "not_anomaly", note: "", reviewed_by: "Analyst", reviewed_at: "2026-10-24T00:00:00Z" } };
+  const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(AnomalyReportTab, { result, reviews })));
+  assert.match(html, /aria-label="1 of 2 readings reviewed"/);
+  assert.match(html, /aria-label="Review status"/);
+  assert.match(html, /Reviewed/);
+  assert.doesNotMatch(html, /All high|All low/);
+  assert.match(html, /aria-label="System flag type"/);
+});
+
+test("comparison labels distinguish recorded zero from missing rainfall", () => {
+  const { comparisonRainfallLabel } = load("components/zones/DateComparisonChart");
+  assert.equal(typeof comparisonRainfallLabel, "function");
+  assert.equal(comparisonRainfallLabel(0), "0.0");
+  assert.equal(comparisonRainfallLabel(null), "No reading");
+  assert.equal(comparisonRainfallLabel(12.5), "12.5");
+});
+
+test("detection details separate selected-day evidence from useful station history", () => {
+  const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+  const { ThemeProvider } = load("context/ThemeContext");
+  const result = fixture({ ...high, rain_days: 64, bias_ratio: 0.94, top_rate: 0.25, peak_rainfall: 775.5, peak_date: "2023-07-09" });
+  result.neighbors = {};
+  result.flagged_data = [{ station_id: "ExampleStation", date: "2023-01-01", rainfall: 22, latitude: 14.6, longitude: 121, is_anomaly: true, lof_score: -3.167 }];
+  const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(AnomalyReportTab, { result })));
+  const day = html.split('aria-label="Selected-day evidence"')[1]?.split("</section>")[0] ?? "";
+  const period = html.split('aria-label="Station pattern across uploaded dates"')[1]?.split("</section>")[0] ?? "";
+  const periodText = period.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+  assert.match(day, /Why flagged/);
+  assert.match(day, /-3.167/);
+  assert.match(day, /Local Outlier Factor/);
+  assert.match(day, /near -1/);
+  assert.match(day, /-3 stands out more than -1/);
+  assert.match(day, /-2 or lower/);
+  assert.match(day, /not an accuracy percentage/);
+  assert.doesNotMatch(day, /775\.5|2023-07-09/);
+  assert.match(periodText, /64/);
+  assert.match(periodText, /6% lower/);
+  assert.match(periodText, /25%/);
+  assert.match(periodText, /775\.5/);
+  assert.match(periodText, /2023-07-09/);
+  assert.match(period, /compare each day, then average/);
+  assert.match(period, /Equal readings do not count/);
+  assert.match(period, /1 in 4/);
+});
+
+test("low-reading details retain low-day frequency and run length without attributing the flag to LOF", () => {
+  const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+  const { ThemeProvider } = load("context/ThemeContext");
+  const result = fixture();
+  result.neighbors = {};
+  result.flagged_data = [{ station_id: "ExampleStation", date: "2023-01-02", rainfall: 0, is_low_anomaly: true, lof_score: -1 }];
+  const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(AnomalyReportTab, { result })));
+  const day = html.split('aria-label="Selected-day evidence"')[1]?.split("</section>")[0] ?? "";
+  const period = html.split('aria-label="Station pattern across uploaded dates"')[1]?.split("</section>")[0] ?? "";
+  assert.doesNotMatch(day, /Detection score|LOF score/);
+  assert.match(period, /Days with 0–1 mm/);
+  assert.match(period, /2 of 20/);
+  assert.match(period, /2 rainy checks in a row/);
+});
+
+test("review workspace handles no flags without claiming the sensors are accurate", () => {
+  const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+  const { ThemeProvider } = load("context/ThemeContext");
+  const result = fixture();
+  result.flagged_data = [];
+  const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(AnomalyReportTab, { result, reviews: {} })));
+  assert.match(html, /No flagged readings to review/);
+  assert.match(html, /could not be assessed/);
+  assert.doesNotMatch(html, /All .*accurate|All .*reliable/);
 });
 
 test("station guide stays compact with evidence in tooltips", () => {

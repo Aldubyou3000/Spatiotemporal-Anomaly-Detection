@@ -86,7 +86,7 @@ def approve_report_endpoint(
     user: UserProfile = Depends(require_analyst),
 ):
     sb = get_supabase()
-    report = approve_report(sb, report_id, body)
+    report = approve_report(sb, report_id, body, user["id"])
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
     audit.report_approved(

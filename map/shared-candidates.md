@@ -20,14 +20,8 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 
 ---
 
-### 2. Client IP / User-Agent extraction
-**Appears in**:
-- `api/app/core/dependencies.py` — `_client_ip`, `_client_ua` (canonical)
-- `api/app/routers/auth.py` — extracts forwarded-IP inline in places
-- `api/app/routers/mobile.py` — same
-- Several other routers pass `request` through to compute IP for audit
-
-**Status**: Mostly centralized already — CLAUDE.md flags `_client_ip(request)` as the one to use. Re-check that no router re-inlines `X-Forwarded-For` parsing. If any do, route them through `_client_ip` / `_client_ua`.
+### 2. Client IP / User-Agent extraction — checked
+`core/dependencies.py` owns `_client_ip` / `_client_ua`. Auth and mobile routers currently import/use the shared helpers; no inline forwarded-IP parsing was found in those routers (2026-10-24). Keep using the existing helper; the earlier claim of duplicate extraction there is stale.
 
 ---
 
@@ -71,3 +65,24 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 *2026-10-22 station review* — resolved the review status labels/tones repeated across OverviewTab, AnomalyReportTab, and StationMap with `web/src/lib/stationReview.ts`. Overview/report also share evidence wording. No additional rule-of-3 hits introduced.
 
 *2026-10-22 pipeline activity* — rechecked: no new behavior repeated in three places. Activity is centralized in PipelineDiagram and its CSS; request cancellation is owned by ZonesProvider.
+
+*2026-10-24 map refresh* — documentation changes only; no new rule-of-3 behavior introduced. Rechecked auth/mobile IP extraction and the shared station-review helper; existing storage/API-origin candidates remain, with no refactor performed.
+
+*2026-10-24 analyst review* — station/day identity, human decision labels and export metadata are centralized in `lib/anomalyReview.ts` for provider/report/page use. Existing station health wording remains in `stationReview.ts`. No new rule-of-3 extraction needed; no unrelated refactors.
+
+*2026-10-24 review hierarchy refinement* — reused review identity, decision labels and next-pending navigation. No new repeated behavior across three components; chart-only zero/missing label formatting stays with DateComparisonChart. Existing module references remain active; no orphan changes.
+
+*2026-10-24 chart switch and review tabs* — reused existing StationChart/DateComparisonChart and review navigation; no additional shared-candidate behavior or orphaned components. History rendering moved into the existing chart area, not a new widget.
+
+*2026-10-24 detection-details simplification* — report no longer imports highReview/lowReview for station-wide explanations; those helpers remain used by Overview and tests, and station status presentation remains active in Overview/map. No new rule-of-3 behavior or orphaned module.
+
+*2026-10-24 structured detection evidence* — restored useful station evidence as labeled fields rather than reusing the full prose tooltip. Existing stationReview helper remains active in Overview/map; report uses source summary fields. No new imports or orphan references; no new cross-component rule-of-3 extraction.
+
+*2026-10-24 LOF tooltip* — reused the existing page InfoTip via renderTip (same pattern as PipelineDiagram), avoiding another near-identical portal implementation. Overview still has its existing local tooltip; no third implementation was added. Module references are unchanged; no orphan updates needed.
+
+## History change review (2026-10-25)
+No new production rule-of-3 candidate: ZoneResults/CreateTicketModal/InfoTip are reused by Zones and History rather than copied. Test-only TypeScript loading now appears in station-review.test.cjs, anomaly-review.test.cjs and history tests; a shared loader is a future test-maintenance candidate if these suites grow. No production refactor is needed for this feature.
+
+Manual-save review (2026-10-25): reused existing dialog/input/button and one shared controller for navigation, reset, rerun, file replacement and save-before-ticket. No new production rule-of-3 candidate.
+
+Compact search field candidate (2026-10-25): icon + small outlined input now appears near-identically in Audit, DataTable and History (also Tickets). Consider a shared search-field primitive if these controls change together; no refactor was needed for this styling correction.

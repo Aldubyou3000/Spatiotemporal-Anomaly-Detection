@@ -57,3 +57,12 @@ Note: in deployed Vercel `vercel.app/api/*` is same-origin (first-party) so `Lax
 
 ## Open questions / debt
 - The shell uses `overflow: hidden` on the root flex container — portal dropdowns inside the ticket detail panel must render via `createPortal(..., document.body)` with `position: fixed`. Established pattern in `ReviewPanel.tsx` (`AddTechPicker`) and `TicketActionDock.tsx`. Easy to get wrong when adding a new dropdown.
+
+## History route (2026-10-25)
+Added protected /history, /history/[id] and /history/[id]/results pages and a History sidebar item. Existing dashboard providers/auth middleware cover them. Tickets wraps its search-param consumer in Suspense for direct links from History. No additional provider was added.
+
+## Save controller (2026-10-25)
+One RunSaveController is mounted inside ToastProvider, reusing ZonesContext state. It guards unsaved internal anchor navigation and coordinates save/discard modals across dashboard routes. No second context/provider or transport was introduced.
+
+## Compact page chrome (2026-10-25)
+The shared Header renders only its sticky topbar, with an h1 styled as the existing breadcrumb title, optional page actions and theme/account controls. Removed the separate title/description strip on every dashboard page. New Technician and audit Export stay available in the topbar; the layout/provider stack is unchanged.

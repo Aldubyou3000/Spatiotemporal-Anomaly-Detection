@@ -1,449 +1,31 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useRef, useState } from "react";
 import { useTicketTechnicians } from "@/hooks/useTechnicians";
 import {
-  Activity,
   AlertTriangle,
-  CheckCircle2,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
-  Clock,
-  Compass,
-  Download,
   FileBarChart2,
-  HelpCircle,
-  LayoutGrid,
   Loader2,
-  MapPin,
   RotateCcw,
-  Table2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useZones } from "@/context/ZonesContext";
-import { Modal, ModalFooter } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
-import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkloadBadge";
-import { byWorkload } from "@/lib/technicianWorkload";
-import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { Header } from "@/components/dashboard/Header";
-import { Select } from "@/components/ui/Select";
 import { PipelineDiagram } from "@/components/zones/PipelineDiagram";
 import { FileUpload } from "@/components/zones/FileUpload";
-import { DataTable } from "@/components/zones/DataTable";
-import type { FilterField } from "@/components/zones/DataTable";
-import { OverviewTab } from "@/components/zones/OverviewTab";
-import { NeighborGroupsTab } from "@/components/zones/NeighborGroupsTab";
-import { AnomalyReportTab } from "@/components/zones/AnomalyReportTab";
 import { zonesApi } from "@/lib/api/zones";
-import { ticketsApi } from "@/lib/api/tickets";
-import type { DailyReading, ProcessResult } from "@/types/zones";
-import type { AnomalyZone, Technician, TicketPriority } from "@/types/tickets";
-import { cn } from "@/lib/cn";
+import type { ProcessResult } from "@/types/zones";
 
-// ─── Info Tooltip ─────────────────────────────────────────────────────────────
-// Portalled + viewport-clamped so it never clips inside cards with overflow:hidden.
-function InfoTip({ text }: { text: string }) {
-  const [pos, setPos] = useState<{ x: number; y: number; h: number } | null>(null);
-  function handleMouseEnter(e: React.MouseEvent<HTMLSpanElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    setPos({ x: r.left + r.width / 2, y: r.top, h: r.height });
-  }
-  const tip = (() => {
-    if (!pos || typeof document === "undefined" || typeof window === "undefined") return null;
-    const W = 230;
-    const half = W / 2;
-    const margin = 10;
-    const minLeft = margin + half;
-    const maxLeft = window.innerWidth - margin - half;
-    const left = Math.max(minLeft, Math.min(pos.x, maxLeft));
-    const estH = 76;
-    const showBelow = pos.y < estH + 12;
-    const top = showBelow ? pos.y + pos.h + 8 : pos.y - 8;
-    const transform = showBelow ? "translate(-50%, 0)" : "translate(-50%, -100%)";
-    return createPortal(
-      <span
-        style={{
-          position: "fixed",
-          left,
-          top,
-          transform,
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--r-lg)",
-          padding: "8px 12px",
-          fontSize: "var(--font-xs)",
-          fontWeight: 400,
-          color: "var(--text)",
-          lineHeight: 1.6,
-          whiteSpace: "normal",
-          width: W,
-          maxWidth: `calc(100vw - ${margin * 2}px)`,
-          boxShadow: "var(--shadow-lg)",
-          zIndex: 9999,
-          pointerEvents: "none",
-          letterSpacing: "0.01em",
-        }}
-      >
-        {text}
-      </span>,
-      document.body,
-    );
-  })();
-  return (
-    <span
-      style={{ display: "inline-flex", alignItems: "center" }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => setPos(null)}
-    >
-      <HelpCircle size={13} strokeWidth={2} style={{ color: "var(--text-tertiary)", cursor: "help", flexShrink: 0 }} />
-      {tip}
-    </span>
-  );
-}
-
-// ─── Create Ticket Modal (3-step) ─────────────────────────────────────────────
-
-function CreateTicketModal({
-  stationId,
-  technicians,
-  onClose,
-  file,
-}: {
-  stationId: string;
-  technicians: Technician[];
-  onClose: () => void;
-  file: File | null;
-}) {
-  const toast = useToast();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [stationInput, setStationInput] = useState(stationId);
-  const [priority, setPriority] = useState<TicketPriority>("medium");
-  const [selectedTechIds, setSelectedTechIds] = useState<string[]>([]);
-  const [zone, setZone] = useState("C");
-  const [attachFile, setAttachFile] = useState(!!file);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  const step1Valid = !!title.trim() && !!stationInput.trim();
-  const step2Valid = selectedTechIds.length > 0;
-
-  const selectedTechs = technicians.filter((t) => selectedTechIds.includes(t.id));
-
-  function toggleTech(id: string) {
-    setSelectedTechIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }
-
-  async function handleCreate() {
-    if (!step1Valid || !step2Valid) return;
-    setConfirmOpen(false);
-    setSaving(true); setError("");
-    try {
-      const ticket = await ticketsApi.create({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        station_id: stationInput.trim(),
-        priority,
-        anomaly_zone: (zone || undefined) as AnomalyZone | undefined,
-        technician_ids: selectedTechIds,
-      });
-      if (file && attachFile) { try { await ticketsApi.uploadAttachment(ticket.id, file); } catch { /* non-fatal */ } }
-      toast.success(`Ticket TKT-${ticket.ticket_number} dispatched`, {
-        description: `${selectedTechs.length} technician${selectedTechs.length !== 1 ? "s" : ""} notified for ${stationInput.trim()}.`,
-      });
-      setDone(true);
-      setTimeout(onClose, 1800);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to create ticket.";
-      setError(msg);
-      toast.error("Couldn't dispatch ticket", { description: msg });
-    } finally { setSaving(false); }
-  }
-
-  const selectStyle: React.CSSProperties = {
-    width: "100%", height: 34, padding: "0 12px",
-    borderRadius: "var(--r-md)", border: "1px solid var(--border)",
-    background: "var(--surface)", color: "var(--text)",
-    fontSize: "var(--font-sm)", outline: "none",
-    boxShadow: "var(--shadow-xs)", fontFamily: "inherit",
-  };
-
-  if (done) {
-    return (
-      <Modal title="Create Ticket" onClose={onClose}>
-        <div style={{ padding: "40px 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
-          <div style={{ width: 48, height: 48, borderRadius: "50%", background: "var(--success-soft)", display: "grid", placeItems: "center" }}>
-            <CheckCircle2 size={22} style={{ color: "var(--success-on)" }} />
-          </div>
-          <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>Work order dispatched</p>
-          <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>
-            {file && attachFile ? "Anomaly data file attached. " : ""}
-            {selectedTechs.length} technician{selectedTechs.length !== 1 ? "s" : ""} notified.
-            Go to the Tickets tab to track progress.
-          </p>
-        </div>
-      </Modal>
-    );
-  }
-
-  const STEPS = [
-    { n: 1 as const, label: "Details" },
-    { n: 2 as const, label: "Assign" },
-    { n: 3 as const, label: "Confirm" },
-  ];
-
-  return (
-    <Modal
-      title="Create Ticket"
-      subtitle={step === 1 ? "Step 1 of 3 — Ticket details" : step === 2 ? "Step 2 of 3 — Assign technicians" : "Step 3 of 3 — Confirm dispatch"}
-      onClose={!saving ? onClose : undefined as unknown as () => void}
-    >
-      {/* Step indicator */}
-      <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "0 24px 0", borderBottom: "1px solid var(--divider)" }}>
-        {STEPS.map((s, i) => {
-          const active = s.n === step;
-          const done = s.n < step;
-          return (
-            <div key={s.n} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", cursor: done ? "pointer" : "default" }} onClick={() => { if (done) setStep(s.n); }}>
-                <div style={{ width: 20, height: 20, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: "var(--font-xs)", fontWeight: 700, background: active ? "var(--brand)" : done ? "var(--success)" : "var(--surface-sunken)", color: active || done ? "#fff" : "var(--text-muted)", border: `1.5px solid ${active ? "var(--brand)" : done ? "var(--success)" : "var(--border)"}`, flexShrink: 0 }}>
-                  {done ? <CheckCircle2 size={11} strokeWidth={3} /> : s.n}
-                </div>
-                <span style={{ fontSize: "var(--font-xs)", fontWeight: active ? 600 : 500, color: active ? "var(--text)" : "var(--text-muted)", whiteSpace: "nowrap" }}>{s.label}</span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <div style={{ flex: 1, height: 1, background: "var(--divider)", margin: "0 8px" }} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-        {/* ── Step 1: Details ── */}
-        {step === 1 && (
-          <>
-            <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Describe the anomaly or issue" required autoFocus />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Input label="Station ID" value={stationInput} onChange={(e) => setStationInput(e.target.value)} required />
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Zone</label>
-                <Select
-                  value={zone}
-                  onChange={setZone}
-                  options={[
-                    { value: "", label: "— none —" },
-                    { value: "A", label: "Zone A" },
-                    { value: "B", label: "Zone B" },
-                    { value: "C", label: "Zone C" },
-                  ]}
-                />
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Priority</label>
-              <Select
-                value={priority}
-                onChange={(v) => setPriority(v as TicketPriority)}
-                options={[
-                  { value: "low", label: "Low" },
-                  { value: "medium", label: "Medium" },
-                  { value: "high", label: "High" },
-                ]}
-              />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Description</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional notes, context, or anomaly details…" rows={3} style={{ ...selectStyle, height: "auto", padding: "8px 12px", resize: "none" }} />
-            </div>
-          </>
-        )}
-
-        {/* ── Step 2: Assign technicians ── */}
-        {step === 2 && (
-          <>
-            <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--text-secondary)" }}>
-              Select one or more technicians to dispatch to this site. All selected technicians will see the ticket on their mobile devices immediately. Lightest current workload is listed first.
-            </p>
-            {technicians.length === 0 ? (
-              <div style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No active technicians found.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
-                {[...technicians].sort(byWorkload).map((t) => {
-                  const checked = selectedTechIds.includes(t.id);
-                  return (
-                    <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", border: `1px solid ${checked ? "var(--brand)" : "var(--border)"}`, background: checked ? "color-mix(in oklab, var(--brand) 6%, var(--surface))" : "var(--surface-sunken)", cursor: "pointer", transition: "border-color 0.12s, background 0.12s" }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleTech(t.id)} style={{ accentColor: "var(--brand)", width: 14, height: 14, flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" }}>{t.full_name}</p>
-                        {t.station_ids?.length > 0 && (
-                          <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>Stations: {t.station_ids.slice(0, 3).join(", ")}{t.station_ids.length > 3 ? ` +${t.station_ids.length - 3}` : ""}</p>
-                        )}
-                      </div>
-                      <TechnicianWorkloadBadge tech={t} showBreakdown />
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-            {selectedTechIds.length > 0 && (
-              <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-                {selectedTechIds.length} technician{selectedTechIds.length !== 1 ? "s" : ""} selected
-              </p>
-            )}
-          </>
-        )}
-
-        {/* ── Step 3: Confirm dispatch ── */}
-        {step === 3 && (
-          <>
-            {/* Warning banner — refined with icon and balanced padding */}
-            <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--warning) 8%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 24%, transparent)" }}>
-              <span style={{ width: 28, height: 28, borderRadius: 8, background: "var(--warning-soft)", border: "1px solid color-mix(in oklab, var(--warning) 18%, transparent)", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                <AlertTriangle size={13} strokeWidth={2.2} style={{ color: "var(--warning-on)" }} />
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--warning-on)", lineHeight: 1.3 }}>
-                  Dispatch work order?
-                </p>
-                <p style={{ margin: "4px 0 0", fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                  This will appear as an active work order on the selected technician{selectedTechs.length !== 1 ? "s'" : "'s"} mobile devices immediately. Make sure all details are correct before proceeding.
-                </p>
-              </div>
-            </div>
-
-            {/* Summary — grid layout prevents label/value overlap */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              {[
-                { label: "Title", value: title.trim() || "—" },
-                { label: "Station", value: stationInput.trim() || "—" },
-                { label: "Priority", value: priority.charAt(0).toUpperCase() + priority.slice(1) },
-                { label: "Zone", value: zone || "—" },
-                {
-                  label: selectedTechs.length === 1 ? "Technician" : "Technicians",
-                  value: selectedTechs.length ? selectedTechs.map((t) => t.full_name).join(", ") : "—",
-                },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "92px 1fr",
-                    gap: 12,
-                    alignItems: "start",
-                    padding: "9px 12px",
-                    borderRadius: "var(--r-md)",
-                    background: "var(--surface-sunken)",
-                    border: "1px solid var(--divider)",
-                    minWidth: 0,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "var(--font-xs)",
-                      fontWeight: 600,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      color: "var(--text-muted)",
-                      whiteSpace: "nowrap",
-                      lineHeight: "18px",
-                    }}
-                  >
-                    {label}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "var(--font-sm)",
-                      fontWeight: 500,
-                      color: "var(--text)",
-                      lineHeight: 1.45,
-                      minWidth: 0,
-                      overflowWrap: "anywhere",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {value}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {file && (
-              <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", border: `1px solid ${attachFile ? "var(--brand)" : "var(--border)"}`, background: attachFile ? "color-mix(in oklab, var(--brand) 6%, var(--surface))" : "var(--surface)", cursor: "pointer", transition: "border-color 0.15s, background 0.15s", minWidth: 0 }}>
-                <input type="checkbox" checked={attachFile} onChange={(e) => setAttachFile(e.target.checked)} style={{ accentColor: "var(--brand)", width: 15, height: 15, flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-                  <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)", lineHeight: 1.3 }}>Attach anomaly data file</p>
-                  <p style={{ margin: "2px 0 0", fontSize: "var(--font-xs)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name} · {Math.round(file.size / 1024)} KB</p>
-                </div>
-              </label>
-            )}
-
-            {error && (
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", borderRadius: "var(--r-md)", background: "var(--danger-soft)", border: "1px solid rgba(220,38,38,0.2)" }}>
-                <AlertTriangle size={13} style={{ color: "var(--danger-on)", flexShrink: 0, marginTop: 1 }} />
-                <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--danger-on)" }}>{error}</p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      <ModalFooter>
-        {step === 1 && (
-          <>
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="button" onClick={() => setStep(2)} disabled={!step1Valid}>Next: Assign →</Button>
-          </>
-        )}
-        {step === 2 && (
-          <>
-            <Button type="button" variant="secondary" onClick={() => setStep(1)}>← Back</Button>
-            <Button type="button" onClick={() => setStep(3)} disabled={!step2Valid}>Next: Review →</Button>
-          </>
-        )}
-        {step === 3 && (
-          <>
-            <Button type="button" variant="secondary" onClick={() => setStep(2)} disabled={saving}>← Back</Button>
-            <Button type="button" loading={saving} onClick={() => setConfirmOpen(true)}>
-              {saving ? "Dispatching…" : `Dispatch to ${selectedTechs.length} technician${selectedTechs.length !== 1 ? "s" : ""}`}
-            </Button>
-          </>
-        )}
-      </ModalFooter>
-
-      {confirmOpen && (
-        <ConfirmDialog
-          title="Dispatch this work order?"
-          message={
-            <>
-              A ticket for <strong style={{ color: "var(--text)" }}>{title.trim()}</strong> at station{" "}
-              <span style={{ fontFamily: "var(--font-mono)" }}>{stationInput.trim()}</span> will be sent to{" "}
-              <strong style={{ color: "var(--text)" }}>
-                {selectedTechs.length} technician{selectedTechs.length !== 1 ? "s" : ""}
-              </strong>{" "}
-              ({selectedTechs.map((t) => t.full_name).join(", ")}). It appears on their mobile devices immediately.
-            </>
-          }
-          confirmLabel="Dispatch"
-          onConfirm={handleCreate}
-          onCancel={() => setConfirmOpen(false)}
-        />
-      )}
-    </Modal>
-  );
-}
+import { InfoTip } from "@/components/zones/InfoTip";
+import { CreateTicketModal } from "@/components/zones/CreateTicketModal";
+import { ZoneResults } from "@/components/zones/ZoneResults";
+import { useHistoryReviews, invalidateHistory } from "@/hooks/useHistory";
+import { RunSaveStatus } from "@/components/history/RunSaveStatus";
+import { ReviewSaveStatus } from "@/components/history/ReviewSaveStatus";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -455,18 +37,23 @@ export default function ZonesPage() {
     running, setRunning,
     abortRef,
     result, setResult,
+    guardUnsaved, requestSave,
     error, setError,
     configOpen, setConfigOpen,
     resetSession,
   } = useZones();
   const { technicians } = useTicketTechnicians();
   const [createStation, setCreateStation] = useState<string | null>(null);
+  const [createDate, setCreateDate] = useState<string | undefined>();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
   // Any file-set change invalidates a previous pipeline result — keep the
   // session coherent when files are added/removed individually after a run.
   function handleFilesChange(next: File[]) {
+    guardUnsaved(() => applyFilesChange(next));
+  }
+  function applyFilesChange(next: File[]) {
     setFiles(next);
     if (result) {
       setResult(null);
@@ -509,6 +96,7 @@ export default function ZonesPage() {
       const data = await zonesApi.process(files, { signal: controller.signal });
       if (controller.signal.aborted || abortRef.current !== controller) return;
       setResult(data);
+      if (data.history_saved) void invalidateHistory();
       setConfigOpen(false);
       const anomalies = data.flagged_data.filter((r) => r.is_anomaly).length;
       const filePrefix = files.length > 1 ? `${files.length} files merged · ` : "";
@@ -551,11 +139,7 @@ export default function ZonesPage() {
 
   return (
     <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-      <Header
-        title="Zones"
-        description="Upload a station CSV and detect rainfall anomalies."
-        live
-      />
+      <Header title="Zones" />
 
       <div style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: "var(--gap-section)" }}>
 
@@ -597,7 +181,7 @@ export default function ZonesPage() {
             {(files.length > 0 || result || error) && !running && (
               <button
                 type="button"
-                onClick={() => setConfirmReset(true)}
+                onClick={() => result && !result.history_saved ? guardUnsaved(resetSession) : setConfirmReset(true)}
                 className="export-btn"
                 title="Clear files and process results"
                 style={{ marginRight: 12, flexShrink: 0, height: 28, gap: 6 }}
@@ -617,7 +201,7 @@ export default function ZonesPage() {
                   <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Upload station data</h3>
                 </div>
                 <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-                  <FileUpload className="flex-1 flex flex-col min-h-0" files={files} onFilesChange={handleFilesChange} onRemove={resetSession} disabled={running} />
+                  <FileUpload className="flex-1 flex flex-col min-h-0" files={files} onFilesChange={handleFilesChange} onRemove={() => guardUnsaved(resetSession)} disabled={running} />
                 </div>
               </div>
 
@@ -632,7 +216,9 @@ export default function ZonesPage() {
                     variant={running ? "danger" : "primary"}
                     disabled={files.length === 0 && !running}
                     loading={false}
-                    onClick={running ? () => setConfirmCancel(true) : handleProcess}
+                    onClick={running ? () => setConfirmCancel(true) : () => {
+                      guardUnsaved(() => void handleProcess());
+                    }}
                   >
                     {running ? "Stop" : "Run Process"}
                   </Button>
@@ -719,7 +305,11 @@ export default function ZonesPage() {
         {running && !result && <RunningSkeleton />}
         {result && (
           <div className="animate-fade-in">
-            <Results result={result} onCreateTicket={(stationId) => setCreateStation(stationId)} />
+            <RunSaveStatus result={result} onSave={() => requestSave()} />
+            <CurrentResults result={result} onCreateTicket={(stationId, date) => {
+              const open = () => { setCreateStation(stationId); setCreateDate(date); };
+              if (result.history_saved) open(); else requestSave(open);
+            }} />
           </div>
         )}
         {!result && !running && <EmptyState />}
@@ -729,6 +319,7 @@ export default function ZonesPage() {
         <CreateTicketModal
           stationId={createStation} technicians={technicians}
           onClose={() => setCreateStation(null)} file={files[0] ?? null}
+          runId={result?.history_saved ? result.run_id ?? undefined : undefined} readingDate={createDate}
         />
       )}
 
@@ -746,7 +337,7 @@ export default function ZonesPage() {
       {confirmReset && (
         <ConfirmDialog
           title="Reset process?"
-          message="All selected files and process results will be cleared. You can then start a new analysis."
+          message={result?.history_saved ? "Clear this workspace? Your saved run and reviews remain in History." : "This run is not saved. Download Results CSV before clearing this workspace."}
           confirmLabel="Reset process"
           isDangerous
           onConfirm={() => {
@@ -785,189 +376,15 @@ function RunningSkeleton() {
   );
 }
 
-function FullAnomalyTable({
-  data,
-  columns,
-  searchKeys,
-  filterFields,
-}: {
-  data: DailyReading[];
-  columns: { key: keyof DailyReading & string; header: string; mono?: boolean; width?: string; align?: "left" | "right" | "center"; render?: (value: unknown) => React.ReactNode }[];
-  searchKeys: (keyof DailyReading & string)[];
-  filterFields: FilterField[];
-}) {
-  const [open, setOpen] = useState(false);
-  if (data.length === 0) return null;
-  return (
-    <div style={{ marginTop: 12 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-secondary)",
-          background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-full)",
-          padding: "5px 12px", cursor: "pointer",
-        }}
-      >
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        {open ? "Hide full table" : `View full table — ${data.length} rows`}
-      </button>
-      {open && (
-        <div style={{ marginTop: 10 }}>
-          <DataTable<DailyReading>
-            data={data} columns={columns} pageSize={10}
-            caption="All flagged anomaly events" emptyMessage="No anomalies — nothing to list."
-            onDownload={() => import("@/lib/csv").then((m) => m.downloadCsv("anomalies.csv", data as unknown as Record<string, unknown>[]))}
-            downloadLabel="Download anomalies"
-            searchKeys={searchKeys}
-            filterFields={filterFields}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
-function Results({ result, onCreateTicket }: { result: ProcessResult; onCreateTicket: (stationId: string) => void }) {
-  const cleanedColumns = useMemo(() => [
-    { key: "station_id" as const, header: "Station", mono: true, width: "20%" },
-    { key: "date" as const, header: "Date", mono: true, width: "16%" },
-    { key: "latitude" as const, header: "Latitude", mono: true, align: "right" as const, width: "14%" },
-    { key: "longitude" as const, header: "Longitude", mono: true, align: "right" as const, width: "14%" },
-    { key: "rainfall" as const, header: "Rainfall (mm)", mono: true, align: "right" as const, width: "14%" },
-    {
-      key: "interpolated_flag" as const, header: "Gap filled", align: "center" as const,
-      render: (value: unknown) => value
-        ? <Badge tone="warning">Filled</Badge>
-        : <span style={{ color: "var(--text-tertiary)" }}>—</span>,
-    },
-  ], []);
-
-  const flaggedColumns = useMemo(() => [
-    { key: "station_id" as const, header: "Station", mono: true, width: "16%" },
-    { key: "date" as const, header: "Date", mono: true, width: "14%" },
-    { key: "rainfall" as const, header: "Rainfall (mm)", mono: true, align: "right" as const, width: "14%" },
-    {
-      key: "lof_score" as const, header: "How unusual", mono: true, align: "right" as const,
-      render: (v: unknown) => typeof v === "number" ? v.toFixed(3) : <span style={{ color: "var(--text-tertiary)" }}>—</span>,
-    },
-    {
-      key: "is_anomaly" as const, header: "Result", align: "center" as const,
-      render: (v: unknown) => v
-        ? <Badge tone="danger" dot>Flagged</Badge>
-        : <Badge tone="success" dot>As expected</Badge>,
-    },
-  ], []);
-
-  const rawColumns = useMemo(() => {
-    if (result.raw_preview.length === 0) return [];
-    const sample = result.raw_preview[0];
-    const HEADER_MAP: Record<string, string> = {
-      station_id: "Station",
-      date: "Date",
-      latitude: "Latitude",
-      longitude: "Longitude",
-      rainfall: "Rainfall (mm)",
-      rainfall_mm: "Rainfall (mm)",
-    };
-    return Object.keys(sample).map((k) => ({
-      key: k as keyof typeof sample & string,
-      header: HEADER_MAP[k] ?? k,
-      mono: true,
-      align: typeof sample[k] === "number" ? ("right" as const) : ("left" as const),
-    }));
-  }, [result.raw_preview]);
-
-  // Raw table: prefer station/date columns; fall back to all string-valued columns
-  const rawSearchKeys = useMemo(() => {
-    if (result.raw_preview.length === 0) return undefined;
-    const sample = result.raw_preview[0];
-    const keys = Object.keys(sample);
-    const preferred = keys.filter(
-      (k) => k === "station_id" || k === "date" ||
-             k.toLowerCase().includes("station") ||
-             k.toLowerCase().includes("date"),
-    );
-    if (preferred.length > 0) return preferred as (keyof Record<string, unknown> & string)[];
-    // Fall back to columns whose values are strings
-    return keys.filter((k) => typeof sample[k] === "string") as (keyof Record<string, unknown> & string)[];
-  }, [result.raw_preview]);
-
-  const cleanedFilterFields = useMemo<FilterField[]>(() => [
-    {
-      key: "interpolated_flag",
-      label: "All readings",
-      type: "select",
-      options: [
-        { value: "true",  label: "Gap filled" },
-        { value: "false", label: "As recorded" },
-      ],
-    },
-  ], []);
-
-  const flaggedFilterFields = useMemo<FilterField[]>(() => [
-    {
-      key: "is_anomaly",
-      label: "Result",
-      type: "select",
-      options: [
-        { value: "true",  label: "Flagged" },
-        { value: "false", label: "As expected" },
-      ],
-    },
-  ], []);
-
-  return (
-    <section style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-2xl)", padding: 4, boxShadow: "var(--shadow-md)", overflow: "hidden" }}>
-      <Tabs defaultValue="overview">
-        <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
-          <TabsList className="px-4 pt-3" style={{ borderBottom: "none" }}>
-            <Tab value="overview" icon={<LayoutGrid size={13} strokeWidth={2.4} />}>Overview &amp; Map</Tab>
-            <Tab value="raw" icon={<Table2 size={13} strokeWidth={2.4} />}>Raw Data</Tab>
-            <Tab value="cleaned" icon={<Activity size={13} strokeWidth={2.4} />}>Cleaned Data</Tab>
-            <Tab value="neighbors" icon={<Compass size={13} strokeWidth={2.4} />}>Neighbor Groups</Tab>
-            <Tab value="anomalies" icon={<AlertTriangle size={13} strokeWidth={2.4} />}>Anomaly Report</Tab>
-          </TabsList>
-          {/* Export buttons — pushed right, never forcing tab overflow */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, paddingRight: 8, marginLeft: "auto", flexShrink: 0 }}>
-            <button
-              onClick={() => import("@/lib/csv").then((m) => m.downloadCsv("cleaned_data.csv", result.cleaned_data as unknown as Record<string, unknown>[]))}
-              className="export-btn"
-            >
-              <Download size={12} strokeWidth={2.2} />
-              Cleaned CSV
-            </button>
-            <button
-              onClick={() => import("@/lib/csv").then((m) => m.downloadCsv("flagged_data.csv", result.flagged_data as unknown as Record<string, unknown>[]))}
-              className="export-btn export-btn--primary"
-            >
-              <Download size={12} strokeWidth={2.2} />
-              Flagged CSV
-            </button>
-          </div>
-        </div>
-        <div className={cn("px-5 pb-5")}>
-          <TabPanel value="overview"><OverviewTab result={result} /></TabPanel>
-          <TabPanel value="raw" className="pt-6">
-            <DataTable data={result.raw_preview} columns={rawColumns} pageSize={10}
-              caption={<>All <span className="font-mono tabular">{result.raw_total_rows.toLocaleString()}</span> uploaded rows</>}
-              emptyMessage="No rows in the uploaded file."
-              searchKeys={rawSearchKeys} />
-          </TabPanel>
-          <TabPanel value="cleaned" className="pt-6">
-            <DataTable<DailyReading> data={result.cleaned_data} columns={cleanedColumns} pageSize={10}
-              caption={`After Zone A — ${result.cleaned_data.length.toLocaleString()} validated daily readings`}
-              searchKeys={["station_id", "date"]}
-              filterFields={cleanedFilterFields} />
-          </TabPanel>
-          <TabPanel value="neighbors"><NeighborGroupsTab neighbors={result.neighbors} /></TabPanel>
-          <TabPanel value="anomalies">
-            <AnomalyReportTab result={result} onCreateTicket={onCreateTicket} />
-            <FullAnomalyTable data={result.flagged_data.filter((r) => r.is_anomaly)} columns={flaggedColumns} searchKeys={["station_id", "date"]} filterFields={flaggedFilterFields} />
-          </TabPanel>
-        </div>
-      </Tabs>
-    </section>
-  );
+function CurrentResults({ result, onCreateTicket }: { result: ProcessResult; onCreateTicket?: (stationId: string, date?: string) => void }) {
+  const { reviews, setReview } = useZones();
+  const saved = useHistoryReviews(result.history_saved ? result.run_id ?? null : null);
+  const persistent = !!result.history_saved;
+  return <>
+    {persistent && <ReviewSaveStatus state={saved} />}
+    <ZoneResults result={result} reviews={persistent ? saved.reviews : reviews}
+      onReview={persistent ? (saved.ready ? saved.saveReview : undefined) : !result.run_id ? setReview : undefined}
+      reviewsReady={!persistent || saved.ready} reviewBusy={saved.saving} onCreateTicket={onCreateTicket} />
+  </>;
 }

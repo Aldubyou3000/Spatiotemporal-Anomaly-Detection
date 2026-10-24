@@ -55,13 +55,13 @@ TERMINAL_STATUSES = ("verified", "cancelled")
 # ── Selects ────────────────────────────────────────────────────────────────
 
 _SELECT_LIST = (
-    "id, ticket_number, title, station_id, status, priority, anomaly_zone, analyst_id, technician_id, "
+    "id, ticket_number, title, station_id, status, priority, anomaly_zone, analyst_id, technician_id, run_id, reading_date, "
     "follow_up_count, created_at, updated_at, "
     "ticket_technicians(user_id, assigned_at, removed_at, profiles!ticket_technicians_user_id_fkey(id, username, full_name))"
 )
 
 _SELECT_DETAIL = (
-    "id, ticket_number, title, description, station_id, status, priority, anomaly_zone, anomaly_data, "
+    "id, ticket_number, title, description, station_id, status, priority, anomaly_zone, anomaly_data, run_id, reading_date, "
     "analyst_id, technician_id, follow_up_count, last_follow_up_at, follow_up_notes, "
     "cancelled_at, cancellation_reason, "
     "created_at, assigned_at, completed_at, verified_at, updated_at, "
@@ -112,6 +112,7 @@ def list_tickets(
     status: str | None = None,
     priority: str | None = None,
     station_id: str | None = None,
+    run_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
@@ -122,6 +123,8 @@ def list_tickets(
         q = q.eq("priority", priority)
     if station_id:
         q = q.eq("station_id", station_id)
+    if run_id:
+        q = q.eq("run_id", run_id)
     res = q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
     items = [_join_technicians(r) for r in (res.data or [])]
     return {"items": items, "total": res.count or 0}
@@ -138,6 +141,11 @@ def get_ticket(sb: Client, ticket_id: str) -> dict | None:
 # ── Create ─────────────────────────────────────────────────────────────────
 
 def create_ticket(sb: Client, analyst_id: str, data: TicketCreate) -> dict:
+    if data.reading_date and not data.run_id:
+        raise HTTPException(422, "A reading date requires a linked processing run.")
+    if data.run_id:
+        from .history_service import validate_ticket_link
+        validate_ticket_link(sb, str(data.run_id), data.station_id, str(data.reading_date) if data.reading_date else None)
     # Validate all technician IDs before touching the tickets table
     profile_res = (
         sb.table("profiles")
@@ -171,6 +179,9 @@ def create_ticket(sb: Client, analyst_id: str, data: TicketCreate) -> dict:
         payload["anomaly_zone"] = data.anomaly_zone
     if data.anomaly_data is not None:
         payload["anomaly_data"] = data.anomaly_data
+    if data.run_id:
+        payload["run_id"] = str(data.run_id)
+        payload["reading_date"] = str(data.reading_date) if data.reading_date else None
 
     insert_res = sb.table("tickets").insert(payload).execute()
     inserted = (insert_res.data or [])

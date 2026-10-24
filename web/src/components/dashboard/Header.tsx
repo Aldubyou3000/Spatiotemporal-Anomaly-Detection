@@ -26,13 +26,10 @@ const SHOW_TEXT_SIZE_PICKER = false;
 
 interface HeaderProps {
   title: string;
-  description?: string;
-  live?: boolean;
   actions?: React.ReactNode;
-  hideHeading?: boolean;
 }
 
-export function Header({ title, description, live, actions, hideHeading }: HeaderProps) {
+export function Header({ title, actions }: HeaderProps) {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -93,11 +90,12 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, fontSize: "var(--font-sm)", color: "var(--text-muted)", minWidth: 0 }}>
           <span>Workspace</span>
           <ChevronRight size={11} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
-          <span style={{ color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+          <h1 style={{ margin: 0, fontSize: "inherit", fontWeight: "inherit", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h1>
         </div>
 
         {/* Right side controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {actions}
           {/* Text size picker — hidden behind SHOW_TEXT_SIZE_PICKER (see comment above) */}
           {SHOW_TEXT_SIZE_PICKER && (
             <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r-md)", overflow: "hidden" }}>
@@ -207,45 +205,6 @@ export function Header({ title, description, live, actions, hideHeading }: Heade
           </div>
         </div>
       </header>
-
-      {/* ── Page heading block ── */}
-      {!hideHeading && <div
-        style={{
-          padding: "20px 28px 16px",
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 16,
-          flexShrink: 0,
-          borderBottom: "1px solid var(--divider)",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-          <h1 style={{
-            margin: 0,
-            fontSize: "var(--font-xl)",
-            fontWeight: 600,
-            letterSpacing: "-0.025em",
-            color: "var(--text)",
-            lineHeight: 1.15,
-          }}>
-            {title}
-          </h1>
-
-          {description && (
-            <p style={{ margin: 0, fontSize: "var(--font-base)", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {description}
-            </p>
-          )}
-        </div>
-
-        {/* Page-level actions */}
-        {actions && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, alignSelf: "center" }}>
-            {actions}
-          </div>
-        )}
-      </div>}
 
       {confirmLogout && (
         <ConfirmDialog

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
+from datetime import date
+from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -10,6 +12,8 @@ AnomalyZone = str  # 'A' | 'B' | 'C'
 
 
 class TicketCreate(BaseModel):
+    run_id: UUID | None = None
+    reading_date: date | None = None
     title: str
     description: str | None = None
     station_id: str
@@ -99,6 +103,8 @@ class TechnicianAssignRequest(BaseModel):
 
 
 class TicketDetail(BaseModel):
+    run_id: str | None = None
+    reading_date: date | None = None
     id: str
     ticket_number: int
     title: str
@@ -126,6 +132,8 @@ class TicketDetail(BaseModel):
 
 
 class TicketListItem(BaseModel):
+    run_id: str | None = None
+    reading_date: date | None = None
     id: str
     ticket_number: int
     title: str

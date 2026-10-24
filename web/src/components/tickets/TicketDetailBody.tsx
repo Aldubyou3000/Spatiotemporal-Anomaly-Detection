@@ -244,13 +244,14 @@ function Section({ title, badge, children }: { title: string; badge?: string; ch
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
-          marginBottom: 16,
-          paddingBottom: 10,
+          marginBottom: 12,
+          paddingBottom: 8,
           borderBottom: "1px solid var(--border)",
         }}
       >
         <h3
           style={{
+            position: "relative",
             display: "flex",
             alignItems: "center",
             gap: 9,
@@ -261,7 +262,7 @@ function Section({ title, badge, children }: { title: string; badge?: string; ch
             letterSpacing: "-0.012em",
           }}
         >
-          <span aria-hidden style={{ width: 3, height: 15, borderRadius: 2, background: "var(--brand)", flexShrink: 0 }} />
+          <span aria-hidden style={{ position: "absolute", left: -10, width: 3, height: 15, borderRadius: 2, background: "var(--brand)" }} />
           {title}
         </h3>
         {badge && (
@@ -290,14 +291,13 @@ function SubHeading({ children }: { children: React.ReactNode }) {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        marginBottom: 9,
+        marginBottom: 6,
         fontSize: "var(--font-base)",
         fontWeight: 600,
         color: "var(--text-secondary)",
         letterSpacing: "-0.005em",
       }}
     >
-      <span aria-hidden style={{ width: 3, height: 12, borderRadius: 2, background: "var(--border-strong)", flexShrink: 0 }} />
       {children}
     </div>
   );
@@ -308,7 +308,7 @@ function SubHeading({ children }: { children: React.ReactNode }) {
 function Prop({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 7 }}>
+      <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 6 }}>
         {label}
       </div>
       {children}
@@ -370,7 +370,7 @@ function AnomalyMetrics({ data, zone }: { data: Record<string, unknown> | null |
 
 function Prose({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
-    <p style={{ margin: 0, fontSize: "var(--font-base)", lineHeight: 1.72, color: muted ? "var(--text-muted)" : "var(--text-secondary)", fontStyle: muted ? "italic" : "normal" }}>
+    <p style={{ margin: 0, fontSize: "var(--font-base)", lineHeight: 1.6, color: muted ? "var(--text-muted)" : "var(--text-secondary)", fontStyle: muted ? "italic" : "normal" }}>
       {children}
     </p>
   );
@@ -580,29 +580,29 @@ function PriorRoundCard({ round: r, onOpenPhoto }: { round: PriorRound; onOpenPh
 
       {/* Expanded — full findings for this round */}
       {open && (
-        <div style={{ borderTop: "1px solid var(--divider)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ borderTop: "1px solid var(--divider)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 0 }}>
           {r.notes && (
             <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
               <SubHeading>Field Observations</SubHeading>
-              <div style={{ paddingLeft: 14 }}><Prose>{r.notes}</Prose></div>
+              <Prose>{r.notes}</Prose>
             </div>
           )}
           {r.rootCause && (
             <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
               <SubHeading>Root Cause</SubHeading>
-              <div style={{ paddingLeft: 14 }}><Prose>{r.rootCause}</Prose></div>
+              <Prose>{r.rootCause}</Prose>
             </div>
           )}
           {r.correctiveAction && (
             <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
               <SubHeading>Corrective Action &amp; Recommendations</SubHeading>
-              <div style={{ paddingLeft: 14 }}><Prose>{r.correctiveAction}</Prose></div>
+              <Prose>{r.correctiveAction}</Prose>
             </div>
           )}
           {photos.length > 0 && (
             <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
               <SubHeading>Photos</SubHeading>
-              <div style={{ paddingLeft: 14 }}><PhotoGrid photos={photos} onOpen={onOpenPhoto} /></div>
+              <PhotoGrid photos={photos} onOpen={onOpenPhoto} />
             </div>
           )}
           {/* The analyst note that sent THIS round back */}
@@ -694,9 +694,9 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
       {/* ── HEADER BAR ── */}
       <div style={{ borderBottom: "1px solid var(--divider)", flexShrink: 0, display: "flex", alignItems: "stretch" }}>
-        <div style={{ flex: 1, minWidth: 0, padding: "16px 20px 16px 18px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0, padding: "var(--pad-y) var(--pad-x)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
               <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 7px", borderRadius: "var(--r-sm)", background: "var(--surface-sunken)", border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.03em" }}>
                 {prefix}-{model.refId}
               </span>
@@ -740,7 +740,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
         {/* Cancelled callout banner */}
         {model.status === "cancelled" && (
-          <div style={{ margin: "16px 28px 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", border: "1px solid var(--border)", display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ margin: "var(--pad-y) var(--pad-x) 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", border: "1px solid var(--border)", display: "flex", alignItems: "flex-start", gap: 12 }}>
             <X size={15} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 1 }} />
             <div>
               <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>
@@ -757,7 +757,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
         {/* Revisit callout banner — only when status is follow_up */}
         {isFollowUp && (
-          <div style={{ margin: "16px 28px 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--warning) 8%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 30%, transparent)", display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ margin: "var(--pad-y) var(--pad-x) 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--warning) 8%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 30%, transparent)", display: "flex", alignItems: "flex-start", gap: 12 }}>
             <RefreshCw size={15} style={{ color: "var(--warning-on)", flexShrink: 0, marginTop: 1 }} />
             <div>
               <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--warning-on)" }}>
@@ -773,7 +773,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
         )}
 
         {/* Property strip */}
-        <div style={{ padding: "16px 28px", background: "var(--surface-sunken)", borderBottom: "1px solid var(--border)", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 28, marginTop: isFollowUp ? 12 : 0 }}>
+        <div style={{ padding: "var(--pad-y) var(--pad-x)", background: "var(--surface-sunken)", borderBottom: "1px solid var(--border)", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "var(--gap-card)", marginTop: isFollowUp ? 12 : 0 }}>
           <Prop label={`Assignee${(model.assignees?.length ?? 0) > 1 ? "s" : ""}`}>
             <AssigneeCell assignees={model.assignees} assigneeName={model.assigneeName} />
           </Prop>
@@ -799,7 +799,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
           </Prop>
         </div>
 
-        <div style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 32, minWidth: 0 }}>
+        <div style={{ padding: "var(--pad-y) var(--pad-x)", display: "flex", flexDirection: "column", gap: "var(--gap-section)", minWidth: 0 }}>
 
           {model.description && (
             <Section title="Description">
@@ -827,10 +827,10 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
           {hasFindings && (
             <Section title={round > 1 ? `Inspection Findings · Round ${round}` : "Inspection Findings"}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {/* Status row — issue resolved + severity badges */}
                 {hasReport && (r?.issueResolved != null || r?.severity) && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingBottom: 14, marginBottom: 4, borderBottom: "1px solid var(--divider)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingBottom: 12, borderBottom: "1px solid var(--divider)" }}>
                     {r?.issueResolved != null && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)", fontWeight: 600, color: r.issueResolved ? "var(--success)" : "var(--danger)" }}>
                         {r.issueResolved ? <CheckCircle2 size={13} strokeWidth={2.5} /> : <WifiOff size={13} />}
@@ -843,28 +843,28 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
                 {/* Finding rows — each is a self-contained block with label + content */}
                 {r?.notes && (
-                  <div style={{ padding: "14px 0", borderBottom: "1px solid var(--divider)" }}>
+                  <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
                     <SubHeading>Field Observations</SubHeading>
-                    <div style={{ paddingLeft: 14 }}><Prose>{r.notes}</Prose></div>
+                    <Prose>{r.notes}</Prose>
                   </div>
                 )}
                 {r?.rootCause && (
-                  <div style={{ padding: "14px 0", borderBottom: "1px solid var(--divider)" }}>
+                  <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
                     <SubHeading>Root Cause</SubHeading>
-                    <div style={{ paddingLeft: 14 }}><Prose>{r.rootCause}</Prose></div>
+                    <Prose>{r.rootCause}</Prose>
                   </div>
                 )}
                 {r?.correctiveAction && (
-                  <div style={{ padding: "14px 0", borderBottom: approved ? "1px solid var(--divider)" : "none" }}>
+                  <div style={{ padding: "12px 0", borderBottom: approved ? "1px solid var(--divider)" : "none" }}>
                     <SubHeading>Corrective Action &amp; Recommendations</SubHeading>
-                    <div style={{ paddingLeft: 14 }}><Prose>{r.correctiveAction}</Prose></div>
+                    <Prose>{r.correctiveAction}</Prose>
                   </div>
                 )}
 
                 {/* Approval callout — always last */}
                 {approved && (
-                  <div style={{ marginTop: 10, padding: "14px 16px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--success) 6%, var(--surface-sunken))", border: "1px solid color-mix(in oklab, var(--success) 20%, transparent)", borderLeft: "3px solid var(--success)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--font-sm)", color: "var(--success)", fontWeight: 700, marginBottom: r?.analystNotes ? 8 : 0 }}>
+                  <div style={{ marginTop: 12, padding: "12px 16px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--success) 6%, var(--surface-sunken))", border: "1px solid color-mix(in oklab, var(--success) 20%, transparent)", borderLeft: "3px solid var(--success)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--font-sm)", color: "var(--success)", fontWeight: 700, marginBottom: 6 }}>
                       <CheckCircle2 size={14} strokeWidth={2.5} />
                       Approved{r?.analystApprovedAt ? ` · ${fmtDate(r.analystApprovedAt)}` : ""}
                     </div>

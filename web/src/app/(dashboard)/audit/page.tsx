@@ -56,6 +56,8 @@ const EVENT_META: Record<string, EventMeta> = {
   file_uploaded:          { tone: "neutral", label: "File uploaded",       icon: Upload },
   photo_uploaded:         { tone: "neutral", label: "Photo added",         icon: Upload },
   zone_pipeline_run:      { tone: "accent",  label: "Process run",        icon: Play },
+  processing_run_saved:   { tone: "accent",  label: "Run saved",          icon: Database },
+  processing_review_saved: { tone: "info",   label: "Reading reviewed",   icon: CheckCircle2 },
   system_startup:         { tone: "neutral", label: "System start",        icon: Database },
 };
 
@@ -270,6 +272,7 @@ const EVENT_OPTIONS = [
   "logout", "account_created",
   "ticket_created", "ticket_updated", "ticket_status_changed",
   "report_submitted", "report_approved", "file_uploaded",
+  "processing_run_saved", "processing_review_saved",
 ];
 
 export default function AuditPage() {
@@ -335,8 +338,6 @@ export default function AuditPage() {
     <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
       <Header
         title="Activity History"
-        description={`${total.toLocaleString()} ${total === 1 ? "record" : "records"} · updates live as your team works`}
-        live
         actions={
           <Button size="sm" variant="secondary" onClick={handleExport}>
             <Download size={13} strokeWidth={2.2} />

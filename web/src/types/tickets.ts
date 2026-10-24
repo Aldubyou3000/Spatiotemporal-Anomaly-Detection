@@ -39,6 +39,8 @@ export interface Technician {
 }
 
 export interface TicketListItem {
+  run_id?: string | null;
+  reading_date?: string | null;
   id: string;
   ticket_number: number;
   title: string;
@@ -74,6 +76,8 @@ export interface TicketListResponse {
 }
 
 export interface TicketCreate {
+  run_id?: string;
+  reading_date?: string;
   title: string;
   description?: string;
   station_id: string;

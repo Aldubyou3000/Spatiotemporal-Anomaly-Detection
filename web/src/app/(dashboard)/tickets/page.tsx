@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Suspense, useState, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useTicketList, useTicketDetail, useTicketReport, useTicketAttachments, invalidateTicketLists, invalidateReports } from "@/hooks/useTickets";
 import {
   AlertTriangle,
@@ -330,6 +332,9 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
           </button>
         </div>
       )}
+      {ticket.run_id && <div style={{ padding: "8px var(--pad-x)", borderBottom: "1px solid var(--divider)", fontSize: "var(--font-sm)" }}>
+        <Link href={`/history/${ticket.run_id}`} style={{ color: "var(--brand)" }}>View source run →</Link>
+      </div>}
       <TicketDetailBody model={model} footer={footer} />
       {confirmApprove && (
         <ConfirmDialog
@@ -525,12 +530,19 @@ function TicketRow({ ticket, selected, onClick }: { ticket: TicketListItem; sele
 const PAGE_SIZE = 50;
 
 export default function TicketsPage() {
+  return <Suspense fallback={<div role="status">Loading tickets…</div>}><TicketsWorkspace /></Suspense>;
+}
+
+function TicketsWorkspace() {
+  const searchParams = useSearchParams();
+  const linkedId = searchParams.get("ticket");
   const { loading: authLoading } = useAuth();
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterStation, setFilterStation] = useState("");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(linkedId);
+  useEffect(() => { setSelectedId(linkedId); }, [linkedId]);
   const { ticket: detailTicket, isLoading: detailLoading, updateCache } = useTicketDetail(selectedId);
 
   const { items, isLoading: loading, error: fetchError, refresh } = useTicketList({
@@ -584,7 +596,7 @@ export default function TicketsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
-      <Header title="Tickets" hideHeading />
+      <Header title="Tickets" />
       <div style={{ display: "grid", gridTemplateColumns: "clamp(260px, 30%, 380px) 1fr", gap: 16, flex: 1, minHeight: 0, padding: "16px 20px 20px", overflow: "hidden" }}>
 
         {/* Left list */}

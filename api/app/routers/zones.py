@@ -16,7 +16,9 @@ from ..core.dependencies import require_analyst_or_bearer
 from ..core.limiter import limiter
 from ..schemas.auth import UserProfile
 from ..schemas.zones import ProcessResult
+from ..schemas.history import SaveRunRequest
 from ..services.zones_service import ZoneProcessingError, run_pipeline_multi
+from ..services.history_service import describe_files, try_save_run
 
 logger = logging.getLogger("zones.router")
 
@@ -27,7 +29,7 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 # job_id -> {status, result, error, created_at}
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
-_JOB_TTL_SECONDS = 600  # 10 min
+_JOB_TTL_SECONDS = 3600  # Temporary previews remain saveable for up to one hour.
 _JOB_MAX = 50
 
 
@@ -42,14 +44,15 @@ def _gc_jobs() -> None:
             _jobs.pop(next(iter(_jobs)), None)
 
 
-def _run_job(job_id: str, payload: list[tuple[str, bytes]]) -> None:
+def _run_job(job_id: str, payload: list[tuple[str, bytes]], user: UserProfile) -> None:
     try:
         logger.info("[zones] job %s start files=%d bytes=%d", job_id, len(payload), sum(len(b) for _, b in payload))
         result = run_pipeline_multi(payload)
+        result = result.model_copy(update={"run_id": job_id, "history_saved": False, "history_error": None})
         with _jobs_lock:
             if job_id in _jobs:
                 _jobs[job_id]["status"] = "done"
-                _jobs[job_id]["result"] = result.model_dump() if hasattr(result, "model_dump") else result
+                _jobs[job_id]["result"] = result.model_dump(mode="json")
                 _jobs[job_id]["error"] = None
         logger.info("[zones] job %s done rows=%d", job_id, result.summary.total_rows if hasattr(result, "summary") else -1)
     except ZoneProcessingError as exc:
@@ -57,6 +60,8 @@ def _run_job(job_id: str, payload: list[tuple[str, bytes]]) -> None:
             if job_id in _jobs:
                 _jobs[job_id]["status"] = "error"
                 _jobs[job_id]["error"] = str(exc)
+                _jobs[job_id]["error_code"] = 422
+                _jobs[job_id].pop("files", None)
         logger.warning("[zones] job %s 422 %s", job_id, exc)
     except Exception as exc:
         logger.exception("[zones] job %s failed", job_id)
@@ -64,6 +69,7 @@ def _run_job(job_id: str, payload: list[tuple[str, bytes]]) -> None:
             if job_id in _jobs:
                 _jobs[job_id]["status"] = "error"
                 _jobs[job_id]["error"] = "The process could not process this file. Please check the file and try again."
+                _jobs[job_id].pop("files", None)
 
 @router.post("/process", response_model=ProcessResult)
 @limiter.limit("10/minute")
@@ -147,31 +153,28 @@ async def process_zones(
         request.headers.get("prefer"), prefer_async, len(files),
         request.headers.get("content-length") or request.query_params.get("async"),
     )
+    _gc_jobs()
+    job_id = str(uuid.uuid4())
+    actor = UserProfile.model_validate(_user)
+    with _jobs_lock:
+        _jobs[job_id] = {"status": "processing", "result": None, "error": None, "created_at": time.time(),
+                         "user_id": actor.id, "user": actor, "files": describe_files(payload)}
     if prefer_async:
-        _gc_jobs()
-        job_id = uuid.uuid4().hex
-        with _jobs_lock:
-            _jobs[job_id] = {"status": "processing", "result": None, "error": None, "created_at": time.time()}
         # Run in background daemon thread (not threadpool, so it survives the 202)
-        t = threading.Thread(target=_run_job, args=(job_id, payload), daemon=True)
+        t = threading.Thread(target=_run_job, args=(job_id, payload, actor), daemon=True)
         t.start()
         # Return 202 with job_id — client will poll GET /api/zones/jobs/{job_id}
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"job_id": job_id, "status": "processing"})
 
-    try:
-        return await run_in_threadpool(run_pipeline_multi, payload)
-    except ZoneProcessingError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        logger.exception("[zones] pipeline failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="The process could not process this file. Please check the file and try again.",
-        ) from exc
+    await run_in_threadpool(_run_job, job_id, payload, actor)
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(410, "Processing session expired. Check History for saved results.")
+        if job["status"] == "error":
+            raise HTTPException(job.get("error_code", 500), job["error"])
+        return job["result"]
 
 
 @router.get("/jobs/{job_id}")
@@ -181,6 +184,8 @@ def get_zones_job(request: Request, job_id: str, _user: UserProfile = Depends(re
         job = _jobs.get(job_id)
         if not job:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found or expired")
+        if job.get("user_id") != _user["id"]:
+            raise HTTPException(404, "Job not found or expired")
         # Return a copy
         status_val = job["status"]
         result = job.get("result")
@@ -190,3 +195,28 @@ def get_zones_job(request: Request, job_id: str, _user: UserProfile = Depends(re
     if status_val == "done":
         return {"job_id": job_id, "status": "done", "result": result}
     return {"job_id": job_id, "status": "error", "detail": error or "Processing failed"}
+
+
+@router.post("/jobs/{job_id}/save", response_model=ProcessResult)
+@limiter.limit("10/minute")
+def retry_save_job(request: Request, job_id: str, body: SaveRunRequest, user: dict = Depends(require_analyst_or_bearer)):
+    if not request.headers.get("authorization", "").startswith("Bearer "):
+        from .auth import _require_csrf
+        _require_csrf(request.headers.get("x-csrf-token"), request.cookies.get("csrf_token"))
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job or job.get("user_id") != user["id"]:
+            raise HTTPException(410, "The unsaved processing session expired. Download your results or process the files again.")
+        if job["status"] != "done":
+            raise HTTPException(409, "Wait for processing to finish.")
+        snapshot = ProcessResult.model_validate(job["result"])
+        if snapshot.history_saved:
+            return snapshot
+        files, actor = job["files"], job["user"]
+    saved = try_save_run(job_id, snapshot, files, actor, body.title)
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["result"] = saved.model_dump(mode="json")
+            if saved.history_saved:
+                _jobs[job_id].pop("files", None)
+    return saved

@@ -53,9 +53,10 @@ Same path, but: Bearer token auth (`get_mobile_user`), routes under `/api/mobile
 
 ### Zone pipeline run
 1. Analyst uploads CSV → `POST /api/zones/process`
-2. `routers/zones.py` calls `zones_service.run_pipeline_multi()` via `fastapi.concurrency.run_in_threadpool` (CPU-bound — must not block the event loop)
+2. Web requests async processing: the router returns HTTP 202 with a job ID, runs `run_pipeline_multi()` in a daemon thread, and the browser polls `GET /api/zones/jobs/{id}`. Synchronous callers use `fastapi.concurrency.run_in_threadpool` (CPU-bound — must not block the event loop).
 3. Optional pre-step: `hmdas_converter` reformats PAGASA/HMDAS exports into the combined frame
-4. `zones_service` runs `zone_a → zone_b → zone_c` (clean → group by Haversine → LOF anomaly detection) and returns a `ProcessResult` synchronously
+4. `zones_service` enforces complete daily totals around frozen Zone A, selects three geographic neighbors in Zone B, and runs same-day high LOF / separate low-reading rules in Zone C. A `ProcessResult` is stored for polling or returned directly to synchronous callers.
+5. Jobs live only in API process memory. Restarting/redeploying loses them; the browser then receives `Job not found or expired`. The single-worker requirement applies to jobs as well as SSE. See [api-zones.md](./components/api-zones.md).
 
 ---
 

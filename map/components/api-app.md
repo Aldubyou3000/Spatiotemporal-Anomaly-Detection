@@ -11,7 +11,7 @@ The FastAPI application object. Uvicorn imports it (`uvicorn app.main:app`); not
 
 ## Depends on
 - `core/config.py` → `settings`
-- `routers/` — all 9 routers (`auth, zones, tickets, reports, technicians, mobile, mobile_events, audit, events`)
+- `routers/` — all 10 routers (`auth, zones, history, tickets, reports, technicians, mobile, mobile_events, audit, events`)
 - `services/events_service.py` → `init_loop`, `shutdown`
 - `services/audit_service.py` → `audit`, `AuditEvent`, `_writer`, `_chain_lock`, `_prev_hash` (rehydrate)
 - `core/dependencies.py` → `get_supabase` (startup rehydrate)

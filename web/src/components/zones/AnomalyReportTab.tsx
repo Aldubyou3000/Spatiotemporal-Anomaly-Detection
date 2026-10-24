@@ -1,522 +1,291 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, Gauge, MapPin, Plus, TrendingUp, Users, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, ArrowRight, BarChart3, Check, Plus, RotateCcw, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { StationChart, type NeighborSeries } from "./StationChart";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Select } from "@/components/ui/Select";
+import { useToast } from "@/components/ui/Toast";
+import { DECISION_LABEL, flaggedReadings, nextPendingReading, readingKey, type AnomalyReview, type AnomalyReviews, type ReviewDecision } from "@/lib/anomalyReview";
+import type { UserProfile } from "@/types/auth";
+import type { DailyReading, ProcessResult } from "@/types/zones";
+import { StationChart } from "./StationChart";
 import { DateComparisonChart, type DateComparisonBar } from "./DateComparisonChart";
-import type { ProcessResult, StationHealth, StationStuckHealth } from "@/types/zones";
-import { REVIEW_STATUS, highReview, lowReview } from "@/lib/stationReview";
-import { useTheme } from "@/context/ThemeContext";
+import styles from "./AnomalyReportTab.module.css";
 
+type Reviewer = Pick<UserProfile, "id" | "full_name" | "username">;
+type ReviewFilter = "pending" | "reviewed" | "all";
+const LOF_HELP = "LOF (Local Outlier Factor) compares same-day rainfall at nearby stations. Scores near -1 are typical. More negative means more unusual: -3 stands out more than -1. A high reading may be flagged at -2 or lower after other rainfall checks. This is not an accuracy percentage or proof of a faulty sensor.";
+const AVERAGE_HELP = "Shows whether this station tends to record more or less rain than its group on checked rainy days. We compare each day, then average the comparisons. The group includes this station and nearby stations. This covers the uploaded period, not just the selected day. It is not an accuracy rating.";
+const HIGHEST_HELP = "How often this station recorded more rain than every other station in its group on checked rainy days. Equal readings do not count. For example, 25% means it was highest on about 1 in 4 rainy days checked. Being highest does not automatically mean an anomaly.";
 interface AnomalyReportTabProps {
   result: ProcessResult;
-  onCreateTicket?: (stationId: string) => void;
+  reviews?: AnomalyReviews;
+  reviewer?: Reviewer | null;
+  onReview?: (key: string, review: AnomalyReview | null) => void | Promise<AnomalyReview | null | void>;
+  onCreateTicket?: (stationId: string, date?: string) => void;
+  reviewBusy?: boolean;
+  renderTip?: (text: string, label?: string) => ReactNode;
 }
 
-export function AnomalyReportTab({ result, onCreateTicket }: AnomalyReportTabProps) {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-  const [mode, setMode] = useState<"high" | "low">("high");
-  const [selectedId, setSelectedId] = useState<string>(() => {
-    const firstHigh = result.anomaly_summary.find((s) => s.events.some((e) => !e.is_low));
-    return firstHigh?.station_id ?? result.dry_stuck_summary[0]?.station_id ?? result.anomaly_summary[0]?.station_id ?? "";
-  });
+function ReviewBadge({ review }: { review?: AnomalyReview }) {
+  return <Badge tone={review?.status === "anomaly" ? "danger" : review ? "neutral" : "warning"}>
+    {review ? DECISION_LABEL[review.status] : "Needs review"}
+  </Badge>;
+}
+
+export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onCreateTicket, renderTip, reviewBusy = false }: AnomalyReportTabProps) {
+  const toast = useToast();
+  const events = useMemo(() => flaggedReadings(result.flagged_data), [result.flagged_data]);
+  const [mode, setMode] = useState<"high" | "low">(() => events.some((row) => row.is_anomaly) ? "high" : "low");
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("pending");
+  const [station, setStation] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [undo, setUndo] = useState<{ row: DailyReading; previous: AnomalyReview | null; applied: AnomalyReview } | null>(null);
   const [compareNeighbors, setCompareNeighbors] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [filter, setFilter] = useState("");
-
-  const flaggedByStation = useMemo(() => {
-    const map = new Map<string, ProcessResult["flagged_data"]>();
-    for (const row of result.flagged_data) {
-      const arr = map.get(row.station_id) ?? [];
-      arr.push(row);
-      map.set(row.station_id, arr);
-    }
-    for (const arr of map.values()) arr.sort((a, b) => (a.date < b.date ? -1 : 1));
-    return map;
-  }, [result.flagged_data]);
-
-  const rainByStationDate = useMemo(() => {
+  const [showHistory, setShowHistory] = useState(false);
+  const highCount = events.filter((row) => row.is_anomaly).length;
+  const lowCount = events.length - highCount;
+  const reviewedCount = events.filter((row) => !!reviews[readingKey(row)]).length;
+  const remaining = events.find((row) => !reviews[readingKey(row)]);
+  const scoped = events.filter((row) => (mode === "high" ? row.is_anomaly : !row.is_anomaly)
+    && (!station || row.station_id === station)
+    && (!query.trim() || `${row.station_id} ${row.date}`.toLowerCase().includes(query.trim().toLowerCase())));
+  const pendingCount = scoped.filter((row) => !reviews[readingKey(row)]).length;
+  const visible = scoped.filter((row) => reviewFilter === "all" || (reviewFilter === "pending" ? !reviews[readingKey(row)] : !!reviews[readingKey(row)]));
+  const selected = selectedKey === "" ? undefined : scoped.find((row) => readingKey(row) === selectedKey)
+    ?? visible[0];
+  const currentKey = selected ? readingKey(selected) : "";
+  const nextKey = nextPendingReading(scoped, reviews, currentKey);
+  const undoControl = undo && onReview ? <Button size="sm" variant="ghost"
+    disabled={reviewBusy}
+    title={`Undo review for ${undo.row.station_id} · ${undo.row.date}`}
+    aria-label={`Undo last review for ${undo.row.station_id} on ${undo.row.date}`}
+    onClick={async () => {
+      const latest = reviews[readingKey(undo.row)];
+      if (latest?.reviewed_at !== undo.applied.reviewed_at || latest?.reviewer_id !== undo.applied.reviewer_id || latest?.revision !== undo.applied.revision) {
+        toast.error("This decision has changed", { description: "Open the reading to check its latest review." }); setUndo(null); return;
+      }
+      try { await onReview(readingKey(undo.row), undo.previous); }
+      catch (error) { toast.error("Couldn't undo review", { description: error instanceof Error ? error.message : "Try again." }); return; }
+      setMode(undo.row.is_anomaly ? "high" : "low");
+      setReviewFilter(undo.previous ? "reviewed" : "pending");
+      setStation(""); setQuery(""); setSelectedKey(readingKey(undo.row)); setUndo(null);
+    }}><RotateCcw size={12} /> Undo</Button> : null;
+  const byStation = useMemo(() => {
     const map = new Map<string, Record<string, number>>();
     for (const row of result.flagged_data) {
-      const byDate = map.get(row.station_id) ?? {};
-      byDate[row.date] = row.rainfall;
-      map.set(row.station_id, byDate);
+      const days = map.get(row.station_id) ?? {};
+      days[row.date] = row.rainfall;
+      map.set(row.station_id, days);
     }
     return map;
   }, [result.flagged_data]);
+  const neighbors = selected ? result.neighbors?.[selected.station_id] ?? [] : [];
+  const bars: DateComparisonBar[] = selected ? [
+    { stationId: selected.station_id, rainfall: selected.rainfall, isSelected: true, isAnomaly: true },
+    ...neighbors.map((neighbor) => ({ stationId: neighbor.neighbor_id, rainfall: byStation.get(neighbor.neighbor_id)?.[selected.date] ?? null, isSelected: false, isAnomaly: false })),
+  ] : [];
+  const neighborValues = bars.slice(1).map((bar) => bar.rainfall).filter((value): value is number => value !== null).sort((a, b) => a - b);
+  const middle = Math.floor(neighborValues.length / 2);
+  const median = neighborValues.length ? (neighborValues.length % 2 ? neighborValues[middle] : (neighborValues[middle - 1] + neighborValues[middle]) / 2) : null;
+  const highPattern = result.station_health?.find((row) => row.station_id === selected?.station_id);
+  const lowPattern = result.station_stuck_health?.find((row) => row.station_id === selected?.station_id);
+  const pattern = mode === "high" ? highPattern : lowPattern;
+  const averageDifference = pattern?.bias_ratio != null ? Math.round((pattern.bias_ratio - 1) * 100) : null;
+  const history = useMemo(() => result.flagged_data.filter((row) => row.station_id === selected?.station_id)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => ({ date: row.date, rainfall: row.rainfall, is_anomaly: mode === "high" && row.is_anomaly, is_low_anomaly: mode === "low" && !!(row.is_low_anomaly || row.is_dry_stuck) })), [result.flagged_data, selected?.station_id, mode]);
 
-  // ── High = only high (is_low=false). Backend anomaly_summary is unified (high+single-day low); we filter here so High never shows low readings.
-  const highOnlySummary = useMemo(() => {
-    return result.anomaly_summary
-      .map((s) => {
-        const highEvents = s.events.filter((e) => !e.is_low);
-        return { ...s, events: highEvents, anomaly_count: highEvents.length };
-      })
-      .filter((s) => s.anomaly_count > 0)
-      .sort((a, b) => b.anomaly_count - a.anomaly_count);
-  }, [result.anomaly_summary]);
+  if (!events.length) return <div className={styles.empty}>
+    <p>No flagged readings to review.</p>
+    <span>Days without enough nearby readings could not be assessed.</span>
+  </div>;
 
-  const maxAnomalies = useMemo(() => Math.max(1, ...highOnlySummary.map((s) => s.anomaly_count)), [highOnlySummary]);
-  const maxDryStuck = useMemo(() => Math.max(1, ...(result.dry_stuck_summary ?? []).map((s) => s.stuck_count)), [result.dry_stuck_summary]);
-
-  const healthById = useMemo(() => {
-    const m = new Map<string, StationHealth>();
-    for (const h of result.station_health ?? []) m.set(h.station_id, h);
-    return m;
-  }, [result.station_health]);
-  const stuckById = useMemo(() => {
-    const m = new Map<string, StationStuckHealth>();
-    for (const h of result.station_stuck_health ?? []) m.set(h.station_id, h);
-    return m;
-  }, [result.station_stuck_health]);
-
-  const selectedHealth = selectedId ? healthById.get(selectedId) ?? null : null;
-  const selectedStuck = selectedId ? stuckById.get(selectedId) ?? null : null;
-
-  useEffect(() => {
-    const list = mode === "high" ? highOnlySummary : (result.dry_stuck_summary ?? []);
-    if (list.length > 0 && !list.some((s) => s.station_id === selectedId)) setSelectedId(list[0].station_id);
-  }, [mode, highOnlySummary, result.dry_stuck_summary, selectedId]);
-
-  const selectedStation = highOnlySummary.find((s) => s.station_id === selectedId) ?? null;
-  const selectedDryStation = (result.dry_stuck_summary ?? []).find((s) => s.station_id === selectedId) ?? null;
-  const selectedTimeseries = selectedId ? (flaggedByStation.get(selectedId) ?? []) : [];
-
-  const topAnomalyDate = useMemo(() => {
-    if (!selectedStation || selectedStation.events.length === 0) return "";
-    return [...selectedStation.events].sort((a, b) => b.rainfall - a.rainfall)[0].date;
-  }, [selectedStation]);
-  const topDryDate = useMemo(() => {
-    if (!selectedDryStation || selectedDryStation.events.length === 0) return "";
-    return [...selectedDryStation.events].sort((a, b) => (a.group_median - a.rainfall) - (b.group_median - b.rainfall))[0].date;
-  }, [selectedDryStation]);
-  const topDateForMode = mode === "high" ? topAnomalyDate : topDryDate;
-
-  useEffect(() => {
-    const list = mode === "high" ? selectedStation?.events : selectedDryStation?.events;
-    const valid = list?.some((e) => e.date === selectedDate);
-    if (!valid) setSelectedDate(topDateForMode);
-  }, [mode, selectedStation, selectedDryStation, topDateForMode, selectedDate]);
-
-  // Clear filter when station/mode changes
-  useEffect(() => { setFilter(""); }, [selectedId, mode]);
-
-  const hasHigh = highOnlySummary.length > 0;
-  const hasLow = (result.dry_stuck_summary ?? []).length > 0;
-
-
-  const chartData = useMemo(
-    () =>
-      selectedTimeseries.map((row) => ({
-        date: row.date,
-        rainfall: row.rainfall,
-        is_anomaly: mode === "high" ? !!row.is_anomaly : false,
-        // Low readings single-day lows stay in flagged_data but are NOT drawn in High; low events (is_dry_stuck) in Low readings mode.
-        is_low_anomaly: mode === "high" ? false : !!row.is_dry_stuck,
-      })),
-    [selectedTimeseries, mode],
-  );
-
-  const neighborSeries: NeighborSeries[] = useMemo(() => {
-    if (!selectedId) return [];
-    const ids = (result.neighbors[selectedId] ?? []).map((n) => n.neighbor_id);
-    return ids.map((id) => ({ stationId: id, byDate: rainByStationDate.get(id) ?? {} })).filter((s) => Object.keys(s.byDate).length > 0);
-  }, [selectedId, result.neighbors, rainByStationDate]);
-
-  const hasNeighborData = neighborSeries.length > 0;
-
-  const comparisonBars: DateComparisonBar[] = useMemo(() => {
-    if (!selectedId || !selectedDate) return [];
-    const isHigh = mode === "high";
-    const events = isHigh ? selectedStation?.events : (selectedDryStation?.events as unknown as { date: string }[] | undefined);
-    const flaggedDates = new Set((events ?? []).map((e) => e.date));
-    const selfRain = rainByStationDate.get(selectedId)?.[selectedDate] ?? null;
-    const bars: DateComparisonBar[] = [{ stationId: selectedId, rainfall: selfRain, isSelected: true, isAnomaly: flaggedDates.has(selectedDate) }];
-    for (const n of result.neighbors[selectedId] ?? []) {
-      bars.push({ stationId: n.neighbor_id, rainfall: rainByStationDate.get(n.neighbor_id)?.[selectedDate] ?? null, isSelected: false, isAnomaly: false });
-    }
-    return bars;
-  }, [selectedId, selectedDate, selectedStation, selectedDryStation, mode, result.neighbors, rainByStationDate]);
-
-  // Provenance line — one sentence instead of 4-col KV grid
-  const provenance = useMemo(() => {
-    if (mode === "high" && selectedStation) {
-      const n = selectedStation.anomaly_count;
-      const vals = selectedStation.events.map((e) => e.rainfall).sort((a, b) => b - a);
-      const peak = vals[0];
-      const peakDate = selectedStation.events.find((e) => e.rainfall === peak)?.date ?? "";
-      // Try median of neighbors for peak date for × figure (if available)
-      let times = "—";
-      if (peakDate) {
-        const neighborVals = (result.neighbors[selectedStation.station_id] ?? [])
-          .map((nn) => rainByStationDate.get(nn.neighbor_id)?.[peakDate])
-          .filter((v): v is number => typeof v === "number");
-        if (neighborVals.length > 0) {
-          const median = [...neighborVals].sort((a, b) => a - b)[Math.floor(neighborVals.length / 2)];
-          if (median > 0) times = `${(peak / median).toFixed(1)}× neighbors`;
-        }
-      }
-      return { left: `${n} flagged ${n === 1 ? "day" : "days"}`, right: peak ? `Peak ${peak.toFixed(1)} mm ${peakDate ? `· ${peakDate}` : ""}${times !== "—" ? ` · ${times}` : ""}` : "" };
-    }
-    if (mode === "low" && selectedDryStation && selectedStuck) {
-      const pct = selectedStuck.zero_rate != null ? Math.round(selectedStuck.zero_rate * 100) : 0;
-      const streak = selectedStuck.max_zero_streak ?? 0;
-      return { left: `${selectedDryStation.stuck_count} low-reading ${selectedDryStation.stuck_count === 1 ? "day" : "days"}`, right: `${pct}% recorded 0–1 mm on assessed rainy days · longest run: ${streak} successive assessed rainy days` };
-    }
-    return { left: "", right: "" };
-  }, [mode, selectedStation, selectedDryStation, selectedStuck, result.neighbors, rainByStationDate]);
-
-  // Dates — compute group median on the fly for high events to show × neighbors instead of raw LOF
-  function medianForHigh(date: string, stationId: string): number | null {
-    const vals = (result.neighbors[stationId] ?? []).map((n) => rainByStationDate.get(n.neighbor_id)?.[date]).filter((v): v is number => typeof v === "number");
-    if (vals.length === 0) return null;
-    const sorted = [...vals].sort((a, b) => a - b);
-    return sorted[Math.floor(sorted.length / 2)];
-  }
-
-  const rawEvents: any[] = mode === "high" ? (selectedStation?.events ?? []) : (selectedDryStation?.events ?? []);
-  // Most recent first — more useful than earliest-first when scanning
-  const sortedEvents = useMemo(() => [...rawEvents].sort((a: any, b: any) => b.date.localeCompare(a.date)), [rawEvents]);
-  const filteredEvents = useMemo(() => {
-    const q = filter.trim();
-    if (!q) return sortedEvents;
-    return sortedEvents.filter((e: any) => e.date.includes(q));
-  }, [sortedEvents, filter]);
-  const visibleEvents = filteredEvents;
-
-  const activeStation = mode === "high" ? selectedStation : selectedDryStation;
-  const activeHealth = mode === "high" ? highReview(selectedHealth) : lowReview(selectedStuck);
-
-  if (!hasHigh && !hasLow) {
-    return (
-      <div style={{ paddingTop: 16 }}>
-        <div style={{ background: "var(--success-soft)", border: "1px solid color-mix(in oklab, var(--success) 30%, transparent)", borderRadius: "var(--r-xl)", padding: 20, display: "flex", alignItems: "flex-start", gap: 14 }}>
-          <div style={{ height: 36, width: 36, borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--success) 18%, transparent)", display: "grid", placeItems: "center", flexShrink: 0 }}>
-            <AlertTriangle size={16} strokeWidth={2.4} style={{ color: "var(--success)" }} />
-          </div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>No anomalies detected.</h3>
-            <p style={{ margin: "4px 0 0", fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>No days met the anomaly rules. Days without enough nearby readings could not be assessed; this does not confirm sensor accuracy.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 14 }}>
-      <p style={{ margin: 0, fontSize: "var(--font-xs)", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-        Review the flagged days below. High and low readings are checked separately.
-      </p>
-      {/* Mode toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={() => setMode("high")}
-          aria-pressed={mode === "high"}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: "var(--r-full)", cursor: "pointer",
-            fontSize: "var(--font-xs)", fontWeight: 600, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums",
-            border: `1px solid ${mode === "high" ? "var(--danger)" : "var(--border)"}`,
-            background: mode === "high" ? "var(--danger-soft)" : "var(--surface)", color: mode === "high" ? "var(--danger)" : "var(--text-secondary)",
-          }}
-        >
-          <AlertTriangle size={11} strokeWidth={2.4} /> High
-          <span style={{ background: "var(--surface)", padding: "0 5px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", fontSize: 11 }}>{highOnlySummary.length}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("low")}
-          aria-pressed={mode === "low"}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: "var(--r-full)", cursor: "pointer",
-            fontSize: "var(--font-xs)", fontWeight: 600, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums",
-            border: `1px solid ${mode === "low" ? "var(--teal)" : "var(--border)"}`,
-            background: mode === "low" ? "var(--teal-soft)" : "var(--surface)", color: mode === "low" ? "var(--teal-on)" : "var(--text-secondary)",
-          }}
-        >
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: mode === "low" ? "var(--teal)" : "var(--text-tertiary)", flexShrink: 0 }} /> Low readings
-          <span style={{ background: "var(--surface)", padding: "0 5px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", fontSize: 11 }}>{(result.dry_stuck_summary ?? []).length}</span>
-        </button>
-        <span style={{ marginLeft: "auto", fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-          {mode === "high" ? `${result.summary.total_high_anomalies ?? highOnlySummary.reduce((a, s) => a + s.anomaly_count, 0)} high` : `${(result.dry_stuck_summary ?? []).reduce((a, s) => a + s.stuck_count, 0)} low-reading days to review`}
-        </span>
-      </div>
-
-      {/* Two-panel */}
-      <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 10, minHeight: 380 }}>
-        {/* Left: station list */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", maxHeight: 440, paddingRight: 2, minHeight: 0 }}>
-          {mode === "high" ? (
-            highOnlySummary.length === 0 ? (
-              <div style={{ padding: "20px 14px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No high anomalies.<br /><span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>Check <b style={{ color: "var(--teal)" }}>Low readings</b>.</span></div>
-            ) : (
-              highOnlySummary.map((station) => {
-                const selected = station.station_id === selectedId;
-                const barPct = (station.anomaly_count / maxAnomalies) * 100;
-                const h = healthById.get(station.station_id) ?? null;
-                const review = highReview(h);
-                return (
-                  <button
-                    key={station.station_id}
-                    type="button"
-                    onClick={() => setSelectedId(station.station_id)}
-                    style={{
-                      display: "flex", flexDirection: "column", gap: 5, padding: "10px 12px", borderRadius: "var(--r-lg)",
-                      border: selected ? "1px solid color-mix(in oklab, var(--danger) 30%, transparent)" : "1px solid transparent",
-                      background: selected ? "var(--danger-soft)" : "transparent", cursor: "pointer", textAlign: "left",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-sm)", fontWeight: 600, color: selected ? "var(--danger)" : "var(--text)", lineHeight: 1 }}>{station.station_id}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)" }}>{station.anomaly_count} days</span>
-                    </div>
-                    <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--danger)" : "color-mix(in oklab, var(--danger) 50%, transparent)", borderRadius: 99 }} /></div>
-                    {h && (
-                      <span title={`${review.detail} ${review.tip}`} style={{ display: "inline-flex" }}>
-                        <Badge tone={REVIEW_STATUS[h.status].tone} dot={h.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{REVIEW_STATUS[h.status].label}
-                        </Badge>
-                      </span>
-                    )}
-                  </button>
-                );
-              })
-            )
-          ) : (
-            (result.dry_stuck_summary ?? []).length === 0 ? (
-              <div style={{ padding: "20px 14px", textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>No flagged low readings.<br /><span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)" }}>No days met the low-reading flag rules.</span></div>
-            ) : (
-              (result.dry_stuck_summary ?? []).map((station) => {
-                const selected = station.station_id === selectedId;
-                const barPct = (station.stuck_count / maxDryStuck) * 100;
-                const s = stuckById.get(station.station_id) ?? null;
-                return (
-                  <button
-                    key={station.station_id}
-                    type="button"
-                    onClick={() => setSelectedId(station.station_id)}
-                    style={{
-                      display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: "var(--r-lg)",
-                      border: selected ? "1px solid color-mix(in oklab, var(--teal) 30%, transparent)" : "1px solid transparent",
-                      background: selected ? "var(--teal-soft)" : "transparent", cursor: "pointer", textAlign: "left",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-sm)", fontWeight: 600, color: selected ? "var(--teal)" : "var(--text)", lineHeight: 1 }}>{station.station_id}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-secondary)" }}>{station.stuck_count} days</span>
-                    </div>
-                    <div style={{ height: 3, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${barPct}%`, background: selected ? "var(--teal)" : "color-mix(in oklab, var(--teal) 50%, transparent)", borderRadius: 99 }} /></div>
-                    {s && (
-                      <span title={`${lowReview(s).detail} ${lowReview(s).tip}`} style={{ display: "inline-flex" }}>
-                        <Badge tone={REVIEW_STATUS[s.status].tone} dot={s.status === "suspect"} style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                          <Gauge size={10} strokeWidth={2} style={{ marginRight: 4, verticalAlign: "-1px" }} />{REVIEW_STATUS[s.status].label}
-                        </Badge>
-                      </span>
-                    )}
-                  </button>
-                );
-              })
-            )
-          )}
-          </div>
-
-        {/* Right: detail */}
-        {activeStation ? (
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "var(--shadow-sm)", display: "flex", flexDirection: "column" }}>
-            {/* Header — compact */}
-            <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ height: 28, width: 28, borderRadius: 8, background: mode === "high" ? "var(--danger-soft)" : "var(--teal-soft)", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                  <AlertTriangle size={13} strokeWidth={2.4} style={{ color: mode === "high" ? "var(--danger)" : "var(--teal)" }} />
-                </div>
-                <div>
-                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>{activeStation.station_id}</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 3 }}>
-                    <MapPin size={10} strokeWidth={2.2} /><span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>{activeStation.latitude.toFixed(3)}, {activeStation.longitude.toFixed(3)}</span>
-                  </p>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ padding: "3px 8px", borderRadius: "var(--r-full)", background: mode === "high" ? "var(--danger-soft)" : "var(--teal-soft)", color: mode === "high" ? "var(--danger)" : "var(--teal)", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-                  {mode === "high" ? `${(activeStation as any).anomaly_count} days` : `${(activeStation as any).stuck_count} days`}
-                </span>
-                {onCreateTicket && <Button size="sm" onClick={() => onCreateTicket(activeStation.station_id)}><Plus size={12} strokeWidth={2.4} /> Ticket</Button>}
-              </div>
-            </div>
-
-            {/* Station review note — mode-specific so High/Low readings stay consistent with the left list */}
-            {activeHealth && (() => {
-              const activeStatus = mode === "high" ? selectedHealth?.status : selectedStuck?.status;
-              const isSuspect = activeStatus === "suspect";
-              const isWatch = activeStatus === "watch";
-              const isNormal = activeStatus === "normal";
-              const bg = isSuspect ? "var(--danger-soft)" : isWatch ? "var(--warning-soft)" : isNormal ? "var(--surface-alt)" : "var(--surface-alt)";
-              const iconColor = isSuspect ? "var(--danger)" : isWatch ? "var(--warning)" : isNormal ? "var(--text-tertiary)" : "var(--text-tertiary)";
-              const titleColor = isNormal ? "var(--text-secondary)" : "var(--text)";
-              return (
-                <div title={(activeHealth as any).tip ?? undefined} style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", gap: 8, padding: "10px 14px", borderBottom: "1px solid var(--divider)", background: bg }}>
-                  <Gauge size={12} strokeWidth={2.4} style={{ color: iconColor, flexShrink: 0 }} />
-                  <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: titleColor, whiteSpace: "nowrap" }}>{activeHealth.title}</span>
-                  <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>· {activeHealth.detail}</span>
-                </div>
-              );
-            })()}
-
-            {/* Provenance — single line, replaces 4-col grid */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--divider)", background: "var(--surface-sunken)", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>{provenance.left}</span>
-              {provenance.right && <><span style={{ color: "var(--text-tertiary)" }}>·</span><span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>{provenance.right}</span></>}
-            </div>
-
-            {/* Timeseries — shorter, neighbors hidden by default */}
-            <div style={{ padding: "10px 14px 2px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <TrendingUp size={12} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>Rainfall</span>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: mode === "high" ? "var(--danger)" : "var(--teal)", flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{mode === "high" ? "flagged days" : "low-reading days"}</span>
-                {hasNeighborData && (
-                  <button type="button" onClick={() => setCompareNeighbors((v) => !v)} aria-pressed={compareNeighbors} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 8px", borderRadius: "var(--r-full)", cursor: "pointer", fontSize: 11, fontWeight: 500, border: `1px solid ${compareNeighbors ? "var(--brand)" : "var(--border)"}`, background: compareNeighbors ? "var(--brand-soft)" : "var(--surface)", color: compareNeighbors ? "var(--brand)" : "var(--text-secondary)" }}>
-                    <Users size={11} strokeWidth={2.2} />{compareNeighbors ? "Hide neighbors" : "Compare"}
-                  </button>
-                )}
-              </div>
-              <StationChart
-                data={chartData}
-                neighbors={compareNeighbors ? neighborSeries : []}
-                height={130}
-                anomalyColor={mode === "low" ? (isDark ? "#2DD4BF" : "#0D9488") : undefined}
-                anomalyLabel={mode === "low" ? "Low readings" : "Anomaly"}
-              />
-            </div>
-
-            {/* Neighbor comparison bar — shorter */}
-            {comparisonBars.length > 0 && (
-              <div style={{ padding: "6px 14px 6px", borderTop: "1px solid var(--divider)", marginTop: 6, outline: "none" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "6px 0 4px" }}>
-                  <BarChart3 size={12} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
-                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>By station — {selectedDate}</span>
-                </div>
-                <DateComparisonChart bars={comparisonBars} height={130} mode={mode} />
-              </div>
-            )}
-
-            {/* Flagged dates — fixed-height scroll + filter, no long list, no 25 clicks for 100+ */}
-            <div style={{ padding: "8px 14px 12px", borderTop: comparisonBars.length ? "none" : "1px solid var(--divider)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)" }}>{mode === "high" ? "Flagged dates" : "Low-reading dates"}</span>
-                <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>· {sortedEvents.length} total</span>
-                {filter && (
-                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>· {filteredEvents.length} matching</span>
-                )}
-                <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)" }}>Most recent first · Tap to compare</span>
-              </div>
-              {sortedEvents.length > 8 && (
-                <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    placeholder="Filter by date (e.g., 2023-08)"
-                    style={{
-                      flex: 1,
-                      height: 28,
-                      padding: "0 10px",
-                      borderRadius: "var(--r-full)",
-                      border: "1px solid var(--border)",
-                      background: "var(--surface)",
-                      fontSize: "var(--font-xs)",
-                      color: "var(--text)",
-                      outline: "none",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  />
-                  {filter && (
-                    <button
-                      type="button"
-                      onClick={() => setFilter("")}
-                      style={{
-                        fontSize: "var(--font-xs)",
-                        color: "var(--text-secondary)",
-                        background: "var(--surface-sunken)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--r-full)",
-                        padding: "4px 10px",
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              )}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                  maxHeight: 164,
-                  overflowY: "auto",
-                  paddingRight: 2,
-                  scrollbarWidth: "thin",
-                }}
-              >
-                {filteredEvents.map((event: any) => {
-                  const active = event.date === selectedDate;
-                  const isHighMode = mode === "high";
-                  const isLowEvent = !!(event as any).is_low;
-                  // For high mode, low events should show median (teal), high events show times (red)
-                  const median = isLowEvent ? ((event as any).group_median ?? medianForHigh(event.date, selectedId)) : (isHighMode ? medianForHigh(event.date, selectedId) : event.group_median);
-                  const times = median && median > 0 ? `${(event.rainfall / median).toFixed(1)}×` : null;
-                  const rightLabel = isLowEvent
-                    ? `median ${median?.toFixed(1) ?? (event as any).group_median?.toFixed(1) ?? "—"} mm`
-                    : isHighMode
-                      ? (times ? `${times} nearby typical rainfall` : (median === 0 ? "Nearby typical rainfall: 0 mm" : "Nearby comparison unavailable"))
-                      : `median ${event.group_median?.toFixed(1) ?? "—"} mm`;
-                  const tone = isLowEvent ? "teal" : isHighMode ? "danger" : "teal";
-                  return (
-                    <button
-                      key={event.date}
-                      type="button"
-                      onClick={() => setSelectedDate(event.date)}
-                      aria-pressed={active}
-                      style={{
-                        display: "grid", gridTemplateColumns: "auto 1fr auto auto", alignItems: "center", gap: 10,
-                        padding: "6px 10px", borderRadius: "var(--r-md)", textAlign: "left", cursor: "pointer", width: "100%", fontFamily: "inherit",
-                        background: active ? `color-mix(in oklab, var(--${tone}) 12%, var(--surface))` : "var(--surface-sunken)",
-                        border: active ? `1px solid var(--${tone})` : "1px solid var(--border)",
-                      }}
-                    >
-                      <span style={{ width: 5, height: 5, borderRadius: 99, background: active ? `var(--${tone})` : "var(--border)", flexShrink: 0 }} />
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: "var(--text)", fontWeight: active ? 600 : 400 }}>{event.date}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: `var(--${tone})`, fontWeight: 500 }}>{event.rainfall.toFixed(1)} mm</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>{rightLabel}</span>
-                    </button>
-                  );
-                })}
-                {filteredEvents.length === 0 && (
-                  <div style={{ padding: "12px", textAlign: "center", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-                    {filter ? `No dates matching "${filter}"` : "No dates"}
-                  </div>
-                )}
-              </div>
-              {sortedEvents.length > 4 && !filter && (
-                <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-tertiary)", textAlign: "center" }}>
-                  {sortedEvents.length} dates · Scroll to see older — most recent at top
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", display: "grid", placeItems: "center", minHeight: 200 }}>
-            <p style={{ fontSize: "var(--font-sm)", color: "var(--text-tertiary)" }}>Select a station</p>
-          </div>
-        )}
+  return <div className={styles.report}>
+    <div className={styles.intro}>
+      <h2>Review flagged readings</h2>
+      <div className={styles.progress}>
+        <span><strong>{reviewedCount}</strong> of {events.length} readings reviewed</span>
+        <progress value={reviewedCount} max={events.length} aria-label={`${reviewedCount} of ${events.length} readings reviewed`} />
       </div>
     </div>
-  );
+    <div className={styles.toolbar}>
+      <div className={styles.filters} aria-label="Review status">
+        {([['pending', 'Needs review', pendingCount], ['reviewed', 'Reviewed', scoped.length - pendingCount], ['all', 'All', scoped.length]] as const).map(([value, label, count]) =>
+          <button key={value} type="button" className={styles.filter} aria-pressed={reviewFilter === value} onClick={() => { setReviewFilter(value); setSelectedKey(null); }}>
+            {label} <span>{count}</span>
+          </button>)}
+      </div>
+      <div className={styles.filters} aria-label="System flag type">
+        {([['high', 'High', highCount], ['low', 'Low', lowCount]] as const).map(([value, label, count]) =>
+          <button key={value} type="button" className={styles.filter} aria-pressed={mode === value} onClick={() => { setMode(value); setSelectedKey(null); }}>
+            {label} <span>{count}</span>
+          </button>)}
+      </div>
+    </div>
+    <div className={styles.workspace}>
+      <aside className={styles.queue} aria-label="Flagged readings">
+        <div className={styles.queueFilters}>
+          <h3>Flagged readings</h3>
+          <Select value={station} onChange={(value) => { setStation(value); setSelectedKey(null); }} ariaLabel="Filter by station" width="100%"
+            options={[{ value: "", label: "All stations" }, ...Array.from(new Set(events.map((row) => row.station_id))).sort().map((id) => ({ value: id, label: id }))]} />
+          <input aria-label="Search station or date" placeholder="Search station or date…" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedKey(null); }} className={styles.search} />
+        </div>
+        <div className={styles.queueList}>
+          {visible.map((row) => {
+            const key = readingKey(row);
+            return <button key={key} type="button" className={styles.reading} aria-pressed={key === currentKey} onClick={() => setSelectedKey(key)}>
+              <span className={styles.station}>{row.station_id}</span>
+              <span className={styles.readingMeta}><span>{row.date}</span><span>{row.rainfall.toFixed(1)} mm</span></span>
+              <ReviewBadge review={reviews[key]} />
+            </button>;
+          })}
+          {!visible.length && <div className={styles.empty}>
+            <p>{!scoped.length ? "No matching readings." : reviewFilter === "pending" ? "No pending readings." : "No reviewed readings yet."}</p>
+            <Button size="sm" variant="ghost" onClick={() => { setStation(""); setQuery(""); setReviewFilter("all"); setSelectedKey(null); }}>Show all readings</Button>
+          </div>}
+        </div>
+      </aside>
+      {selected ? <section className={styles.detail} aria-label="Selected reading">
+        <div className={styles.detailHeader}>
+          <div className={styles.heading}>
+            <h3>{selected.station_id}</h3>
+            <div className={styles.readingContext}>
+              <time className={styles.readingDate} dateTime={selected.date}>{selected.date}</time>
+              <span className={styles.systemFlag}>System flag: <strong>{mode === "high" ? "High reading" : "Low reading"}</strong></span>
+            </div>
+          </div>
+          {onCreateTicket && <Button size="sm" onClick={() => onCreateTicket(selected.station_id, selected.date)}><Plus size={13} /> Create ticket</Button>}
+        </div>
+        <div className={styles.comparison}>
+          <div className={styles.chartToolbar}>
+            <p className={styles.chartTitle}>{showHistory ? "Rainfall history" : "Same-day rainfall"} <span>· mm</span></p>
+            <div className={styles.filters}>
+              {showHistory && <Button size="sm" variant="ghost" aria-pressed={compareNeighbors} disabled={!neighbors.length} onClick={() => setCompareNeighbors((value) => !value)}><Users size={12} />{compareNeighbors ? "Hide neighbors" : "Compare neighbors"}</Button>}
+              <Button size="sm" aria-label={showHistory ? "Show bar graph" : "Show rainfall history"} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}>
+                {showHistory ? <BarChart3 size={13} /> : <TrendingUp size={13} />}{showHistory ? "Bar graph" : "History"}
+              </Button>
+            </div>
+          </div>
+          <div className={styles.measurements}><strong>{selected.rainfall.toFixed(1)} <span>mm recorded</span></strong>
+            <span>{median === null ? "Nearby comparison unavailable" : `Nearby typical rainfall: ${Number(median.toFixed(1))} mm`}</span>
+          </div>
+          {showHistory ? <StationChart data={history} neighbors={compareNeighbors ? neighbors.map((neighbor) => ({ stationId: neighbor.neighbor_id, byDate: byStation.get(neighbor.neighbor_id) ?? {} })) : []}
+            height={180} anomalyColor={mode === "low" ? "var(--teal)" : undefined} anomalyLabel={mode === "low" ? "Low readings" : "High readings"} />
+          : <div className={styles.chart} tabIndex={0} role="region" aria-label="Nearby station comparison; scroll horizontally on small screens">
+            <div className={styles.chartContent}><DateComparisonChart bars={bars} height={180} mode={mode} /></div>
+          </div>}
+          {!showHistory && neighborValues.length < neighbors.length && <p className={styles.hint}>Some nearby stations have no reading on this date.</p>}
+        </div>
+        <details className={styles.disclosure}>
+          <summary>Detection details</summary>
+          <div className={styles.disclosureBody}>
+            <section className={styles.detectionGroup} aria-label="Selected-day evidence">
+              <h4>Selected day · {selected.date}</h4>
+              <dl className={styles.detectionFacts}>
+                <div className={styles.fullFact}><dt>Why flagged</dt><dd>{mode === "high" ? "High reading that stood out from nearby stations." : "Very little rain recorded while nearby stations reported rain."}</dd></div>
+                {mode === "high" && <div><dt className={styles.helpLabel} title={renderTip ? undefined : LOF_HELP}>Detection score (LOF){renderTip?.(LOF_HELP, "Explain LOF and the detection score")}</dt><dd>{selected.lof_score?.toFixed(3) ?? "Unavailable"}</dd></div>}
+              </dl>
+            </section>
+            <section className={styles.detectionGroup} aria-label="Station pattern across uploaded dates">
+              <h4>Station pattern · all uploaded dates</h4>
+              <dl className={styles.detectionFacts}>
+                <div><dt>Rainy days checked</dt><dd>{pattern?.rain_days ?? "Unavailable"}</dd></div>
+                <div><dt className={styles.helpLabel} title={renderTip ? undefined : AVERAGE_HELP}>Average vs group{renderTip?.(AVERAGE_HELP, "Explain average vs group")}</dt><dd>{averageDifference === null ? "Not enough data" : averageDifference === 0 ? "About the same" : `About ${Math.abs(averageDifference)}% ${averageDifference > 0 ? "higher" : "lower"}`}</dd></div>
+                {mode === "high" ? <>
+                  <div><dt className={styles.helpLabel} title={renderTip ? undefined : HIGHEST_HELP}>Highest in group{renderTip?.(HIGHEST_HELP, "Explain highest in group")}</dt><dd>{highPattern?.top_rate != null ? <>{Math.round(highPattern.top_rate * 100)}%<span className={styles.valueMeta}> of checked rainy days</span></> : "Not enough data"}</dd></div>
+                  <div><dt>Largest flagged reading</dt><dd>{highPattern?.peak_rainfall != null ? <>{highPattern.peak_rainfall.toFixed(1)} mm{highPattern.peak_date && <span className={styles.valueMeta}> · {highPattern.peak_date}</span>}</> : "Unavailable"}</dd></div>
+                </> : <>
+                  <div><dt>Days with 0–1 mm</dt><dd>{lowPattern && lowPattern.rain_days > 0 ? `${lowPattern.events.length} of ${lowPattern.rain_days} checked rainy days` : "Not enough data"}</dd></div>
+                  <div><dt title="Successive assessed rainy days, which may be separated by dry days or gaps. This is not necessarily a run of consecutive calendar days.">Longest low-reading run</dt><dd>{lowPattern?.max_zero_streak != null ? `${lowPattern.max_zero_streak} rainy checks in a row` : "Not enough data"}</dd></div>
+                </>}
+              </dl>
+            </section>
+            <p className={styles.detectionNote}>A flag needs review. It does not confirm a sensor fault.</p>
+          </div>
+        </details>
+        <ReviewActions key={currentKey} row={selected} review={reviews[currentKey]} reviewer={reviewer}
+          busy={reviewBusy}
+          undoControl={undoControl}
+          onSkip={nextKey ? () => { setReviewFilter("pending"); setSelectedKey(nextKey); } : undefined}
+          onReview={onReview ? async (key, review) => {
+            if (!review) return;
+            const applied = await onReview(key, review);
+            setUndo({ row: selected, previous: reviews[key] ?? null, applied: applied ?? review });
+            setReviewFilter("pending");
+            setSelectedKey(nextPendingReading(scoped, { ...reviews, [key]: review }, key) ?? "");
+          } : undefined} />
+      </section> : <section className={styles.detail}><div className={styles.empty}>
+        <p>{scoped.length && !pendingCount ? "All readings in this selection have been reviewed." : "No readings in this view."}</p>
+        <div className={styles.completionActions}>
+        {remaining && (!pendingCount || selectedKey === "")
+          ? <Button size="sm" onClick={() => { setMode(remaining.is_anomaly ? "high" : "low"); setReviewFilter("pending"); setStation(""); setQuery(""); setSelectedKey(readingKey(remaining)); }}>Review remaining readings <ArrowRight size={13} /></Button>
+          : <span>{reviewedCount === events.length ? "Open Reviewed to check your decisions, or download Results CSV." : "Choose another review tab, station, or search to continue."}</span>}
+          {undoControl}
+        </div>
+      </div></section>}
+    </div>
+  </div>;
+}
+
+function ReviewActions({ row, review, reviewer, onReview, onSkip, undoControl, busy = false }: {
+  row: DailyReading;
+  review?: AnomalyReview;
+  reviewer?: Reviewer | null;
+  onReview?: (key: string, review: AnomalyReview | null) => void | Promise<void>;
+  busy?: boolean;
+  onSkip?: () => void;
+  undoControl?: ReactNode;
+}) {
+  const toast = useToast();
+  const [note, setNote] = useState(review?.note ?? "");
+  const lastSavedNote = useRef(review?.note ?? "");
+  const [decision, setDecision] = useState<{ status: ReviewDecision; note: string; save: NonNullable<typeof onReview> } | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const previous = lastSavedNote.current;
+    const next = review?.note ?? "";
+    lastSavedNote.current = next;
+    setNote((draft) => draft === previous ? next : draft);
+  }, [review?.note]);
+  function confirmDecision(status: ReviewDecision) {
+    // Retain the handler's revision snapshot when opening confirmation; SSE must not change its base.
+    if (onReview) setDecision({ status, note: note.trim(), save: onReview });
+  }
+  const enabled = !!(onReview && reviewer?.id) && !busy && !saving;
+  return <div className={styles.review}>
+    <div className={styles.reviewHeading}><h4>How would you mark this reading?</h4><ReviewBadge review={review} /></div>
+    <p className={styles.hint}>After confirmation, the next pending reading opens.</p>
+    {review && <p className={styles.hint}>Reviewed by {review.reviewed_by} · {new Date(review.reviewed_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" })}</p>}
+    <div className={styles.reviewFooter}>
+      <details className={styles.note}>
+        <summary>{review?.note ? "Review note" : "Add note (optional)"}</summary>
+        <textarea aria-label="Review note" value={note} maxLength={1000} disabled={!enabled} onChange={(event) => setNote(event.target.value)} placeholder="Why did you choose this decision?" />
+        {note.trim() !== (review?.note ?? "") && <p className={styles.hint}>Your note is included when you mark this reading.</p>}
+      </details>
+      <div className={styles.actions}>
+        <Button variant="primary" size="md" disabled={!enabled || (review?.status === "anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("anomaly")}><AlertTriangle size={14} /> Mark as anomaly</Button>
+        <Button variant="primary" size="md" disabled={!enabled || (review?.status === "not_anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("not_anomaly")}><Check size={14} /> Mark as not anomaly</Button>
+        {undoControl}
+        <Button size="sm" variant="ghost" disabled={!onSkip || saving || busy} onClick={onSkip}>{review ? "Next to review" : "Skip for now"} <ArrowRight size={13} /></Button>
+      </div>
+    </div>
+    {decision && <ConfirmDialog title={decision.status === "anomaly" ? "Mark as anomaly?" : "Mark as not anomaly?"}
+      message={<>{row.station_id} · {row.date}<br />{row.rainfall.toFixed(1)} mm. Your decision will be included in downloads; the system flag will remain recorded.</>}
+      confirmLabel={decision.status === "anomaly" ? "Mark as anomaly" : "Mark as not anomaly"} onCancel={() => setDecision(null)}
+      onConfirm={async () => {
+        if (!reviewer || !onReview) return;
+        setDecision(null);
+        setSaving(true);
+        try {
+          await decision.save(readingKey(row), { status: decision.status, note: decision.note, reviewed_by: reviewer.full_name || reviewer.username, reviewer_id: reviewer.id, reviewed_at: new Date().toISOString() });
+          toast.success(`Marked as ${DECISION_LABEL[decision.status].toLowerCase()}`, { description: `${row.station_id} · ${row.date}` });
+        } catch (error) {
+          toast.error("Couldn't save review", { description: error instanceof Error ? error.message : "Try again." });
+        } finally { setSaving(false); }
+      }} />}
+  </div>;
 }
