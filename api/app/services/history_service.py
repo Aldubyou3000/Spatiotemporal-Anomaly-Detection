@@ -1,5 +1,6 @@
 """Immutable processing snapshots and separate, authenticated analyst decisions."""
 import hashlib
+import json
 import logging
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
@@ -106,7 +107,7 @@ def get_reviews(sb, run_id: str) -> list[dict]:
 def validate_reading(sb, run_id: str, station_id: str, day: str) -> None:
     # Check compact identities without downloading every raw/cleaned row on each decision.
     rows = sb.table("processing_runs").select("id").eq("id", run_id).contains(
-        "flagged_readings", [{"station_id": station_id, "date": day}]).limit(1).execute().data
+        "flagged_readings", json.dumps([{"station_id": station_id, "date": day}])).limit(1).execute().data
     if not rows:
         raise HTTPException(422, "This flagged reading does not belong to the saved run.")
 

@@ -25,7 +25,7 @@ interface StationChartProps {
   data: { date: string; rainfall: number; is_anomaly: boolean; is_low_anomaly?: boolean }[];
   /** Optional neighbor lines overlaid for spatial comparison. */
   neighbors?: NeighborSeries[];
-  height?: number;
+  height?: number | "100%";
   /** Color for anomaly dots — teal for silent, red for high. */
   anomalyColor?: string;
   anomalyLabel?: string;

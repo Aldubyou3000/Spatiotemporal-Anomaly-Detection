@@ -92,9 +92,12 @@ test("review workspace keeps zero-neighbor evidence, decisions and optional hist
   assert.match(html, /Mark as not anomaly/);
   assert.match(html, /Skip for now/);
   assert.match(html, /Review flagged readings/);
-  assert.match(html, /How would you mark this reading/);
+  assert.match(html, /Review decision/);
   assert.match(html, /Same-day rainfall/);
   assert.match(html, /aria-label="Show rainfall history"/);
+  assert.match(html, /aria-label="Show detection details"/);
+  assert.match(html, /<textarea[^>]*aria-label="Review note"/);
+  assert.doesNotMatch(html, /<details|<summary/);
   assert.equal((html.match(/recharts-responsive-container/g) ?? []).length, 1, "only one chart is displayed at a time");
   assert.doesNotMatch(html, /Compare nearby stations, then record your decision|Reviews apply to this run/);
   assert.match(html, /Create ticket/);

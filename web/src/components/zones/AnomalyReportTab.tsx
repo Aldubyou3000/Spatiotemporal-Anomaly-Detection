@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowRight, BarChart3, Check, Plus, RotateCcw, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, Check, Info, Plus, RotateCcw, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -45,7 +45,7 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ row: DailyReading; previous: AnomalyReview | null; applied: AnomalyReview } | null>(null);
   const [compareNeighbors, setCompareNeighbors] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
+  const [evidenceView, setEvidenceView] = useState<"bar" | "history" | "details">("bar");
   const highCount = events.filter((row) => row.is_anomaly).length;
   const lowCount = events.length - highCount;
   const reviewedCount = events.filter((row) => !!reviews[readingKey(row)]).length;
@@ -58,6 +58,18 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
   const selected = selectedKey === "" ? undefined : scoped.find((row) => readingKey(row) === selectedKey)
     ?? visible[0];
   const currentKey = selected ? readingKey(selected) : "";
+  const queueRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Pin the initial choice before live reviews change the filtered queue.
+    if (selectedKey === null && currentKey) setSelectedKey(currentKey);
+    const queue = queueRef.current;
+    const item = queue?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!queue || !item) return;
+    const bounds = queue.getBoundingClientRect();
+    const reading = item.getBoundingClientRect();
+    if (reading.top < bounds.top) queue.scrollTop += reading.top - bounds.top;
+    else if (reading.bottom > bounds.bottom) queue.scrollTop += reading.bottom - bounds.bottom;
+  }, [currentKey, selectedKey]);
   const nextKey = nextPendingReading(scoped, reviews, currentKey);
   const undoControl = undo && onReview ? <Button size="sm" variant="ghost"
     disabled={reviewBusy}
@@ -113,18 +125,21 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
       </div>
     </div>
     <div className={styles.toolbar}>
-      <div className={styles.filters} aria-label="Review status">
-        {([['pending', 'Needs review', pendingCount], ['reviewed', 'Reviewed', scoped.length - pendingCount], ['all', 'All', scoped.length]] as const).map(([value, label, count]) =>
-          <button key={value} type="button" className={styles.filter} aria-pressed={reviewFilter === value} onClick={() => { setReviewFilter(value); setSelectedKey(null); }}>
-            {label} <span>{count}</span>
-          </button>)}
-      </div>
-      <div className={styles.filters} aria-label="System flag type">
-        {([['high', 'High', highCount], ['low', 'Low', lowCount]] as const).map(([value, label, count]) =>
-          <button key={value} type="button" className={styles.filter} aria-pressed={mode === value} onClick={() => { setMode(value); setSelectedKey(null); }}>
-            {label} <span>{count}</span>
-          </button>)}
-      </div>
+      <input aria-label="Search station or date" placeholder="Search station or date…" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedKey(null); }} className={styles.search} />
+      <div className={styles.reportFilters}>
+        <div className={styles.filters} aria-label="Review status">
+          {([['pending', 'Needs review', pendingCount], ['reviewed', 'Reviewed', scoped.length - pendingCount], ['all', 'All', scoped.length]] as const).map(([value, label, count]) =>
+            <button key={value} type="button" className={styles.filter} aria-pressed={reviewFilter === value} onClick={() => { setReviewFilter(value); setSelectedKey(null); }}>
+              {label} <span>{count}</span>
+            </button>)}
+        </div>
+        <div className={styles.filters} aria-label="System flag type">
+          {([['high', 'High', highCount], ['low', 'Low', lowCount]] as const).map(([value, label, count]) =>
+            <button key={value} type="button" className={styles.filter} aria-pressed={mode === value} onClick={() => { setMode(value); setSelectedKey(null); }}>
+              {label} <span>{count}</span>
+            </button>)}
+        </div>
+        </div>
     </div>
     <div className={styles.workspace}>
       <aside className={styles.queue} aria-label="Flagged readings">
@@ -132,9 +147,8 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
           <h3>Flagged readings</h3>
           <Select value={station} onChange={(value) => { setStation(value); setSelectedKey(null); }} ariaLabel="Filter by station" width="100%"
             options={[{ value: "", label: "All stations" }, ...Array.from(new Set(events.map((row) => row.station_id))).sort().map((id) => ({ value: id, label: id }))]} />
-          <input aria-label="Search station or date" placeholder="Search station or date…" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedKey(null); }} className={styles.search} />
         </div>
-        <div className={styles.queueList}>
+        <div className={styles.queueList} ref={queueRef}>
           {visible.map((row) => {
             const key = readingKey(row);
             return <button key={key} type="button" className={styles.reading} aria-pressed={key === currentKey} onClick={() => setSelectedKey(key)}>
@@ -162,27 +176,32 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
         </div>
         <div className={styles.comparison}>
           <div className={styles.chartToolbar}>
-            <p className={styles.chartTitle}>{showHistory ? "Rainfall history" : "Same-day rainfall"} <span>· mm</span></p>
-            <div className={styles.filters}>
-              {showHistory && <Button size="sm" variant="ghost" aria-pressed={compareNeighbors} disabled={!neighbors.length} onClick={() => setCompareNeighbors((value) => !value)}><Users size={12} />{compareNeighbors ? "Hide neighbors" : "Compare neighbors"}</Button>}
-              <Button size="sm" aria-label={showHistory ? "Show bar graph" : "Show rainfall history"} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}>
-                {showHistory ? <BarChart3 size={13} /> : <TrendingUp size={13} />}{showHistory ? "Bar graph" : "History"}
-              </Button>
+            <p className={styles.chartTitle}>{evidenceView === "details" ? "Detection details" : <>{evidenceView === "history" ? "Rainfall history" : "Same-day rainfall"} <span>· mm</span></>}</p>
+              <div className={styles.filters} role="group" aria-label="Reading evidence view">
+                <Button size="sm" variant={evidenceView === "bar" ? "secondary" : "ghost"} aria-label="Show bar graph" aria-pressed={evidenceView === "bar"} onClick={() => setEvidenceView("bar")}><BarChart3 size={13} /> Bar graph</Button>
+                <Button size="sm" variant={evidenceView === "history" ? "secondary" : "ghost"} aria-label="Show rainfall history" aria-pressed={evidenceView === "history"} onClick={() => setEvidenceView("history")}><TrendingUp size={13} /> History</Button>
+                <Button size="sm" variant={evidenceView === "details" ? "secondary" : "ghost"} aria-label="Show detection details" aria-pressed={evidenceView === "details"} onClick={() => setEvidenceView("details")}><Info size={13} /> Detection details</Button>
+              </div>
+          </div>
+          <div className={styles.evidenceView}>
+          {evidenceView !== "details" && <>
+          <div className={styles.measurements}><strong>{selected.rainfall.toFixed(1)} <span>mm recorded</span></strong>
+            <div className={styles.neighborControls}>
+              <span>{median === null ? "Nearby comparison unavailable" : `Nearby typical rainfall: ${Number(median.toFixed(1))} mm`}</span>
+              {evidenceView === "history" && <Button size="sm" variant={compareNeighbors ? "primary" : "secondary"} aria-pressed={compareNeighbors} disabled={!neighbors.length} onClick={() => setCompareNeighbors((value) => !value)}>
+                {compareNeighbors ? <Check size={13} /> : <Users size={13} />} Compare neighbors
+              </Button>}
             </div>
           </div>
-          <div className={styles.measurements}><strong>{selected.rainfall.toFixed(1)} <span>mm recorded</span></strong>
-            <span>{median === null ? "Nearby comparison unavailable" : `Nearby typical rainfall: ${Number(median.toFixed(1))} mm`}</span>
-          </div>
-          {showHistory ? <StationChart data={history} neighbors={compareNeighbors ? neighbors.map((neighbor) => ({ stationId: neighbor.neighbor_id, byDate: byStation.get(neighbor.neighbor_id) ?? {} })) : []}
-            height={180} anomalyColor={mode === "low" ? "var(--teal)" : undefined} anomalyLabel={mode === "low" ? "Low readings" : "High readings"} />
-          : <div className={styles.chart} tabIndex={0} role="region" aria-label="Nearby station comparison; scroll horizontally on small screens">
-            <div className={styles.chartContent}><DateComparisonChart bars={bars} height={180} mode={mode} /></div>
+          {evidenceView === "history" ? <div className={styles.chart}><div className={styles.chartContent}><StationChart data={history} neighbors={compareNeighbors ? neighbors.map((neighbor) => ({ stationId: neighbor.neighbor_id, byDate: byStation.get(neighbor.neighbor_id) ?? {} })) : []}
+            height="100%" anomalyColor={mode === "low" ? "var(--teal)" : undefined} anomalyLabel={mode === "low" ? "Low readings" : "High readings"} /></div></div>
+          : <div className={`${styles.chart} ${styles.barChart}`} tabIndex={0} role="region" aria-label="Nearby station comparison; scroll horizontally on small screens">
+            <div className={styles.chartContent}><DateComparisonChart bars={bars} height="100%" mode={mode} /></div>
           </div>}
-          {!showHistory && neighborValues.length < neighbors.length && <p className={styles.hint}>Some nearby stations have no reading on this date.</p>}
-        </div>
-        <details className={styles.disclosure}>
-          <summary>Detection details</summary>
-          <div className={styles.disclosureBody}>
+          {evidenceView === "bar" && neighborValues.length < neighbors.length && <p className={styles.hint}>Some nearby stations have no reading on this date.</p>}
+          </>}
+          <div hidden={evidenceView !== "details"}>
+          <div className={styles.detectionDetails}>
             <section className={styles.detectionGroup} aria-label="Selected-day evidence">
               <h4>Selected day · {selected.date}</h4>
               <dl className={styles.detectionFacts}>
@@ -206,7 +225,9 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
             </section>
             <p className={styles.detectionNote}>A flag needs review. It does not confirm a sensor fault.</p>
           </div>
-        </details>
+          </div>
+          </div>
+        </div>
         <ReviewActions key={currentKey} row={selected} review={reviews[currentKey]} reviewer={reviewer}
           busy={reviewBusy}
           undoControl={undoControl}
@@ -257,19 +278,20 @@ function ReviewActions({ row, review, reviewer, onReview, onSkip, undoControl, b
   }
   const enabled = !!(onReview && reviewer?.id) && !busy && !saving;
   return <div className={styles.review}>
-    <div className={styles.reviewHeading}><h4>How would you mark this reading?</h4><ReviewBadge review={review} /></div>
-    <p className={styles.hint}>After confirmation, the next pending reading opens.</p>
-    {review && <p className={styles.hint}>Reviewed by {review.reviewed_by} · {new Date(review.reviewed_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" })}</p>}
+    <div className={styles.reviewHeading}>
+      <h4>Review decision</h4><ReviewBadge review={review} />
+      {review && <p className={styles.hint}>Reviewed by {review.reviewed_by} · {new Date(review.reviewed_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" })}</p>}
+    </div>
     <div className={styles.reviewFooter}>
-      <details className={styles.note}>
-        <summary>{review?.note ? "Review note" : "Add note (optional)"}</summary>
-        <textarea aria-label="Review note" value={note} maxLength={1000} disabled={!enabled} onChange={(event) => setNote(event.target.value)} placeholder="Why did you choose this decision?" />
-        {note.trim() !== (review?.note ?? "") && <p className={styles.hint}>Your note is included when you mark this reading.</p>}
-      </details>
+      <div className={styles.note}>
+        <label><span className="sr-only">Review note (optional)</span>
+          <textarea aria-label="Review note" aria-description="Your note is included when you mark this reading." rows={2} value={note} maxLength={1000} disabled={!enabled} onChange={(event) => setNote(event.target.value)} placeholder="Review note (optional)…" />
+        </label>
+      </div>
       <div className={styles.actions}>
         <Button variant="primary" size="md" disabled={!enabled || (review?.status === "anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("anomaly")}><AlertTriangle size={14} /> Mark as anomaly</Button>
         <Button variant="primary" size="md" disabled={!enabled || (review?.status === "not_anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("not_anomaly")}><Check size={14} /> Mark as not anomaly</Button>
-        {undoControl}
+        <span className={styles.undoSlot}>{undoControl}</span>
         <Button size="sm" variant="ghost" disabled={!onSkip || saving || busy} onClick={onSkip}>{review ? "Next to review" : "Skip for now"} <ArrowRight size={13} /></Button>
       </div>
     </div>

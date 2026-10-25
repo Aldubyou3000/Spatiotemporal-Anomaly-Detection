@@ -226,6 +226,13 @@ server-side: `logger.error("[mobile] report insert failed: %s", err)`.
 
 ## 4. UI / UX
 
+### Bug: Review controls jump while typing, saving or receiving live updates
+**Root cause:** A conditional note paragraph added 18px of height while typing; inserting Undo shifted the actions by about 79px. Until a queue row was explicitly clicked, selection followed the first pending row, so a live update could silently select another reading and discard its draft editor.
+
+**Fix:** Reserve Undo/Next control space, keep note guidance out of layout via aria-description, keep attribution on one line, and pin the initial reading key. Scroll only the queue to reveal the selected reading; disable its automatic browser scroll anchoring. Verified with hydrated synthetic saves, live updates and Undo at wide/narrow panel widths, plus a selected-editor regression test.
+
+**Files:** `web/src/components/zones/AnomalyReportTab.tsx`, its CSS module and `web/tests/history-render.test.cjs`.
+
 ### Bug: Brief flash of "oauth-callback" screen after Google sign-in
 **Symptom:** After successful Google sign-in, a brief white screen or "oauth-callback" text flashes
 before landing on the home screen.
@@ -254,6 +261,15 @@ now the implicit, always-on behavior. No confusing opt-in needed.
 ---
 
 ## 5. Data / API
+
+### Bug: Saved-reading review fails with "Failed to fetch"
+**Symptom:** Confirming a review in saved History results shows Couldn't save review / Failed to fetch.
+
+**Root cause:** `validate_reading` passed a list of dictionaries to the Python PostgREST client's `contains` filter. That client treats a list as a PostgreSQL array and attempts to join its elements as strings, raising `TypeError: sequence item 0: expected str instance, dict found` before the database request. The unhandled API failure appears as a fetch error in the cross-origin dashboard.
+
+**Fix:** JSON-encode the station/day array with `json.dumps` before passing it to `contains`. This shared validation also protects ticket-to-reading links. A real-client HTTP transport regression covers the review endpoint and quoted station names. Live lookup and a non-writing revision check passed; the separate database save probe was rolled back.
+
+**Files:** `api/app/services/history_service.py`, `api/tests/test_history.py`.
 
 ### Bug: Random "Ticket not found" errors on the mobile app
 **Symptom:** A technician taps a ticket that was just loaded in the list, and gets "Ticket not

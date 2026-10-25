@@ -1,6 +1,7 @@
 """Saved history must preserve evidence and authenticate every review."""
 import sys
 import os
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,8 @@ for key, value in {"SUPABASE_URL": "http://127.0.0.1:1", "SUPABASE_SERVICE_ROLE_
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+import httpx
+from postgrest import SyncPostgrestClient
 from app.schemas.auth import UserProfile
 from app.schemas.zones import ProcessResult
 from app.services import history_service as history
@@ -62,7 +65,7 @@ class HistoryTests(unittest.TestCase):
         query = sb.table.return_value.select.return_value.eq.return_value
         def contains(column, values):
             self.assertEqual(column, "flagged_readings")
-            rows = [{"id": RUN}] if values == [{"station_id": "A", "date": "2023-01-01"}] else []
+            rows = [{"id": RUN}] if json.loads(values) == [{"station_id": "A", "date": "2023-01-01"}] else []
             query.limit.return_value.execute.return_value.data = rows
             return query
         query.contains.side_effect = contains
@@ -144,6 +147,38 @@ class HistoryTests(unittest.TestCase):
             response = client.patch(f"/api/history/{RUN}/reviews", headers={"X-CSRF-Token": "test-csrf"}, json={"station_id": "A", "date": "2023-01-01", "status": "anomaly"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(save.call_args.args[3].id, USER.id)
+
+    def test_review_endpoint_encodes_jsonb_with_real_postgrest_client(self):
+        from app.routers import history as router_module
+        from app.core.dependencies import require_analyst
+        station = 'Station "North", {A}'
+        saved = {"station_id": station, "date": "2023-01-01", "status": "anomaly", "note": "checked",
+                 "reviewer_id": USER.id, "reviewed_by": USER.full_name, "reviewed_at": "2026-10-25T00:00:00Z", "revision": 1}
+        requests = []
+
+        def respond(request):
+            requests.append(request)
+            if request.method == "GET":
+                predicate = request.url.params["flagged_readings"]
+                self.assertTrue(predicate.startswith("cs."))
+                self.assertEqual(json.loads(predicate[3:]), [{"station_id": station, "date": "2023-01-01"}])
+                return httpx.Response(200, json=[{"id": RUN}])
+            self.assertEqual(request.url.path, "/rpc/save_processing_review")
+            self.assertEqual(json.loads(request.content)["p_station_id"], station)
+            return httpx.Response(200, json=saved)
+
+        app = FastAPI()
+        app.include_router(router_module.router)
+        app.dependency_overrides[require_analyst] = lambda: USER.model_dump()
+        with httpx.Client(transport=httpx.MockTransport(respond)) as transport:
+            sb = SyncPostgrestClient("http://database.test", http_client=transport)
+            with patch.object(router_module, "get_supabase", return_value=sb), patch.object(history.audit, "log"):
+                response = TestClient(app, cookies={"csrf_token": "test"}).patch(
+                    f"/api/history/{RUN}/reviews", headers={"X-CSRF-Token": "test"},
+                    json={"station_id": station, "date": "2023-01-01", "status": "anomaly", "note": "checked"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), saved)
+        self.assertEqual(len(requests), 2)
 
     def test_cookie_review_write_requires_matching_csrf_token(self):
         from app.routers import history as router_module

@@ -25,7 +25,7 @@ export interface DateComparisonBar {
 
 interface DateComparisonChartProps {
   bars: DateComparisonBar[];
-  height?: number;
+  height?: number | "100%";
   mode?: "high" | "low";
 }
 

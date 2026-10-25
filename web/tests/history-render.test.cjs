@@ -49,7 +49,7 @@ const render = (Component) => renderToStaticMarkup(React.createElement(ToastProv
 
 test("history keeps a multi-file processing run in a single row with review and ticket counts", () => {
   const html = render(List);
-  assert.equal((html.match(/aria-label="View run for/g) ?? []).length, 1);
+  assert.equal((html.match(/class="runRow"/g) ?? []).length, 1);
   assert.match(html, /HMDAS-ScienceGarden.csv/);
   assert.match(html, /2 files/);
   assert.match(html, /Analyst One/);
@@ -61,7 +61,9 @@ test("history keeps a multi-file processing run in a single row with review and 
 test("History displays the analyst title while keeping older records readable by filename", () => {
   run.title = "October rainfall validation";
   try {
-    assert.match(render(List), /title="October rainfall validation"[^>]*>October rainfall validation<\/a>/);
+    const html = render(List);
+    assert.match(html, /title="October rainfall validation"/);
+    assert.match(html, /<strong>October rainfall validation<\/strong>/);
     assert.match(render(Detail), /<h2>October rainfall validation<\/h2>/);
   } finally { delete run.title; }
   assert.match(render(List), /HMDAS-ScienceGarden.csv/);
@@ -114,4 +116,75 @@ test("an open review confirmation keeps the save handler and note from before an
   await confirmation.props.onConfirm();
   assert.deepEqual(calls, [[1, "First inspection"]], "the confirmed action must not switch to the handler for an unseen revision");
   reactOverride = undefined;
+});
+
+test("reading evidence switches views while retaining the selected reading and review controls", () => {
+  const cells = []; let cursor = 0;
+  const reportPath = path.resolve(__dirname, "../src/components/zones/AnomalyReportTab.tsx");
+  cache.delete(reportPath);
+  reactOverride = {
+    ...React, useEffect: () => {}, useMemo: (fn) => fn(), useRef: (value) => ({ current: value }),
+    useState: (initial) => { const index = cursor++; if (!(index in cells)) cells[index] = typeof initial === "function" ? initial() : initial;
+      return [cells[index], (update) => { cells[index] = typeof update === "function" ? update(cells[index]) : update; }]; },
+  };
+  function find(node, match) {
+    if (!node || typeof node !== "object") return null;
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
+    return null;
+  }
+  try {
+    const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+    const row = { station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true };
+    const renderReport = () => { cursor = 0; return AnomalyReportTab({ result: { flagged_data: [row] } }); };
+    let report = renderReport();
+    const reviewKey = find(report, (node) => node.type?.name === "ReviewActions").key;
+    assert.ok(find(report, (node) => node.type?.name === "DateComparisonChart"));
+    for (const [label, chart, detailsVisible] of [
+      ["Show rainfall history", "StationChart", false],
+      ["Show detection details", null, true],
+      ["Show bar graph", "DateComparisonChart", false],
+    ]) {
+      find(report, (node) => node.props?.["aria-label"] === label).props.onClick();
+      report = renderReport();
+      assert.equal(find(report, (node) => node.props?.hidden !== undefined).props.hidden, !detailsVisible);
+      assert.equal(!!find(report, (node) => node.type?.name === "StationChart"), chart === "StationChart");
+      assert.equal(!!find(report, (node) => node.type?.name === "DateComparisonChart"), chart === "DateComparisonChart");
+      assert.equal(find(report, (node) => node.type?.name === "ReviewActions").key, reviewKey);
+      assert.equal(find(report, (node) => node.props?.["aria-label"] === label).props["aria-pressed"], true);
+    }
+  } finally { reactOverride = undefined; cache.delete(reportPath); }
+});
+
+test("live reviews retain the initial reading and its mounted note editor", () => {
+  const cells = []; let cursor = 0; let effects = [];
+  const reportPath = path.resolve(__dirname, "../src/components/zones/AnomalyReportTab.tsx");
+  cache.delete(reportPath);
+  reactOverride = {
+    ...React, useMemo: (fn) => fn(), useRef: () => ({ current: null }), useEffect: (fn) => effects.push(fn),
+    useState: (initial) => { const index = cursor++; if (!(index in cells)) cells[index] = typeof initial === "function" ? initial() : initial;
+      return [cells[index], (update) => { cells[index] = typeof update === "function" ? update(cells[index]) : update; }]; },
+  };
+  function findActions(node) {
+    if (!node || typeof node !== "object") return null;
+    if (node.type?.name === "ReviewActions") return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = findActions(child); if (found) return found; }
+    return null;
+  }
+  try {
+    const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+    const rows = ["A", "B"].map((station_id) => ({ station_id, date: "2023-01-01", rainfall: 30, is_anomaly: true }));
+    const render = (reviews) => {
+      cursor = 0; effects = [];
+      const report = AnomalyReportTab({ result: { flagged_data: rows }, reviews });
+      effects.forEach((effect) => effect());
+      return findActions(report);
+    };
+    const initial = render({});
+    const updated = render({ '["A","2023-01-01"]': { status: "anomaly", note: "Updated by another analyst", revision: 1 } });
+    assert.equal(initial.props.row.station_id, "A");
+    assert.equal(updated.props.row.station_id, "A");
+    assert.equal(updated.key, initial.key, "a live update must not unmount the editor and discard its draft");
+    assert.equal(updated.props.review.status, "anomaly");
+  } finally { reactOverride = undefined; cache.delete(reportPath); }
 });

@@ -85,4 +85,4 @@ No new production rule-of-3 candidate: ZoneResults/CreateTicketModal/InfoTip are
 
 Manual-save review (2026-10-25): reused existing dialog/input/button and one shared controller for navigation, reset, rerun, file replacement and save-before-ticket. No new production rule-of-3 candidate.
 
-Compact search field candidate (2026-10-25): icon + small outlined input now appears near-identically in Audit, DataTable and History (also Tickets). Consider a shared search-field primitive if these controls change together; no refactor was needed for this styling correction.
+Compact search field candidate (2026-10-25): icon + small outlined input appears near-identically in Audit, DataTable and Tickets. History's inbox redesign now uses a wider rounded search field and is no longer part of this compact pattern. Consider a shared search-field primitive if the three compact controls change together; no refactor was needed for these styling changes.

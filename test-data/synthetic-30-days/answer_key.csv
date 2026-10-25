@@ -1,0 +1,121 @@
+date,station_id,expected_daily_mm,expected_high_flag,expected_low_flag,expected_label,scenario
+2023-09-01,SyntheticMandaluyong,0,false,false,normal,All dry
+2023-09-01,SyntheticMarikinaYouthCamp,0,false,false,normal,All dry
+2023-09-01,SyntheticNapindanII,0,false,false,normal,All dry
+2023-09-01,SyntheticValenzuelaNHS,0,false,false,normal,All dry
+2023-09-02,SyntheticMandaluyong,1,false,false,normal,Light rain
+2023-09-02,SyntheticMarikinaYouthCamp,1.5,false,false,normal,Light rain
+2023-09-02,SyntheticNapindanII,2,false,false,normal,Light rain
+2023-09-02,SyntheticValenzuelaNHS,2.5,false,false,normal,Light rain
+2023-09-03,SyntheticMandaluyong,18.5,false,false,normal,Similar moderate rain
+2023-09-03,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Similar moderate rain
+2023-09-03,SyntheticNapindanII,20.5,false,false,normal,Similar moderate rain
+2023-09-03,SyntheticValenzuelaNHS,21.5,false,false,normal,Similar moderate rain
+2023-09-04,SyntheticMandaluyong,100,true,false,high,Isolated high reading
+2023-09-04,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Isolated high reading
+2023-09-04,SyntheticNapindanII,20.5,false,false,normal,Isolated high reading
+2023-09-04,SyntheticValenzuelaNHS,21.5,false,false,normal,Isolated high reading
+2023-09-05,SyntheticMandaluyong,28.5,false,false,normal,Similar moderate rain
+2023-09-05,SyntheticMarikinaYouthCamp,29.5,false,false,normal,Similar moderate rain
+2023-09-05,SyntheticNapindanII,30.5,false,false,normal,Similar moderate rain
+2023-09-05,SyntheticValenzuelaNHS,31.5,false,false,normal,Similar moderate rain
+2023-09-06,SyntheticMandaluyong,18.5,false,false,normal,Zero while neighbors report rain
+2023-09-06,SyntheticMarikinaYouthCamp,0,false,true,low,Zero while neighbors report rain
+2023-09-06,SyntheticNapindanII,20.5,false,false,normal,Zero while neighbors report rain
+2023-09-06,SyntheticValenzuelaNHS,21.5,false,false,normal,Zero while neighbors report rain
+2023-09-07,SyntheticMandaluyong,78.5,false,false,normal,Widespread heavy rain
+2023-09-07,SyntheticMarikinaYouthCamp,79.5,false,false,normal,Widespread heavy rain
+2023-09-07,SyntheticNapindanII,80.5,false,false,normal,Widespread heavy rain
+2023-09-07,SyntheticValenzuelaNHS,81.5,false,false,normal,Widespread heavy rain
+2023-09-08,SyntheticMandaluyong,23.5,false,false,normal,Similar moderate rain
+2023-09-08,SyntheticMarikinaYouthCamp,24.5,false,false,normal,Similar moderate rain
+2023-09-08,SyntheticNapindanII,25.5,false,false,normal,Similar moderate rain
+2023-09-08,SyntheticValenzuelaNHS,26.5,false,false,normal,Similar moderate rain
+2023-09-09,SyntheticMandaluyong,18.5,false,false,normal,Isolated high reading
+2023-09-09,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Isolated high reading
+2023-09-09,SyntheticNapindanII,140,true,false,high,Isolated high reading
+2023-09-09,SyntheticValenzuelaNHS,21.5,false,false,normal,Isolated high reading
+2023-09-10,SyntheticMandaluyong,0,false,false,normal,All dry
+2023-09-10,SyntheticMarikinaYouthCamp,0,false,false,normal,All dry
+2023-09-10,SyntheticNapindanII,0,false,false,normal,All dry
+2023-09-10,SyntheticValenzuelaNHS,0,false,false,normal,All dry
+2023-09-11,SyntheticMandaluyong,18.5,false,false,normal,Trace rain while neighbors report rain
+2023-09-11,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Trace rain while neighbors report rain
+2023-09-11,SyntheticNapindanII,20.5,false,false,normal,Trace rain while neighbors report rain
+2023-09-11,SyntheticValenzuelaNHS,0.5,false,true,low,Trace rain while neighbors report rain
+2023-09-12,SyntheticMandaluyong,1,false,false,normal,Light rain
+2023-09-12,SyntheticMarikinaYouthCamp,1.5,false,false,normal,Light rain
+2023-09-12,SyntheticNapindanII,2,false,false,normal,Light rain
+2023-09-12,SyntheticValenzuelaNHS,2.5,false,false,normal,Light rain
+2023-09-13,SyntheticMandaluyong,18.5,false,false,normal,Isolated high reading
+2023-09-13,SyntheticMarikinaYouthCamp,90,true,false,high,Isolated high reading
+2023-09-13,SyntheticNapindanII,20.5,false,false,normal,Isolated high reading
+2023-09-13,SyntheticValenzuelaNHS,21.5,false,false,normal,Isolated high reading
+2023-09-14,SyntheticMandaluyong,33.5,false,false,normal,Similar moderate rain
+2023-09-14,SyntheticMarikinaYouthCamp,34.5,false,false,normal,Similar moderate rain
+2023-09-14,SyntheticNapindanII,35.5,false,false,normal,Similar moderate rain
+2023-09-14,SyntheticValenzuelaNHS,36.5,false,false,normal,Similar moderate rain
+2023-09-15,SyntheticMandaluyong,1,false,true,low,Low reading at 1 mm boundary
+2023-09-15,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Low reading at 1 mm boundary
+2023-09-15,SyntheticNapindanII,20.5,false,false,normal,Low reading at 1 mm boundary
+2023-09-15,SyntheticValenzuelaNHS,21.5,false,false,normal,Low reading at 1 mm boundary
+2023-09-16,SyntheticMandaluyong,98.5,false,false,normal,Widespread heavy rain
+2023-09-16,SyntheticMarikinaYouthCamp,99.5,false,false,normal,Widespread heavy rain
+2023-09-16,SyntheticNapindanII,100.5,false,false,normal,Widespread heavy rain
+2023-09-16,SyntheticValenzuelaNHS,101.5,false,false,normal,Widespread heavy rain
+2023-09-17,SyntheticMandaluyong,18.5,false,false,normal,Similar moderate rain
+2023-09-17,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Similar moderate rain
+2023-09-17,SyntheticNapindanII,20.5,false,false,normal,Similar moderate rain
+2023-09-17,SyntheticValenzuelaNHS,21.5,false,false,normal,Similar moderate rain
+2023-09-18,SyntheticMandaluyong,18.5,false,false,normal,Isolated high reading
+2023-09-18,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Isolated high reading
+2023-09-18,SyntheticNapindanII,20.5,false,false,normal,Isolated high reading
+2023-09-18,SyntheticValenzuelaNHS,120,true,false,high,Isolated high reading
+2023-09-19,SyntheticMandaluyong,5,false,false,normal,Isolated 5 mm below high flag minimum
+2023-09-19,SyntheticMarikinaYouthCamp,0,false,false,normal,Isolated 5 mm below high flag minimum
+2023-09-19,SyntheticNapindanII,0,false,false,normal,Isolated 5 mm below high flag minimum
+2023-09-19,SyntheticValenzuelaNHS,0,false,false,normal,Isolated 5 mm below high flag minimum
+2023-09-20,SyntheticMandaluyong,28.5,false,false,normal,Similar moderate rain
+2023-09-20,SyntheticMarikinaYouthCamp,29.5,false,false,normal,Similar moderate rain
+2023-09-20,SyntheticNapindanII,30.5,false,false,normal,Similar moderate rain
+2023-09-20,SyntheticValenzuelaNHS,31.5,false,false,normal,Similar moderate rain
+2023-09-21,SyntheticMandaluyong,18.5,false,false,normal,Zero while neighbors report rain
+2023-09-21,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Zero while neighbors report rain
+2023-09-21,SyntheticNapindanII,0,false,true,low,Zero while neighbors report rain
+2023-09-21,SyntheticValenzuelaNHS,21.5,false,false,normal,Zero while neighbors report rain
+2023-09-22,SyntheticMandaluyong,118.5,false,false,normal,Widespread heavy rain
+2023-09-22,SyntheticMarikinaYouthCamp,119.5,false,false,normal,Widespread heavy rain
+2023-09-22,SyntheticNapindanII,120.5,false,false,normal,Widespread heavy rain
+2023-09-22,SyntheticValenzuelaNHS,121.5,false,false,normal,Widespread heavy rain
+2023-09-23,SyntheticMandaluyong,10,true,false,high,Isolated high at 10 mm boundary
+2023-09-23,SyntheticMarikinaYouthCamp,0,false,false,normal,Isolated high at 10 mm boundary
+2023-09-23,SyntheticNapindanII,0,false,false,normal,Isolated high at 10 mm boundary
+2023-09-23,SyntheticValenzuelaNHS,0,false,false,normal,Isolated high at 10 mm boundary
+2023-09-24,SyntheticMandaluyong,1,false,false,normal,Light rain
+2023-09-24,SyntheticMarikinaYouthCamp,1.5,false,false,normal,Light rain
+2023-09-24,SyntheticNapindanII,2,false,false,normal,Light rain
+2023-09-24,SyntheticValenzuelaNHS,2.5,false,false,normal,Light rain
+2023-09-25,SyntheticMandaluyong,18.5,false,false,normal,Trace rain while neighbors report rain
+2023-09-25,SyntheticMarikinaYouthCamp,0.5,false,true,low,Trace rain while neighbors report rain
+2023-09-25,SyntheticNapindanII,20.5,false,false,normal,Trace rain while neighbors report rain
+2023-09-25,SyntheticValenzuelaNHS,21.5,false,false,normal,Trace rain while neighbors report rain
+2023-09-26,SyntheticMandaluyong,38.5,false,false,normal,Similar moderate rain
+2023-09-26,SyntheticMarikinaYouthCamp,39.5,false,false,normal,Similar moderate rain
+2023-09-26,SyntheticNapindanII,40.5,false,false,normal,Similar moderate rain
+2023-09-26,SyntheticValenzuelaNHS,41.5,false,false,normal,Similar moderate rain
+2023-09-27,SyntheticMandaluyong,18.5,false,false,normal,Isolated high reading
+2023-09-27,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Isolated high reading
+2023-09-27,SyntheticNapindanII,110,true,false,high,Isolated high reading
+2023-09-27,SyntheticValenzuelaNHS,21.5,false,false,normal,Isolated high reading
+2023-09-28,SyntheticMandaluyong,0,false,false,normal,All dry
+2023-09-28,SyntheticMarikinaYouthCamp,0,false,false,normal,All dry
+2023-09-28,SyntheticNapindanII,0,false,false,normal,All dry
+2023-09-28,SyntheticValenzuelaNHS,0,false,false,normal,All dry
+2023-09-29,SyntheticMandaluyong,18.5,false,false,normal,Low reading at 1 mm boundary
+2023-09-29,SyntheticMarikinaYouthCamp,19.5,false,false,normal,Low reading at 1 mm boundary
+2023-09-29,SyntheticNapindanII,20.5,false,false,normal,Low reading at 1 mm boundary
+2023-09-29,SyntheticValenzuelaNHS,1,false,true,low,Low reading at 1 mm boundary
+2023-09-30,SyntheticMandaluyong,88.5,false,false,normal,Widespread heavy rain
+2023-09-30,SyntheticMarikinaYouthCamp,89.5,false,false,normal,Widespread heavy rain
+2023-09-30,SyntheticNapindanII,90.5,false,false,normal,Widespread heavy rain
+2023-09-30,SyntheticValenzuelaNHS,91.5,false,false,normal,Widespread heavy rain

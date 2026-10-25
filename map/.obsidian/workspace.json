@@ -180,8 +180,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "7d519219af3f5d2a",
+  "active": "dc5f300b9545c45c",
   "lastOpenFiles": [
+    "log.md",
     "orphans.md",
     "shared-candidates.md",
     "components/api-app.md",
