@@ -9,7 +9,7 @@
 .sectionTabs > [role="tab"][aria-selected="false"]:hover { background: var(--surface-sunken); }
 .sectionTabs > [role="tab"] > span:last-child { display: none; }
 .sectionTabs > [role="tab"]:focus-visible { outline-offset: -3px; }
-.warningCount { padding: 0 var(--space-1); border-radius: var(--r-sm); background: var(--danger-soft); color: var(--danger-on); font-size: var(--font-xs); font-variant-numeric: tabular-nums; }
+.warningCount { display: inline-flex; align-items: center; justify-content: center; min-width: calc(var(--space-6) - var(--space-1)); min-height: calc(var(--space-6) - var(--space-1)); padding: 0 var(--space-1); border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent); border-radius: var(--r-sm); background: var(--danger-soft); color: var(--danger-on); font-size: var(--font-xs); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
 .sectionContent { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: var(--gap-card); background: var(--surface-alt); }
 .sectionContent[hidden] { display: none; }
 .qualityCard { padding: var(--pad-y) var(--pad-x); background: var(--surface); border-radius: var(--r-xl); }
@@ -30,7 +30,7 @@
 .rowValue span { font-size: var(--font-xs); font-weight: 400; color: var(--text-muted); }
 .stationCounts { margin: var(--space-1) 0 var(--space-2); color: var(--text-muted); font-size: var(--font-xs); font-variant-numeric: tabular-nums; }
 .stationLink { border: 0; background: none; padding: 0; text-align: left; font-size: var(--font-sm); font-weight: 600; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
-.stationLink:hover { color: var(--brand); text-decoration: underline; }
+.stationLink:hover { color: var(--brand-text); text-decoration: underline; }
 .stationLink:disabled { cursor: default; color: var(--text); text-decoration: none; }
 .reviewRow[data-selected="true"] { background: var(--surface-sunken); border-radius: var(--r-md); }
 .runDetails { padding: var(--pad-y) var(--pad-x); background: var(--surface); border-radius: var(--r-xl); display: flex; flex-direction: column; gap: var(--space-4); }
@@ -48,7 +48,7 @@
 .metrics > div { position: relative; overflow: hidden; min-width: 0; padding: var(--pad-y) var(--pad-x); background: var(--surface); border-radius: var(--r-xl); }
 .metricLabel { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: var(--r-sm); min-width: 0; }
 .metrics dt { display: flex; align-items: center; gap: var(--r-sm); color: var(--text-secondary); font-size: var(--font-sm); }
-.metrics dd { position: relative; z-index: 1; margin: var(--r-sm) 0 0; font-size: calc(var(--font-xl) + var(--r-xs)); font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text); }
+.metrics dd { position: relative; z-index: 1; margin: var(--r-sm) 0 0; font-size: var(--font-metric); font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text); }
 .metrics small { display: block; margin-top: var(--r-xs); color: var(--text-muted); font-size: var(--font-xs); font-weight: 400; line-height: 1.5; }
 .dateRange { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 .sectionLabel { display: flex; align-items: center; gap: var(--r-sm); margin: 0; color: var(--text-secondary); font-size: var(--font-sm); font-weight: 500; }
@@ -60,7 +60,7 @@
 .reviewCard { padding: var(--pad-y) var(--pad-x); background: var(--surface); border-radius: var(--r-xl); }
 .reviewHeader, .reviewFooter { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
 .reviewHeader { color: var(--text-secondary); }
-.reviewHeader h3 { margin: 0; font-size: var(--font-sm); font-weight: 600; color: var(--text); }
+.reviewHeader h3 { margin: 0; font-size: var(--font-lg); font-weight: 600; color: var(--text); }
 .headerMeta { margin-left: auto; color: var(--text-muted); font-size: var(--font-xs); }
 .reviewRow { display: flex; align-items: flex-start; gap: var(--r-lg); padding: var(--space-4) 0; }
 .reviewRow + .reviewRow { border-top: 1px solid var(--border-soft); }

@@ -1,6 +1,6 @@
 # Orphans
 
-Local UI Library reference check (2026-10-25): design routes are Next entry points. DesignLibrary imports the catalogue/settings model; ComponentPreview imports Specimens and fixtures; specimens import every existing visual module listed in the catalogue. The previously unused Card primitive now has an active gallery caller. No component was removed or orphaned; nonvisual controllers retain their operational callers.
+UI Library removal check (2026-10-27): removed design routes/editor/preview, the unused Card family, gallery-only tests and library docs/scratch notes. Every retained visual component module has an operational inbound reference outside the retired gallery. Shared regression data moved to `web/tests/fixtures.ts`, used by component, History, Overview and ticket-stability checks; no runtime module imports test fixtures.
 
 Files/components with no inbound references from anything else in the map, or that the map flags as suspect. Each entry: what it is, why it has no inbound refs (dead code, map gap, or external entry point), and a suggested action.
 
@@ -14,9 +14,9 @@ Checked 2026-10-24: `start.sh`, `api/debug_tickets.py`, `api/=4.0.0`, `api/uvico
 
 ## Apparent orphans (need verification before action)
 
-### `web/src/components/ui/Card.tsx`
-**What**: Available primitive `Card`/`CardHeader`/`CardTitle`/`CardBody` (68 lines). Currently 0 inbound imports — all pages build cards inline with `div style={{background:"var(--surface)"…}}`. Not deleted; kept as a reusable primitive for future use.
-**Action**: If a new page needs a surface card, import from here instead of inlining. Remove only if the design system drops the pattern.
+### `web/src/components/ui/Card.tsx` — removed 2026-10-27
+**What**: `Card`/`CardHeader`/`CardTitle`/`CardBody` were used only by the retired gallery. All operational pages build their own surfaces.
+**Action**: Removed with the UI Library after checking imports across the source tree; no dashboard caller required replacement.
 
 ### `web/src/components/ui/Skeleton.tsx` — `ReportSkeleton`/`AttachmentSkeleton`/`TableSkeleton`
 **What**: Three skeleton variants removed 2026-08-31 — never imported (only `TicketRowSkeleton`, `TechRowSkeleton`, `AuditRowSkeleton`, `DetailSkeleton` are live). See `web-pages-components.md` for the retained set.
@@ -177,3 +177,63 @@ Data quality density (2026-10-26): HelpTip aliases the shared InfoTip in Overvie
 
 
 Station panel refinement (2026-10-26): stationPicker/reviewList CSS is consumed by its owning panels; reused existing HelpTip import. No orphan module.
+
+
+History visual update (2026-10-26): removed redundant CalendarDays import. Reused existing page, CSS and pagination; no orphan modules.
+
+
+History sort/filter wiring (2026-10-26): existing Select is imported by History, HistoryFilters.sort crosses API wrapper/router/service; no new modules or orphan references.
+
+
+Zones ready indicator (2026-10-26): WorkspaceSidebar is private to dashboard layout; Sidebar resultsReady is supplied by that wrapper and the existing gallery. No new module or orphan.
+
+
+History toolbar alignment (2026-10-26): removed unused ArrowDownWideNarrow import; existing Select and listOrder class remain in use.
+
+
+Search consistency (2026-10-26): reused existing attributes and modules; no new modules or orphan references.
+
+
+Search behavior repair (2026-10-26): new web/src/lib/search.ts is imported by DataTable, AnomalyReportTab, Tickets, Technicians and DesignLibrary. Added focused web/tests/search.test.cjs and api/tests/test_search.py; no orphan modules.
+
+
+Ticket numeric prefix (2026-10-26): matchesTicketSearch exported from existing lib/search.ts is consumed by Tickets page and search regression checks; no new modules.
+
+
+Shared table headers (2026-10-26): existing components reference the global .table-heading utility; no new modules or orphan references.
+
+
+History summary density (2026-10-26): summaryOverview/detailBody/summaryCard/ticketsCard classes are referenced by the existing detail page; no new modules or orphan references.
+
+
+History file readability (2026-10-26): removed obsolete .file/.file strong rules; new detail classes are referenced by existing History detail page. No new module.
+
+
+History detail canvas (2026-10-26): new local detailPage/detailWorkspace classes are used by the existing detail route; no new files or orphan references.
+
+
+History back navigation (2026-10-26): removed detail page usage of styles.back; class remains used by History empty-state links. ArrowLeft remains in use in Header.leading.
+
+
+History back-link restoration (2026-10-26): detail route again uses existing styles.back; topbar-btn--back remains used by results route. No new modules.
+
+Roboto rollout (2026-10-26): removed unused Fraunces import/font load and .font-display class. Root --font-roboto feeds --font-ui across all interface consumers; --font-mono remains referenced by code/version styling. No new runtime module or orphan component introduced. Typography research and implementation plan are documentation artifacts.
+
+
+Tickets refinement (2026-10-26): Tickets.module.css is imported by the Tickets page, TicketDetailBody and TicketActionDock. Removed private StatusDropdown, duplicated dock header decorations and unused global dock animation rules. Existing detail/dock/gallery imports remain; no orphan runtime component.
+
+
+Compact ticket queue (2026-10-26): removed Tickets page User icon import and queue-only technician class. TicketRow/rowFooter/station and matching skeleton remain used; assignment detail retains its own existing identity controls. New report-density plan is documentation only.
+
+
+Report density (2026-10-27): removed background band styling but retained referenced context/properties/dates classes. New local notice/history classes are used by existing TicketDetailBody; all photo/prior-round/file renderers retain active callers. No orphan module.
+
+Ticket update stability (2026-10-27): removed ticket entrance animation class references; global animation utilities remain used elsewhere. Existing components/classes remain referenced; new ticket-stability.test.cjs is a direct Node regression entry point. No orphan runtime modules.
+
+History/realtime performance (2026-10-27): new nested loading files are Next route entry points; both SSE routers call the broker heartbeat subscription; refreshSession is used by REST and SSE. New events/session-refresh tests are test entry points. No orphan runtime module.
+
+Sidebar logo anchoring (2026-10-27): styles only in existing Sidebar; no new modules or changed references.
+
+Sidebar toggle icons (2026-10-27): removed unused Sidebar ChevronLeft/ChevronRight imports; no module/reference change.
+
+Instant result tabs (2026-10-27): removed animation-class references only; global fade utility remains used elsewhere. No orphan module.

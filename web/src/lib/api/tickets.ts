@@ -44,6 +44,19 @@ export const ticketsApi = {
   list: (params: TicketListParams = {}) =>
     apiClient.get<TicketListResponse>("/api/tickets", { params }),
 
+  // shortcut: load all summaries for local board search; use server search when the board reaches thousands of tickets.
+  async listAll(params: TicketListParams = {}): Promise<TicketListResponse> {
+    const items: TicketListResponse["items"] = [];
+    let total = 0;
+    do {
+      const page = await ticketsApi.list({ ...params, limit: 100, offset: items.length });
+      total = page.total;
+      if (!page.items.length) break;
+      items.push(...page.items);
+    } while (items.length < total);
+    return { items, total };
+  },
+
   get: (id: string) =>
     apiClient.get<TicketDetail>(`/api/tickets/${id}`),
 

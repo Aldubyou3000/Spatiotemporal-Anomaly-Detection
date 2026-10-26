@@ -2,7 +2,7 @@
 .card h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text); font-size: var(--font-sm); font-weight: 600; }
 .description { margin: var(--space-2) 0 var(--space-4); color: var(--text-secondary); font-size: var(--font-sm); line-height: 1.6; }
 .label { display: block; margin-bottom: var(--space-2); color: var(--text-secondary); font-size: var(--font-xs); }
-.listHeading { display: flex; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-4); color: var(--text-muted); font-size: var(--font-xs); }
+.listHeading { display: flex; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-4); align-items: center; }
 .list { list-style: none; padding: 0; margin: var(--space-2) 0; }
 .list li { display: flex; justify-content: space-between; gap: var(--space-4); min-height: var(--row-h); align-items: center; padding: var(--space-2) 0; color: var(--text); font-size: var(--font-sm); }
 .list li + li { border-top: 1px solid var(--border-soft); }

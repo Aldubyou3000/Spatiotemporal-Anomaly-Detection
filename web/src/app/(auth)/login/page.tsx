@@ -154,6 +154,7 @@ export default function LoginPage() {
       {/* ── Left: light panel — exactly 50% on desktop, hidden on mobile */}
       <div
         className="hidden md:flex"
+        data-theme="light"
         style={{
           flex: "0 0 50%",
           maxWidth: "50%",
@@ -211,15 +212,15 @@ export default function LoginPage() {
           />
           <div style={{ width: 1, height: 38, background: "#D1D5DB", flexShrink: 0 }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "grid", placeItems: "center", color: "var(--brand)", flexShrink: 0 }}>
+            <div style={{ display: "grid", placeItems: "center", color: "var(--brand-text)", flexShrink: 0 }}>
               <SentinelMark size={52} />
             </div>
             <div style={{ lineHeight: 1, display: "flex", flexDirection: "column", gap: 4 }}>
               <div
                 style={{
-                  fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
-                  fontSize: "18px",
-                  fontWeight: 800,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: "var(--font-lg)",
+                  fontWeight: 700,
                   letterSpacing: "-0.02em",
                   color: "#0B1220",
                   lineHeight: 1,
@@ -229,17 +230,17 @@ export default function LoginPage() {
               </div>
               <div
                 style={{
-                  fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
-                  fontSize: "9.5px",
+                  fontFamily: "var(--font-ui)",
+                  fontSize: "var(--font-xs)",
                   fontWeight: 600,
                   letterSpacing: "0.20em",
                   color: "#6B7280",
-                  textTransform: "uppercase",
+                  textTransform: "none",
                   lineHeight: 1,
                   marginRight: "-0.20em",
                 }}
               >
-                ANOMALY DETECTOR
+                Anomaly detector
               </div>
             </div>
           </div>
@@ -260,9 +261,9 @@ export default function LoginPage() {
           <h2
             style={{
               margin: 0,
-              fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
-              fontSize: "48px",
-              fontWeight: 800,
+              fontFamily: "var(--font-ui)",
+              fontSize: "3rem",
+              fontWeight: 700,
               lineHeight: 0.95,
               letterSpacing: "-0.04em",
               color: "#0B1220",
@@ -275,7 +276,7 @@ export default function LoginPage() {
           <p
             style={{
               margin: "18px 0 0",
-              fontSize: "16px",
+              fontSize: "var(--font-base)",
               lineHeight: 1.55,
               color: "#6B7280",
               maxWidth: 380,
@@ -287,7 +288,7 @@ export default function LoginPage() {
         </div>
 
         {/* Bottom subtle caption — no fake avatars / no trial */}
-        <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 8, fontSize: "11.5px", color: "#9CA3AF" }}>
+        <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>
           <span style={{ width: 28, height: 1, background: "#D1D5DB", display: "inline-block" }} />
           PAGASA · Department of Science and Technology
         </div>
@@ -296,6 +297,7 @@ export default function LoginPage() {
       {/* ── Right: dark panel — 50/50 on desktop, full width on mobile — darkblue like darkmode (surface #11151B) */}
       <div
         className="w-full md:w-1/2 md:basis-1/2 flex items-center justify-center"
+        data-theme="dark"
         style={{
           minWidth: 0,
           background: "#11151B",
@@ -322,9 +324,9 @@ export default function LoginPage() {
               <SentinelMark size={42} />
             </div>
             <div style={{ lineHeight: 1 }}>
-              <div style={{ fontSize: "14px", fontWeight: 800, letterSpacing: "-0.02em", color: "#F3F5F8" }}>AWS Sentinel</div>
-              <div style={{ fontSize: "8.5px", fontWeight: 600, letterSpacing: "0.18em", color: "#9CA3AF", textTransform: "uppercase", marginRight: "-0.18em" }}>
-                ANOMALY DETECTOR
+              <div style={{ fontSize: "var(--font-base)", fontWeight: 700, letterSpacing: "-0.02em", color: "#F3F5F8" }}>AWS Sentinel</div>
+              <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "normal", color: "#C4CBD8", textTransform: "none", marginRight: 0 }}>
+                Anomaly detector
               </div>
             </div>
           </div>
@@ -336,8 +338,8 @@ export default function LoginPage() {
             <h1
               style={{
                 margin: 0,
-                fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
-                fontSize: "20px",
+                fontFamily: "var(--font-ui)",
+                fontSize: "var(--font-xl)",
                 fontWeight: 600,
                 letterSpacing: "-0.02em",
                 color: "#FFFFFF",
@@ -346,7 +348,7 @@ export default function LoginPage() {
             >
               Welcome back
             </h1>
-            <p style={{ margin: "6px 0 0", fontSize: "13.5px", color: "#9CA3AF", lineHeight: 1.5 }}>
+            <p style={{ margin: "6px 0 0", fontSize: "var(--font-base)", color: "#C4CBD8", lineHeight: 1.5 }}>
               Sign in to your AWS Sentinel workspace.
             </p>
           </div>
@@ -365,7 +367,7 @@ export default function LoginPage() {
                   border: "1px solid #1F2530",
                   background: "#161B22",
                   color: "#F4F4F5",
-                  fontSize: "13.5px",
+                  fontSize: "var(--font-base)",
                   fontWeight: 500,
                   display: "flex",
                   alignItems: "center",
@@ -398,11 +400,11 @@ export default function LoginPage() {
                   alignItems: "center",
                   gap: 12,
                   margin: "16px 0",
-                  color: "#71717A",
-                  fontSize: "11px",
+                  color: "#C4CBD8",
+                  fontSize: "var(--font-xs)",
                   fontWeight: 500,
                   letterSpacing: "0.08em",
-                  textTransform: "uppercase",
+                  textTransform: "none",
                 }}
               >
                 <span style={{ flex: 1, height: 1, background: "#1F2530" }} />
@@ -416,7 +418,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {/* Email */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: "12.5px", fontWeight: 500, color: "#E4E4E7" }}>Email</label>
+              <label style={{ fontSize: "var(--font-xs)", fontWeight: 500, color: "#E4E4E7" }}>Email</label>
               <input
                 type="text"
                 value={credential}
@@ -434,7 +436,7 @@ export default function LoginPage() {
                   border: `1px solid ${error ? "#7F1D1D" : "#1F2530"}`,
                   background: "#0D1117",
                   color: "#FAFAFA",
-                  fontSize: "13.5px",
+                  fontSize: "var(--font-base)",
                   outline: "none",
                   transition: "border-color 0.12s ease, background 0.12s ease",
                   opacity: loading ? 0.6 : 1,
@@ -454,7 +456,7 @@ export default function LoginPage() {
             {/* Password */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <label style={{ fontSize: "12.5px", fontWeight: 500, color: "#E4E4E7" }}>Password</label>
+                <label style={{ fontSize: "var(--font-xs)", fontWeight: 500, color: "#E4E4E7" }}>Password</label>
                 {/* Intentionally no Forgot? link — not implemented */}
               </div>
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -475,7 +477,7 @@ export default function LoginPage() {
                     border: `1px solid ${error ? "#7F1D1D" : "#1F2530"}`,
                     background: "#0D1117",
                     color: "#FAFAFA",
-                    fontSize: "13.5px",
+                    fontSize: "var(--font-base)",
                     outline: "none",
                     transition: "border-color 0.12s ease, background 0.12s ease",
                     opacity: loading ? 0.6 : 1,
@@ -534,9 +536,9 @@ export default function LoginPage() {
                   <AlertCircle size={14} style={{ color: "#F87171", flexShrink: 0, marginTop: 1 }} />
                 )}
                 <div>
-                  <p style={{ margin: 0, fontSize: "13px", color: "#FECACA", lineHeight: 1.4 }}>{error}</p>
+                  <p style={{ margin: 0, fontSize: "var(--font-base)", color: "#FECACA", lineHeight: 1.4 }}>{error}</p>
                   {isLocked && (
-                    <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#F87171", fontVariantNumeric: "tabular-nums" }}>
+                    <p style={{ margin: "2px 0 0", fontSize: "var(--font-base)", color: "#F87171", fontVariantNumeric: "tabular-nums" }}>
                       Unlocks in {lockedFor}s
                     </p>
                   )}
@@ -557,7 +559,7 @@ export default function LoginPage() {
                 background:
                   loading || isLocked || !credential.trim() || !password ? "#1F2530" : "#FFFFFF",
                 color: loading || isLocked || !credential.trim() || !password ? "#A1A1AA" : "#0A0A0A",
-                fontSize: "13.5px",
+                fontSize: "var(--font-base)",
                 fontWeight: 600,
                 display: "flex",
                 alignItems: "center",

@@ -12,7 +12,7 @@
  *
  * Principles:
  *  • Strict 4 / 8-pt spacing grid
- *  • Type scale: 11, 12, 13, 15, 17, 20, 28
+ *  • Type scale: 14 supporting, 16 body, 18/20/24 headings, 28 metrics
  *  • Semantic color names — never raw hex in components
  *  • Light + dark surfaces tuned for WCAG AA contrast
  * ─────────────────────────────────────────────────────────────────────── */
@@ -22,6 +22,7 @@
   /* Brand */
   --brand:          #1E6FD9;
   --brand-hover:    #1758B3;
+  --brand-text:     #1758B3;
   --brand-active:   #134A96;
   --brand-soft:     #C7DAF7;
   --brand-softer:   #F6F7F9;
@@ -48,9 +49,9 @@
 
   /* Text */
   --text:           #202124;
-  --text-secondary: #51565E;
-  --text-muted:     #626A73;
-  --text-tertiary:  #6D747D;
+  --text-secondary: #3C4043;
+  --text-muted:     #51565E;
+  --text-tertiary:  #51565E;
   --text-inverse:   #FFFFFF;
 
   /* Status */
@@ -110,16 +111,19 @@
   --pad-y:       16px;
   --gap-card:    16px;
   --gap-section: 28px;
-  --font-base:   15px;
-  --font-sm:     14px;
-  --font-xs:     12.5px;
-  /* Detail panel scale — derived so text-size picker affects the whole UI */
-  --font-md:     14px;
-  --font-lg:     16px;
-  --font-xl:     20px;
-  --font-metric: 16px;
+  --font-base: 1rem;
+  --font-sm: 1rem;
+  --font-xs: .875rem;
+  /* Purpose-based type roles shared by every density. */
+  --font-md: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.25rem;
+  --font-metric: 1.75rem;
 
-  /* Decorative */
+  --font-ui: var(--font-roboto), Arial, sans-serif;
+  --control-h: 2.5rem;
+  --control-h-sm: 2.25rem;
+  --control-h-lg: 2.75rem;
 }
 
 [data-density="compact"] {
@@ -128,13 +132,6 @@
   --pad-y:       12px;
   --gap-card:    12px;
   --gap-section: 22px;
-  --font-base:   14px;
-  --font-sm:     13px;
-  --font-xs:     12px;
-  --font-md:     13px;
-  --font-lg:     15px;
-  --font-xl:     18px;
-  --font-metric: 15px;
 }
 
 [data-density="roomy"] {
@@ -143,16 +140,13 @@
   --pad-y:       20px;
   --gap-card:    20px;
   --gap-section: 36px;
-  --font-md:     15px;
-  --font-lg:     17px;
-  --font-xl:     22px;
-  --font-metric: 18px;
 }
 
 [data-theme="dark"] {
   /* Brand */
   --brand:          #4D9CFF;
   --brand-hover:    #6FAEFF;
+  --brand-text:     #8BC0FF;
   --brand-active:   #8BC0FF;
   --brand-soft:     #0F2138;
   --brand-softer:   #0B1A2C;
@@ -179,9 +173,9 @@
 
   /* Text */
   --text:           #F3F5F8;
-  --text-secondary: #C4CBD8;
-  --text-muted:     #BCC8D9;
-  --text-tertiary:  #91A1B8;
+  --text-secondary: #E0E4EB;
+  --text-muted:     #C4CBD8;
+  --text-tertiary:  #C4CBD8;
   --text-inverse:   #0B1220;
 
   /* Status — brightened for dark surfaces */
@@ -261,8 +255,7 @@
   --color-teal-soft:        var(--teal-soft);
   --color-teal-on:          var(--teal-on);
 
-  --font-sans:    var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans:    var(--font-ui);
   --font-mono:    var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
 }
 
@@ -273,8 +266,9 @@ html, body {
 }
 
 body {
-  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  font-feature-settings: "ss01", "cv01", "cv02";
+  font-family: var(--font-ui);
+  font-size: var(--font-base);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -288,12 +282,6 @@ body {
 /* Numerals — tabular for data, lining for text. JetBrains Mono is already tabular. */
 .tabular { font-variant-numeric: tabular-nums; }
 
-/* Display headings — Fraunces with optical sizing */
-.font-display {
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-variation-settings: "opsz" 64, "SOFT" 0, "WONK" 0;
-  letter-spacing: -0.02em;
-}
 
 /* ─── Selection ───────────────────────────────────────────────────────── */
 .dashboard-workspace {
@@ -316,7 +304,7 @@ input::placeholder, textarea::placeholder {
 
 ::selection {
   background: var(--brand-soft);
-  color: var(--brand);
+  color: var(--brand-text);
 }
 
 /* ─── Focus ring ───────────────────────────────────────────────────────── */
@@ -425,43 +413,6 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-/* Gentle vertical bob — hints that a collapsed panel can be pulled open */
-@keyframes dock-nudge {
-  0%, 88%, 100% { transform: translateY(0); }
-  94%           { transform: translateY(-3px); }
-}
-/* Flat attention pulse; no glow or elevation. */
-@keyframes review-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: .6; }
-}
-/* One-shot attention flash when a ticket is first selected.
- * Applied to a zero-size overlay child so it doesn't conflict with
- * the parent's own box-shadow. */
-@keyframes dock-ping {
-  0%   { opacity: 0; transform: scaleY(0.6); }
-  18%  { opacity: 1; transform: scaleY(1); }
-  100% { opacity: 0; transform: scaleY(1); }
-}
-.dock-ping {
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  border-top: 2px solid color-mix(in oklab, var(--brand) 60%, transparent);
-  border-radius: inherit;
-  animation: dock-ping 750ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  transform-origin: top;
-}
-@media (prefers-reduced-motion: reduce) {
-  .dock-ping { animation: none !important; opacity: 0 !important; }
-}
-/* Pop-in for avatar stack items — staggered via animation-delay inline */
-@keyframes avatar-pop {
-  0%   { opacity: 0; transform: scale(0.55) translateX(-4px); }
-  60%  { transform: scale(1.08); }
-  100% { opacity: 1; transform: scale(1) translateX(0); }
-}
-
 .animate-fade-in-up     { animation: fade-in-up var(--duration-enter) var(--ease-out-expo) both; }
 .animate-fade-in        { animation: fade-in var(--duration-base) var(--ease-std) both; }
 .animate-scale-in       { animation: scale-in var(--duration-enter) var(--ease-out-expo) both; }
@@ -469,42 +420,6 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 .animate-pulse-anom     { animation: pulse-anomaly 2s ease-in-out infinite; }
 .animate-spin           { animation: spin 700ms linear infinite; }
 .animate-sweep          { animation: sweep 1.4s ease-in-out infinite; }
-
-/* ─── Action-dock grab handle ───────────────────────────────────────────
- * The pill-shaped "pull tab" at the top of a collapsible bottom panel.
- * Widens + darkens on hover; bobs periodically while collapsed to advertise it.
- * ─────────────────────────────────────────────────────────────────────── */
-.dock-handle {
-  width: 40px;
-  height: 5px;
-  border-radius: var(--r-full);
-  background: var(--border-strong);
-  transition: width var(--duration-fast) var(--ease-std),
-              background var(--duration-fast) var(--ease-std);
-}
-.dock-handle[data-collapsed="true"] {
-  animation: dock-nudge 3.4s ease-in-out infinite;
-}
-.dock-strip:hover .dock-handle {
-  width: 52px;
-  background: var(--brand);
-}
-/* Arrow chevron — bigger, animated version of the old grab handle */
-.dock-arrow {
-  color: var(--text-tertiary);
-  transition: color var(--duration-fast) var(--ease-std),
-              transform var(--duration-fast) var(--ease-std);
-}
-.dock-arrow[data-collapsed="true"] {
-  animation: dock-nudge 3.4s ease-in-out infinite;
-}
-.dock-strip:hover .dock-arrow {
-  color: var(--brand);
-}
-/* Breathing pulse on the review-state icon — draws the eye without being jarring */
-.dock-review-icon {
-  animation: review-pulse 2.4s ease-in-out infinite;
-}
 
 /* Staggered children — page load tables/lists */
 .stagger > * { animation: fade-in-up var(--duration-enter) var(--ease-out-expo) both; }
@@ -522,9 +437,6 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   .animate-fade-in,
   .animate-scale-in,
   .animate-slide-in-right,
-  .dock-handle[data-collapsed="true"],
-  .dock-arrow[data-collapsed="true"],
-  .dock-review-icon,
   .stagger > * {
     animation: none !important;
     opacity: 1 !important;
@@ -581,7 +493,7 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 }
 
 .nav-item[data-active="true"] .nav-item__icon {
-  color: var(--brand);
+  color: var(--brand-text);
 }
 
 .nav-item:hover:not([data-active="true"]) .nav-item__icon {
@@ -613,7 +525,7 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 
 .nav-icon-btn[data-active="true"] {
   background: var(--brand-soft);
-  color: var(--brand);
+  color: var(--brand-text);
 }
 
 /* Topbar small icon button (theme toggle, etc.) */
@@ -637,6 +549,16 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   color: var(--text);
   border-color: var(--border-strong);
 }
+
+.topbar-btn--back {
+  width: calc(var(--space-8) + var(--space-1));
+  height: calc(var(--space-8) + var(--space-1));
+  border: 0;
+  border-radius: var(--r-full);
+  color: var(--text-secondary);
+}
+.topbar-btn--back:hover { background: var(--surface); color: var(--text); }
+.topbar-btn--back:active { background: var(--surface-sunken); }
 
 /* User chip in topbar */
 .user-chip {
@@ -719,7 +641,7 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: var(--control-h-sm);
   padding: 0 12px;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
@@ -894,7 +816,7 @@ select:-webkit-autofill {
 /* ─── Leaflet overrides — match theme ───────────────────────────────── */
 .leaflet-container {
   background: var(--surface-sunken) !important;
-  font-family: var(--font-geist), system-ui, sans-serif !important;
+  font-family: var(--font-ui) !important;
 }
 /* Never let the global a/button transition bleed into Leaflet — its panes
    move tiles with translate3d and SVG markers with path transforms; animating
@@ -906,10 +828,23 @@ select:-webkit-autofill {
 .leaflet-marker-shadow {
   transition: none !important;
 }
+.station-map-halo {
+  --map-glow-blur: 6px;
+  --map-glow-duration: 2400ms;
+  animation: station-map-glow var(--map-glow-duration) ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes station-map-glow {
+  0%, 100% { opacity: .3; filter: drop-shadow(0 0 0 var(--danger)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 var(--map-glow-blur) var(--danger)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .station-map-halo { animation: none; opacity: .7; filter: none; }
+}
 .leaflet-control-attribution {
   background: var(--surface) !important;
   color: var(--text-secondary) !important;
-  font-size: 10px !important;
+  font-size: var(--font-xs) !important;
 }
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
@@ -943,7 +878,7 @@ select:-webkit-autofill {
   border-radius: var(--r-sm) !important;
   box-shadow: var(--shadow-sm) !important;
   color: var(--text) !important;
-  font-family: var(--font-geist), system-ui, sans-serif !important;
+  font-family: var(--font-ui) !important;
   font-size: var(--font-xs) !important;
   font-weight: 500 !important;
   padding: var(--space-1) var(--space-2) !important;
@@ -988,11 +923,62 @@ select:-webkit-autofill {
 }
 
 
-/* Search containers own focus so their input never draws a second rectangle. */
-[data-search-field]:focus-within {
+/* Shared search/date chrome; callers own width and placement. */
+[data-search-field], [data-filter-field] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--font-sm);
+}
+input[data-search-field] { color: var(--text); }
+[data-search-field] > svg { flex-shrink: 0; width: 16px; height: 16px; }
+[data-search-field] input, [data-filter-field] input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+[data-search-field]:focus-within, [data-filter-field]:focus-within {
   outline: 2px solid var(--border-focus) !important;
   outline-offset: -1px;
 }
-[data-search-field] input:focus-visible {
+[data-search-field] input:focus-visible, [data-filter-field] input:focus-visible {
   outline: none !important;
+}
+
+/* Shared column headings for tables and aligned list views. */
+.table-heading {
+  height: var(--row-h);
+  min-height: var(--row-h);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--divider);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.table-heading > th {
+  padding: var(--space-2) var(--pad-x);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
 }

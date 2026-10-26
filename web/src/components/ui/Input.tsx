@@ -37,7 +37,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       )}
       <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <input
-          data-ui="input"
           ref={ref}
           id={inputId}
           type={resolvedType}
@@ -46,7 +45,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           className={cn(className)}
           style={{
             width: "100%",
-            height: 34,
+            height: "var(--control-h)",
             padding: isPasswordToggle ? "0 38px 0 12px" : "0 12px",
             borderRadius: "var(--r-md)",
             border: `1px solid ${error ? "var(--danger)" : "var(--border)"}`,

@@ -17,18 +17,16 @@ export function Skeleton({ className }: SkeletonProps) {
   );
 }
 
-// ─── Ticket row — mirrors TicketRow exactly (11px vertical padding, 19px left
-// accent offset, badge height 20). Previous version used py-3.5 (14px) and
-// rounded-full badges — both too large for the actual row.
+// Ticket queue: ID/status/update time, title, then station/priority.
 export function TicketRowSkeleton() {
   return (
-    <div className="flex flex-col gap-1.5 px-4 py-[11px] pl-[19px] border-b border-divider last:border-b-0">
+    <div className="flex flex-col gap-2 p-3">
       <div className="flex items-center gap-2">
         <Skeleton className="h-3 w-14" />
         <Skeleton className="h-[18px] w-20 rounded-[6px]" />
-        <Skeleton className="h-[18px] w-12 rounded-[6px]" />
+        <Skeleton className="h-3 w-12 ml-auto" />
       </div>
-      <Skeleton className="h-3.5 w-[72%]" />
+      <Skeleton className="h-4 w-[72%]" />
       <div className="flex items-center justify-between gap-3">
         <Skeleton className="h-3 w-36" />
         <Skeleton className="h-3 w-12" />
@@ -97,7 +95,7 @@ export function DetailSkeleton() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Header bar */}
-      <div className="p-4 border-b border-divider space-y-3">
+      <div className="p-4 space-y-3">
         <div className="flex gap-2">
           <Skeleton className="h-5 w-16 rounded-[6px]" />
           <Skeleton className="h-5 w-20 rounded-full" />
@@ -106,10 +104,10 @@ export function DetailSkeleton() {
         <Skeleton className="h-5 w-3/4" />
         <Skeleton className="h-3 w-1/3" />
       </div>
-      {/* Property strip - 4 cols */}
-      <div className="grid grid-cols-4 gap-6 p-5 bg-[var(--surface-sunken)] border-b border-border">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="space-y-2">
+      {/* Station and team */}
+      <div className="flex flex-wrap gap-8 px-4 py-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="space-y-1">
             <Skeleton className="h-3 w-12" />
             <Skeleton className="h-3.5 w-20" />
             <Skeleton className="h-3 w-16" />
@@ -117,11 +115,10 @@ export function DetailSkeleton() {
         ))}
       </div>
       {/* Sections */}
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-4">
         {Array.from({ length: 2 }).map((_, i) => (
           <div key={i} className="space-y-3">
             <div className="flex items-center gap-2">
-              <Skeleton className="h-[14px] w-0.5 rounded-full" />
               <Skeleton className="h-3.5 w-32" />
             </div>
             <Skeleton className="h-3 w-full" />

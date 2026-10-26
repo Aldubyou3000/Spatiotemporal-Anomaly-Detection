@@ -39,3 +39,6 @@ Append-only, SHA-256 hash-chained, tamper-evident audit log. Writes through the 
 
 ## History events (2026-10-25)
 processing_run_saved and processing_review_saved use audit.log and its existing SSE producer. The web Audit page includes readable labels and filter choices for both. Review records include previous revision metadata; original detection output remains untouched.
+
+
+Audit search (2026-10-26): list/export accept bounded search (200 chars); _build_query OR-matches actor name/email, event, entity type, credential and partial IP, quoting PostgREST values and escaping LIKE percent/underscore. Exact IP/event/outcome filters still compose. List now returns the database exact count from the paginated query instead of counting a capped row response. No schema change.

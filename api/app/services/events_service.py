@@ -86,7 +86,7 @@ async def shutdown() -> None:
 
 # ── Subscribe (consumer side — used by the SSE endpoint) ────────────────────
 
-async def subscribe() -> AsyncGenerator[dict, None]:
+async def subscribe(heartbeat_seconds: float = 20.0) -> AsyncGenerator[dict | None, None]:
     """Yield events for one connected client. The ``finally`` guarantees the
     subscriber queue is removed on disconnect (tab close / navigation)."""
     q: asyncio.Queue = asyncio.Queue(maxsize=_QUEUE_MAX)
@@ -94,7 +94,12 @@ async def subscribe() -> AsyncGenerator[dict, None]:
     logger.debug("[events] subscriber added (total=%d)", len(_subscribers))
     try:
         while True:
-            event = await q.get()
+            # Timeout the queue read, not the subscription generator itself.
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=heartbeat_seconds)
+            except asyncio.TimeoutError:
+                yield None
+                continue
             yield event
     finally:
         _subscribers.discard(q)

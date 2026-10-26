@@ -7,10 +7,10 @@ import { useTheme } from "@/context/ThemeContext";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 const TEXT_SIZES = [
-  { label: "S",  base: "13px", sm: "12px",   xs: "11px",   md: "12px", lg: "14px", xl: "17px", metric: "14px" },
-  { label: "M",  base: "15px", sm: "14px",   xs: "12.5px", md: "14px", lg: "16px", xl: "20px", metric: "16px" },
-  { label: "L",  base: "16px", sm: "15px",   xs: "13px",   md: "15px", lg: "17px", xl: "22px", metric: "18px" },
-  { label: "XL", base: "18px", sm: "17px",   xs: "14px",   md: "17px", lg: "19px", xl: "25px", metric: "20px" },
+  { label: "S", base: "1rem", sm: "1rem", xs: ".875rem", md: "1rem", lg: "1.125rem", xl: "1.25rem", metric: "1.75rem" },
+  { label: "M", base: "1rem", sm: "1rem", xs: ".875rem", md: "1rem", lg: "1.125rem", xl: "1.25rem", metric: "1.75rem" },
+  { label: "L", base: "1.125rem", sm: "1.125rem", xs: "1rem", md: "1.125rem", lg: "1.25rem", xl: "1.5rem", metric: "2rem" },
+  { label: "XL", base: "1.25rem", sm: "1.25rem", xs: "1.125rem", md: "1.25rem", lg: "1.5rem", xl: "1.75rem", metric: "2.25rem" },
 ] as const;
 type SizeIdx = 0 | 1 | 2 | 3;
 
@@ -80,7 +80,7 @@ export function Header({ title, actions, leading, parent = "Workspace", backgrou
           display: "flex",
           alignItems: "center",
           padding: "0 28px",
-          gap: 16,
+          gap: leading ? "var(--space-2)" : "var(--space-4)",
           position: "sticky",
           top: 0,
           zIndex: 1000,
@@ -115,7 +115,7 @@ export function Header({ title, actions, leading, parent = "Workspace", backgrou
                       borderRight: i < TEXT_SIZES.length - 1 ? "1px solid var(--border)" : undefined,
                       background: active ? "var(--surface-sunken)" : "transparent",
                       color: active ? "var(--text)" : "var(--text-muted)",
-                      fontSize: 11 + i,
+                      fontSize: "var(--font-base)",
                       fontWeight: active ? 600 : 400,
                       cursor: "pointer",
                       transition: "background var(--duration-fast) var(--ease-std), color var(--duration-fast) var(--ease-std)",

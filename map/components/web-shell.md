@@ -1,5 +1,11 @@
 # Component: Web shell & layout (`web/src/app/`, `web/src/middleware.ts`)
 
+Sidebar hierarchy refinement (2026-10-26): navigation labels use --font-xs (14px) and both modes use 18px icons instead of 20px. The 44px logo, 16px bold app name, matching icon/text colors and existing row hit areas remain unchanged. This makes navigation visually subordinate to branding without reducing click targets.
+
+Sidebar proportions and icon color (2026-10-26): both sidebar modes now render the original mark at 44px wide (previously 36px), preserving its aspect ratio and the 40px brand row. Expanded nav icons inherit their label color; collapsed icons use the same primary/selected text tokens. Hover resets and chevrons also use primary text rather than muted gray. Existing navigation, status badges and sidebar dimensions remain intact.
+
+Sidebar label cleanup (2026-10-26): removed the expanded sidebar's Workspace section label at user request. Navigation follows the brand row directly; links, branding and collapse behavior are unchanged.
+
 The Next.js 15 App Router entry surface: route groups, the dashboard shell, and the cookie-based route guard. Everything analysts see flows through this skeleton.
 
 ## Structure
@@ -54,8 +60,8 @@ Note: in deployed Vercel `vercel.app/api/*` is same-origin (first-party) so `Lax
 Spacing primitives (2026-10-25): globals.css defines stable --space-1/2/4/6/8 values of 4/8/16/24/32px. Zones workspace, FileUpload and PipelineDiagram use them for a consistent spacing scale across setup, processing, configuration dialog and gallery. Existing --pad-*, --gap-* and --row-h density behavior for other consumers remains; the new primitives themselves do not vary by density or theme. Reference: [Carbon spacing](https://www.carbondesignsystem.com/building-blocks/foundations/spacing/overview).
 
 ## Key invariants
-- `/ui-library` and `/ui-library/preview` are standalone development-only routes with server notFound guards. Middleware bypasses auth only for those development paths; the real dashboard remains protected. The editor never mounts AuthProvider/RealtimeProvider/ZonesProvider. Its same-origin preview frame uses fixture contexts and an independent cache; see docs/UI_LIBRARY.md and web-pages-components.md.
-- Next headers allow SAMEORIGIN framing only for the exact development preview route. Production and other pages keep DENY / frame-ancestors none.
+- The development-only UI Library and preview routes were removed on 2026-10-27. Middleware has no library auth bypass; `/login` and backend-authenticated `/api/*` retain their existing handling.
+- Every page uses DENY / frame-ancestors none in development and production; there is no preview framing exception.
 - Provider order is load-bearing. Changing it can break real-time (RealtimeProvider outside SWRConfig) or auth gating (AuthProvider must be outermost so context is available to all descendants).
 - `globals.css` is the single source for the design system — never hardcode colors/sizes. Density via `data-density` on `<html>`. See CLAUDE.md "CSS design system" for the token groups and shared utility classes.
 
@@ -115,3 +121,35 @@ Map visual hierarchy (2026-10-26): globals.css scopes a light-theme filter to .s
 
 
 Basemap style instead of color filter (2026-10-26): removed the station-map tile-pane saturation filter. StationMap now requests a simpler colored light basemap; station label CSS remains shared.
+
+
+Zones-ready navigation (2026-10-26): private WorkspaceSidebar reads the existing ZonesContext inside dashboard providers and passes resultsReady = result present and not running to Sidebar. Expanded Zones shows a shared success Badge (Ready); collapsed Zones uses a success dot with an explicit accessible/tooltip label. Reset/rerun hides it; tab navigation retains it. UI Library shell supplies the prop as fixture data without mounting operational providers.
+
+
+Shared field chrome (2026-10-26): globals.css owns neutral surface-sunken fill, 34px height, r-md corners, border, spacing and a single focus outline for data-search-field/data-filter-field. Nested inputs are transparent and do not draw duplicate outlines. Page CSS owns placement/width only.
+
+
+Shared table heading primitive (2026-10-26): globals.css .table-heading supplies neutral surface, consistent height, readable labels and one boundary for semantic tr headers and grid/flex list headers. Child th inherit typography with column-aligned insets; DataTable overrides only its existing narrower cell padding.
+
+
+History detail canvas (2026-10-26): existing dashboard-content surface is applied to the full workspace instead of the width-limited content column. Shared Header/sidebar tokens and other pages remain unchanged.
+
+
+Back-button refinement (2026-10-26): topbar-btn--back removes boxed borders, uses a 36px circular hit area and stronger neutral icon with subtle surface hover. Header leading gap reduces to space-2 when navigation is present; ordinary headers retain space-4. Summary/results back links use the modifier, preserving accessible names and targets.
+
+## Approved Roboto typography (2026-10-26)
+Root layout now loads Roboto 400/500/600/700 through next/font/google and retains JetBrains Mono for actual code. Removed Geist, unused Fraunces and .font-display. globals.css owns --font-ui and a rem scale: 16px body/control, 14px supporting, 18/20px headings, 28px metrics at default browser sizing. Density changes spacing only. Secondary/muted/tertiary roles are stronger in both themes; --brand-text is separate from filled brand backgrounds. Shared controls grow with text; logo geometry and neutral pearl surfaces stay intact. Login scopes its fixed light/dark panels to corresponding themes for readable captions, placeholders and autofill. TypeScript/contrast/component checks passed. Initial production build completed; final build compiled/typechecked but page-data collection reported missing generated route modules (both files existed afterward). Cause unconfirmed; process inspection denied. Live browser/zoom appearance remains unverified because UI automation ended on URL-policy confidence; no more UI inputs were attempted.
+
+Sidebar text refinement (2026-10-26): expanded navigation labels, Workspace label and brand subtitle now use the primary --text role instead of secondary/muted gray. The inactive hover reset uses the same primary role. Active blue text/fill, Ready status, icon colors and geometry retain their existing styling; dark mode inherits its primary text token. No new primitive or orphan reference.
+
+Map glow styling (2026-10-26): globals.css adds scoped station-map-halo keyframes and local --map-glow-blur/duration values. Only halo opacity/filter animate; the existing Leaflet transition/zoom suppression remains. Reduced-motion disables the decorative pulse while retaining the halo.
+
+
+Sidebar branding cleanup (2026-10-26): expanded brand row retains SentinelMark and AWS Sentinel, removing the Anomaly detector subtitle. Collapsed sidebar retains its logo and descriptive tooltip. Workspace section label remains removed; geometry/navigation/status/collapse behavior stays intact.
+
+
+Tickets dock cleanup (2026-10-26): removed unused dock-nudge/review-pulse/dock-ping/avatar-pop keyframes and dock-handle/arrow/icon selectors after the shared dock stopped using decorative attention animations. Global entrance, spinner and station-map-glow animations remain. Ticket-only selection is scoped in Tickets.module.css; global list-row styling is retained for other consumers.
+
+Sidebar logo anchoring (2026-10-27): expanded and collapsed logo slots are both 44 by 40px at a fixed 12px left/top inset. Removed expanded-only 2px row padding; collapsed brand uses a fixed left inset rather than centering in a differently sized slot. Toggle/navigation/tooltips and logo geometry retained.
+
+Sidebar toggle icons (2026-10-27): replaced lone chevrons with existing Lucide PanelLeftOpen/PanelLeftClose icons and matching native title hints. Existing button geometry, accessible labels and collapse state remain intact.

@@ -221,7 +221,6 @@ The dashboard auto-updates live — there are no manual "Refresh" buttons. `Real
 - **`ConfirmDialog`** — blocking confirm modal; props: `title`, `message`, `confirmLabel`, `isDangerous`, `onConfirm`, `onCancel`; auto-focuses confirm button, handles Escape key
 - **`Badge`** — tones: `neutral | brand | success | warning | danger | info | accent | teal`; optional `dot`
 - **`Input`** — label, hint, error states; 34px height
-- **`Card` / `CardHeader` / `CardTitle` / `CardBody`** — surface card with dividers (available primitive, currently unused — pages build cards inline)
 - **`Tabs` / `TabsList` / `Tab` / `TabPanel`** — context-based tab system
 
 All destructive or consequential actions must use `ConfirmDialog` before executing. Currently guarded: logout, ticket status advancement, technician reassignment on ticket, report approval.

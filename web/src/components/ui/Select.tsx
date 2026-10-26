@@ -95,7 +95,6 @@ export function Select({ value, onChange, options, placeholder, width, ariaLabel
   return (
     <div ref={wrapperRef} style={{ position: "relative", width: width ?? "auto", flexShrink: 0 }}>
       <button
-        data-ui="select"
         ref={btnRef}
         type="button"
         aria-label={ariaLabel}
@@ -107,7 +106,7 @@ export function Select({ value, onChange, options, placeholder, width, ariaLabel
         }}
         style={{
           width: "100%",
-          height: 30,
+          height: "var(--control-h)",
           padding: "0 10px",
           borderRadius: "var(--r-md)",
           border: `1px solid ${open ? "var(--border-focus)" : hasValue ? "var(--border)" : "var(--border)"}`,
@@ -161,7 +160,7 @@ export function Select({ value, onChange, options, placeholder, width, ariaLabel
                     display: "flex",
                     alignItems: "center",
                     width: "100%",
-                    height: 30,
+                    height: "var(--control-h)",
                     padding: "0 8px",
                     borderRadius: "var(--r-md)",
                     border: 0,

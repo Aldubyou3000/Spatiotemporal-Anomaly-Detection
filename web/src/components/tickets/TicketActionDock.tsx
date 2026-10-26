@@ -13,6 +13,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import styles from "@/components/tickets/Tickets.module.css";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { TechnicianWorkloadBadge } from "@/components/tickets/TechnicianWorkloadBadge";
@@ -89,14 +90,14 @@ export function TicketActionDock({
   // A ticket awaiting the analyst's decision opens expanded so the approve/verify
   // action is never hidden; assignment-only states start collapsed to free the scroll area.
   const needsReview = ticket.status === "pending_review" && !!reviewSlot;
-  const [open, setOpen]       = useState(needsReview);
+  const [drawer, setDrawer] = useState({ review: needsReview, open: needsReview });
+  // A mode change must not briefly show the previous mode's expanded form.
+  const open = drawer.review === needsReview ? drawer.open : needsReview;
   const [addOpen, setAddOpen] = useState(false);
 
-  // If the dock mounted before reviewSlot was ready (report still loading),
-  // needsReview was false and open initialised collapsed. Correct it as soon
-  // as the slot arrives so the review panel isn't hidden behind a closed dock.
   useEffect(() => {
-    if (needsReview) setOpen(true);
+    setDrawer({ review: needsReview, open: needsReview });
+    setAddOpen(false);
   }, [needsReview]);
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const [addBtnRect, setAddBtnRect] = useState<DOMRect | null>(null);
@@ -138,13 +139,13 @@ export function TicketActionDock({
       const updated = pending.kind === "add"
         ? await ticketsApi.assignTechnicians(ticket.id, [pending.id], r)
         : await ticketsApi.removeTechnician(ticket.id, pending.id, r);
+      closePrompt();
       onUpdated(updated);
       await invalidateTicketLists();
       toast.success(
         pending.kind === "add" ? `${pending.name} assigned` : `${pending.name} removed`,
         { description: `TKT-${ticket.ticket_number} · ${pending.kind === "add" ? "added to the ticket" : "taken off the ticket"}.` },
       );
-      closePrompt();
     } catch (err) {
       const msg = err instanceof Error ? err.message : `Failed to ${pending.kind === "add" ? "assign" : "remove"} technician.`;
       setError(msg);
@@ -155,148 +156,36 @@ export function TicketActionDock({
   // Verified tickets are terminal — nothing to act on, no dock.
   if (isVerified) return null;
 
-  const STACK_CAP = 4;
-  const shown = assigned.slice(0, STACK_CAP);
-  const overflow = assigned.length - shown.length;
-
   return (
     <>
       <div
+        className={styles.actionDock}
         style={{
-          flexShrink: 0, position: "relative",
-          background: open ? "var(--surface)" : "var(--surface-alt)",
+          position: "relative",
+          background: "var(--surface)",
           boxShadow: "none",
         }}
       >
-        {/* One-shot ping overlay — plays once on mount (ticket selection), then disappears */}
-        <span className="dock-ping" aria-hidden="true" />
-        {/* ── Always-visible header strip (the collapse handle) ── */}
-        <button
-          type="button"
-          onClick={() => setOpen((x) => !x)}
-          aria-expanded={open}
-          aria-controls="ticket-action-drawer"
-          aria-label={open ? "Collapse actions panel" : "Expand actions panel"}
-          className="dock-strip"
-          style={{
-            width: "100%", display: "flex", flexDirection: "column", alignItems: "stretch",
-            padding: "0 16px",
-            background: "transparent", border: 0, cursor: "pointer",
-            fontFamily: "inherit", textAlign: "left",
-            transition: "background var(--duration-fast) var(--ease-std)",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = open ? "var(--surface-sunken)" : "color-mix(in oklab, var(--surface-alt) 80%, var(--surface-sunken))"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-        >
-          {/* Single enclosed chevron — subtle but scannable, rotates with state */}
-          <span style={{ display: "flex", justifyContent: "center", paddingTop: 6, paddingBottom: 4 }}>
-            <span
-              style={{
-                width: 22, height: 22, borderRadius: "var(--r-full)",
-                border: "1px solid var(--border)", background: "var(--surface)",
-                display: "grid", placeItems: "center", flexShrink: 0,
-                boxShadow: "var(--shadow-xs)",
-              }}
-            >
-              <ChevronDown
-                size={12}
-                strokeWidth={2.6}
-                className="dock-arrow"
-                data-collapsed={!open}
-                style={{ transform: open ? "rotate(180deg)" : "none" }}
-              />
-            </span>
-          </span>
-
-          {/* Main row — vertically centered */}
-          <span style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 10 }}>
-
-            {/* Context icon — pulses when review is needed */}
-            <span
-              className={needsReview && !open ? "dock-review-icon" : undefined}
-              style={{
-                width: 28, height: 28, borderRadius: "var(--r-md)", display: "grid", placeItems: "center", flexShrink: 0,
-                background: needsReview ? "var(--brand-soft)" : "var(--surface-sunken)",
-                color: needsReview ? "var(--brand)" : "var(--text-muted)",
-                border: needsReview ? "1px solid color-mix(in oklab, var(--brand) 22%, transparent)" : "1px solid var(--divider)",
-              }}
-            >
-              {needsReview ? <ShieldCheck size={15} strokeWidth={2.2} /> : <Users size={14} strokeWidth={2} />}
-            </span>
-
-            {/* Label */}
-            <span style={{ minWidth: 0, flex: 1 }}>
-              <span style={{ display: "block", fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)", lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {needsReview ? "Review & verify" : "Assignment"}
-              </span>
-              <span style={{ display: "block", fontSize: "var(--font-xs)", color: "var(--text-muted)", lineHeight: 1.3, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {needsReview
-                  ? <>Approve to close as <span style={{ fontWeight: 600, color: "var(--success)" }}>verified</span></>
-                  : assigned.length === 0
-                    ? "No technicians assigned"
-                    : `${assigned.length} technician${assigned.length > 1 ? "s" : ""} assigned`}
-              </span>
-            </span>
-
-            {/* Overlapping avatar stack — staggered pop-in animation */}
-            {assigned.length > 0 && (
-              <span style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                {shown.map((a, i) => (
-                  <span
-                    key={a.id}
-                    style={{
-                      marginLeft: i === 0 ? 0 : -8, zIndex: shown.length - i,
-                      animation: `avatar-pop 300ms cubic-bezier(0.34,1.56,0.64,1) both`,
-                      animationDelay: `${i * 55}ms`,
-                    }}
-                  >
-                    <StackAvatar name={a.full_name} size={26} />
-                  </span>
-                ))}
-                {overflow > 0 && (
-                  <span
-                    style={{
-                      marginLeft: -8, width: 26, height: 26, borderRadius: "50%",
-                      background: "var(--surface-sunken)", color: "var(--text-muted)",
-                      display: "grid", placeItems: "center", fontSize: "var(--font-xs)", fontWeight: 700,
-                      boxShadow: "0 0 0 2px var(--surface)", fontVariantNumeric: "tabular-nums",
-                      animation: `avatar-pop 300ms cubic-bezier(0.34,1.56,0.64,1) ${shown.length * 55}ms both`,
-                    }}
-                  >
-                    +{overflow}
-                  </span>
-                )}
-              </span>
-            )}
-
-            {/* Expand/collapse pill — subtle lift when collapsed so purpose scans */}
-            <span
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
-                height: 28, padding: "0 9px 0 11px", borderRadius: "var(--r-full)",
-                border: "1px solid var(--border)",
-                background: needsReview && !open ? "var(--brand-soft)" : "var(--surface)",
-                color: needsReview && !open ? "var(--brand)" : "var(--text-secondary)",
-                fontSize: "var(--font-xs)", fontWeight: 600,
-                boxShadow: !open ? "var(--shadow-xs)" : "none",
-                transition: "background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast)",
-              }}
-            >
-              {open ? "Hide" : needsReview ? "Review" : "Manage"}
-              <ChevronDown
-                size={13}
-                style={{
-                  transform: open ? "rotate(180deg)" : "none",
-                  transition: `transform var(--duration-fast) var(--ease-std)`,
-                }}
-              />
-            </span>
-          </span>
-        </button>
+        <div className={styles.dockHeader}>
+          {needsReview ? <ShieldCheck size={20} aria-hidden="true" /> : <Users size={20} aria-hidden="true" />}
+          <div className={styles.dockLabel}>
+            <strong>{needsReview ? "Inspection review" : "Assignment"}</strong>
+            <span>{needsReview ? "Approve the report or request another visit" : `${assigned.length} technician${assigned.length === 1 ? "" : "s"} assigned`}</span>
+          </div>
+          {assigned.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)", flexShrink: 0 }} aria-label="Assigned technicians">
+            {assigned.slice(0, 3).map(technician => <StackAvatar key={technician.id} name={technician.full_name} />)}
+            {assigned.length > 3 && <span title={assigned.slice(3).map(technician => technician.full_name).join(", ")} style={{ fontSize: "var(--font-xs)" }}>+{assigned.length - 3}</span>}
+          </div>}
+          <Button variant="secondary" size="sm" onClick={() => { setDrawer({ review: needsReview, open: !open }); setAddOpen(false); }} aria-expanded={open} aria-controls="ticket-action-drawer"
+            aria-label={needsReview ? "Review inspection" : "Manage technicians"} className={styles.dockToggle} style={{ boxShadow: "none" }}>
+            {open ? "Hide" : needsReview ? "Review" : "Manage"}
+            <ChevronDown size={16} aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : "none" }} />
+          </Button>
+        </div>
 
         {/* ── Expandable drawer ── */}
         {open && (
-          <div id="ticket-action-drawer" className="animate-fade-in" style={{ borderTop: "1px solid var(--divider)" }}>
+          <div id="ticket-action-drawer" className={styles.dockBody}>
 
             {/* Analyst review (owned by page) — only when pending_review.
                 In that state reassignment lives inside the review's follow-up branch,
@@ -331,7 +220,7 @@ export function TicketActionDock({
                   </button>
                   {addOpen && available.length > 0 && addBtnRect && createPortal(
                     <div
-                      className="animate-scale-in"
+
                       style={{
                         position: "fixed",
                         bottom: window.innerHeight - addBtnRect.top + 6,
@@ -426,7 +315,7 @@ export function TicketActionDock({
 
               {/* Reason prompt — required before any add/remove commits */}
               {pending && (
-                <div className="animate-fade-in" style={{ marginTop: 10, borderRadius: "var(--r-md)", border: `1px solid ${pending.kind === "remove" ? "color-mix(in oklab, var(--danger) 30%, var(--border))" : "color-mix(in oklab, var(--brand) 30%, var(--border))"}`, background: "var(--surface)", overflow: "hidden" }}>
+                <div  style={{ marginTop: 10, borderRadius: "var(--r-md)", border: `1px solid ${pending.kind === "remove" ? "color-mix(in oklab, var(--danger) 30%, var(--border))" : "color-mix(in oklab, var(--brand) 30%, var(--border))"}`, background: "var(--surface)", overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderBottom: "1px solid var(--divider)", background: pending.kind === "remove" ? "var(--danger-soft)" : "var(--brand-soft)" }}>
                     <span style={{ display: "grid", placeItems: "center", color: pending.kind === "remove" ? "var(--danger)" : "var(--brand)" }}>
                       {pending.kind === "remove" ? <UserMinus size={14} /> : <UserPlus size={14} />}
@@ -458,7 +347,7 @@ export function TicketActionDock({
                       <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>
                         Reason <span style={{ color: "var(--danger)" }}>*</span>
                       </span>
-                      <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+                      <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-ui)", fontVariantNumeric: "tabular-nums" }}>
                         {finalReason ? `${finalReason.length} chars` : "required"}
                       </span>
                     </div>
@@ -522,8 +411,8 @@ export function TicketActionDock({
                         style={{ gap: 6 }}
                       >
                         {pending.kind === "remove"
-                          ? <><UserMinus size={13} /> {saving ? "Removing…" : "Remove"}</>
-                          : <><UserPlus size={13} /> {saving ? "Assigning…" : "Assign"}</>}
+                          ? <><UserMinus size={13} /> Remove</>
+                          : <><UserPlus size={13} /> Assign</>}
                       </Button>
                     </div>
                   </div>

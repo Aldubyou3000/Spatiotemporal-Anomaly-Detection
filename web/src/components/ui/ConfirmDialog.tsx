@@ -82,11 +82,11 @@ export function ConfirmDialog({
             id="confirm-dialog-title"
             style={{
               margin: 0,
-              fontSize: "var(--font-lg)",
+              fontSize: "var(--font-xl)",
               fontWeight: 600,
-              letterSpacing: "-0.015em",
+              lineHeight: 1.4,
               color: "var(--text)",
-              lineHeight: 1.2,
+
             }}
           >
             {title}

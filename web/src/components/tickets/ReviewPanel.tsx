@@ -64,7 +64,7 @@ function AddTechPicker({
 
   const dropdown = open && available.length > 0 && rect ? createPortal(
     <div
-      className="animate-scale-in"
+
       style={{
         position: "fixed",
         bottom: window.innerHeight - rect.top + 6,
@@ -162,7 +162,7 @@ function DecisionCard({
           width: 16, height: 16, borderRadius: "50%", flexShrink: 0, marginTop: 1,
           border: active ? `5px solid ${accentVar}` : "2px solid var(--border-strong)",
           background: "var(--surface)",
-          transition: "border var(--duration-fast)",
+          transition: "border-color var(--duration-fast)",
         }}
       />
       <span style={{ minWidth: 0 }}>
@@ -288,10 +288,10 @@ export function ReviewPanel({
 
       {/* Step 2 — fields for the chosen decision (note clearly belongs to it) */}
       {isApprove ? (
-        <div key="approve" className="animate-fade-in" style={{ borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "var(--surface)", overflow: "hidden" }}>
+        <div key="approve"  style={{ borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "var(--surface)", overflow: "hidden" }}>
           <div style={{ padding: "8px 12px 2px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>Approval remarks</span>
-            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-ui)", fontVariantNumeric: "tabular-nums" }}>
               {approveNotes.length > 0 ? `${approveNotes.length} chars` : "optional"}
             </span>
           </div>
@@ -305,14 +305,14 @@ export function ReviewPanel({
           />
         </div>
       ) : (
-        <div key="follow" className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div key="follow"  style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {/* Required instructions */}
           <div style={{ borderRadius: "var(--r-md)", border: `1px solid ${followReady ? "var(--border)" : "color-mix(in oklab, var(--warning) 40%, var(--border))"}`, background: "var(--surface)", overflow: "hidden" }}>
             <div style={{ padding: "8px 12px 2px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)" }}>
                 What to do on revisit <span style={{ color: "var(--danger)" }}>*</span>
               </span>
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-ui)", fontVariantNumeric: "tabular-nums" }}>
                 {followReady ? `${followNotes.trim().length} chars` : "required"}
               </span>
             </div>
@@ -322,7 +322,6 @@ export function ReviewPanel({
               placeholder="Tell the team what to check or fix on the next visit…"
               rows={3}
               disabled={approving}
-              autoFocus
               style={{ width: "100%", padding: "4px 12px 10px", border: 0, outline: "none", resize: "none", background: "transparent", color: "var(--text)", fontSize: "var(--font-sm)", fontFamily: "inherit", lineHeight: 1.55, opacity: approving ? 0.6 : 1, display: "block", boxSizing: "border-box" }}
             />
           </div>
@@ -348,7 +347,7 @@ export function ReviewPanel({
             </button>
 
             {reassignOpen && (
-              <div className="animate-fade-in" style={{ padding: "2px 12px 12px", borderTop: "1px solid var(--divider)" }}>
+              <div  style={{ padding: "2px 12px 12px", borderTop: "1px solid var(--divider)" }}>
                 <p style={{ margin: "10px 0 8px", fontSize: "var(--font-xs)", color: "var(--text-muted)", lineHeight: 1.5 }}>
                   Keep the same team or pick someone else for the next visit. Changes apply when you send the request.
                 </p>
@@ -434,8 +433,8 @@ export function ReviewPanel({
         onMouseLeave={(e) => { e.currentTarget.style.filter = ""; }}
       >
         {isApprove
-          ? <><CheckCircle2 size={15} strokeWidth={2.4} /> {approving ? "Approving…" : "Approve"}</>
-          : <><RefreshCw size={14} strokeWidth={2.4} /> {approving ? "Sending…" : "Request revisit"}</>}
+          ? <><CheckCircle2 size={15} strokeWidth={2.4} /> Approve</>
+          : <><RefreshCw size={14} strokeWidth={2.4} /> Request revisit</>}
       </Button>
 
       {error && (

@@ -41,6 +41,7 @@ export function StationMap({ stations, className, height = 480, style, selectedS
   const tilesRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<CircleMarker[]>([]);
   const stationMarkersRef = useRef(new Map<string, CircleMarker>());
+  const fittedLocationsRef = useRef<string | null>(null);
   const { theme } = useTheme();
 
   const center = useMemo<[number, number]>(() => {
@@ -70,6 +71,7 @@ export function StationMap({ stations, className, height = 480, style, selectedS
     }).addTo(map);
 
     mapRef.current = map;
+    fittedLocationsRef.current = null;
 
     // Keep Leaflet in sync when the flex container resizes (map now stretches to
     // match the right-hand stats stack). Without this, Leaflet keeps the old 0×0
@@ -119,7 +121,13 @@ export function StationMap({ stations, className, height = 480, style, selectedS
     markersRef.current = [];
     stationMarkersRef.current.clear();
 
-    if (stations.length === 0) return;
+    if (stations.length === 0) {
+      fittedLocationsRef.current = null;
+      return;
+    }
+
+    const locations = JSON.stringify(stations.map(s => [s.latitude, s.longitude])
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]));
 
     const bounds = L.latLngBounds([]);
     stations.forEach((station) => {
@@ -130,11 +138,12 @@ export function StationMap({ stations, className, height = 480, style, selectedS
       const baseColor = isAnomalous ? getCssVar("--danger") || "#DC2626" : getCssVar("--success") || "#16A34A";
 
       if (isAnomalous) {
-        // Outer faint ring — makes flagged visible even at zoom 7
+        // Animate only the halo opacity/glow; Leaflet owns marker geometry.
         const outer = L.circleMarker([station.latitude, station.longitude], {
+          className: "station-map-halo",
           radius: 20,
           fillColor: baseColor,
-          fillOpacity: 0.07,
+          fillOpacity: 0.12,
           color: baseColor,
           weight: 1,
           opacity: 0.18,
@@ -142,9 +151,10 @@ export function StationMap({ stations, className, height = 480, style, selectedS
         }).addTo(map);
         markersRef.current.push(outer);
         const halo = L.circleMarker([station.latitude, station.longitude], {
+          className: "station-map-halo",
           radius: 14,
           fillColor: baseColor,
-          fillOpacity: 0.22,
+          fillOpacity: 0.28,
           color: baseColor,
           weight: 1,
           opacity: 0.25,
@@ -172,23 +182,23 @@ export function StationMap({ stations, className, height = 480, style, selectedS
       };
       const gaugeTint = status ? statusHue[status] : getCssVar("--text-tertiary") || "#6B7280";
       marker.bindPopup(
-        `<div style="font-family: var(--font-geist, system-ui); padding: 6px 4px; min-width: 230px;">
-            <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary);">Station</div>
-            <div style="font-family: var(--font-jetbrains, ui-monospace); font-size: 14px; font-weight: 700; color: var(--text);">${station.station_id}</div>
+        `<div style="font-family: var(--font-ui); padding: 6px 4px; min-width: 230px;">
+            <div style="font-size: var(--font-xs); font-weight: 600;  color: var(--text-secondary);">Station</div>
+            <div style="font-family: var(--font-ui); font-size: var(--font-sm); font-weight: 700; color: var(--text);">${station.station_id}</div>
             <div style="margin-top: 10px; display: flex; gap: 14px; align-items: flex-end;">
               <div>
-                <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em;">Readings</div>
-                <div style="font-family: var(--font-jetbrains, ui-monospace); font-size: 14px; font-weight: 600; color: var(--text);">${station.total_readings}</div>
+                <div style="font-size: var(--font-xs); color: var(--text-secondary); ">Readings</div>
+                <div style="font-family: var(--font-ui); font-size: var(--font-sm); font-weight: 600; color: var(--text);">${station.total_readings}</div>
               </div>
               <div>
-                <div style="font-size: 10px; color: ${isAnomalous ? "var(--danger)" : "var(--text-secondary)"}; text-transform: uppercase; letter-spacing: 0.06em;">Flagged days</div>
-                <div style="font-family: var(--font-jetbrains, ui-monospace); font-size: 14px; font-weight: 700; color: ${isAnomalous ? "var(--danger)" : "var(--text)"};">${station.anomaly_count}</div>
+                <div style="font-size: var(--font-xs); color: ${isAnomalous ? "var(--danger)" : "var(--text-secondary)"}; ">Flagged days</div>
+                <div style="font-family: var(--font-ui); font-size: var(--font-sm); font-weight: 700; color: ${isAnomalous ? "var(--danger)" : "var(--text)"};">${station.anomaly_count}</div>
               </div>
             </div>
             <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider); display: flex; align-items: center; gap: 6px;">
               <span style="width:7px;height:7px;border-radius:99px;background:${gaugeTint};flex-shrink:0;display:inline-block;"></span>
-              <span style="font-size: 11px; font-weight: 600; color: ${gaugeTint};">${gaugeLabel}</span>
-              ${gaugeDesc ? `<span style="font-size: 11px; color: var(--text-secondary);">· ${gaugeDesc}</span>` : ``}
+              <span style="font-size: var(--font-xs); font-weight: 600; color: ${gaugeTint};">${gaugeLabel}</span>
+              ${gaugeDesc ? `<span style="font-size: var(--font-xs); color: var(--text-secondary);">· ${gaugeDesc}</span>` : ``}
             </div>
           </div>`,
         {
@@ -213,7 +223,7 @@ export function StationMap({ stations, className, height = 480, style, selectedS
       bounds.extend([station.latitude, station.longitude]);
     });
 
-    if (bounds.isValid()) {
+    if (bounds.isValid() && fittedLocationsRef.current !== locations) {
       map.setMinZoom(0);
       // No fly/animate on tab switch — the TabPanel already fades; second motion stacks and feels exaggerated.
       map.fitBounds(bounds, { padding: [24, 24], maxZoom: 12, animate: false } as L.FitBoundsOptions);
@@ -221,6 +231,7 @@ export function StationMap({ stations, className, height = 480, style, selectedS
       // Lock zoom-out to the level that shows all stations, and pan to those bounds
       map.setMinZoom(map.getZoom());
       map.setMaxBounds(bounds.pad(0.3));
+      fittedLocationsRef.current = locations;
     }
   }, [stations]);
 
@@ -229,10 +240,10 @@ export function StationMap({ stations, className, height = 480, style, selectedS
     stationMarkersRef.current.forEach((marker, id) => {
       const selected = id === selectedStationId;
       const nearby = highlightedStationIds?.includes(id);
-      marker.setStyle({ color: selected ? getCssVar("--brand") : nearby ? getCssVar("--on-brand-soft") : "#ffffff", weight: selected ? 4 : (marker.options.radius === 10 ? 3 : 2) });
+      marker.setStyle({ color: selected ? getCssVar("--brand") : nearby ? getCssVar("--text-secondary") : "#ffffff", weight: selected ? 4 : (marker.options.radius === 10 ? 3 : 2) });
       if (selected) marker.bringToFront();
     });
-  }, [selectedStationId, highlightedStationIds, stations]);
+  }, [selectedStationId, highlightedStationIds, stations, theme]);
 
   const isFlexible = typeof height === "string" && height.includes("%");
   return (

@@ -97,7 +97,7 @@ async function _doRefresh(): Promise<boolean> {
   }
 }
 
-function _refresh(): Promise<boolean> {
+export function refreshSession(): Promise<boolean> {
   if (!_refreshPromise) {
     _refreshPromise = _doRefresh();
   }
@@ -141,7 +141,7 @@ async function request<T>(path: string, init: RequestInit & { timeoutMs?: number
   }
 
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
-    const refreshed = await _refresh();
+    const refreshed = await refreshSession();
     if (refreshed) {
       // Re-read CSRF after rotation (the refresh endpoint rotated it)
       const retryHeaders = withCsrf(method, init.headers ?? {});

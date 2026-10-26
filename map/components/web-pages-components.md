@@ -4,6 +4,8 @@ The analyst-facing feature pages and their component building blocks. Pages comp
 
 ## Current overview split (2026-10-26)
 
+Warning-count visibility: Station summary's count uses a compact soft-red badge with dark-red semibold digits and a subtle red outline. This replaces the rejected solid circular counter. Shared OverviewTab styling reaches Zones, saved History results and the UI Library; count calculations and tab behavior are unchanged. Live visuals unverified.
+
 Inner-tab hierarchy: Overview / Station summary / Data quality now use a compact neutral rounded selected fill instead of repeating the main navigation's blue underline. Only OverviewTab's scoped CSS changes; keyboard focus, aria-selected, tab state and the main result tabs remain intact. Selected/unselected tabs use the same padding and font weight to avoid movement.
 
 Tab divider follow-up: removed the full-width line beneath the right-pane section tabs; the active-tab underline remains. Shared OverviewTab styling applies in Zones and History.
@@ -29,7 +31,7 @@ Review hierarchy/footer completion (2026-10-26): review filters and both decisio
 | `technicians/page.tsx` | Manage technician accounts | `useTechnicianProfiles` | Create-tech modal (`Modal` + `ConfirmDialog`) |
 | `audit/page.tsx` | Audit log + filters | `useAuditLogs` | CSV export |
 
-Local development entry: `/ui-library` (outside the dashboard layout) renders `components/design/DesignLibrary.tsx`; its isolated `/ui-library/preview` renders `ComponentPreview.tsx` and `Specimens.tsx`. See [UI Library guide](../../docs/UI_LIBRARY.md). It includes 20 groups and source inventory coverage of every visual component module in ui/dashboard/history/zones/tickets. Nonvisual controllers are described with their surfaces rather than running application navigation or auth.
+The local-only `/ui-library` and `/ui-library/preview` routes and `components/design/` were removed on 2026-10-27. Operational dashboard pages retain their shared UI, charts, maps and workflow components. Sample data used by feature regressions moved to `web/tests/fixtures.ts`; `components-render.test.cjs` retains the upload, progress, Sidebar and ticket checks.
 
 ## Components (`web/src/components/`)
 
@@ -125,7 +127,7 @@ Minimal reading selection (2026-10-26): AnomalyReportTab uses an 80% --brand-sof
 
 | Group | Files | Role |
 |-------|-------|------|
-| `ui/` | `Badge`, `Button`, `Card` (`CardHeader`/`CardTitle`/`CardBody` — available primitive, currently unused), `ConfirmDialog`, `Input`, `Modal`, `Skeleton` (`TicketRowSkeleton`, `TechRowSkeleton`, `AuditRowSkeleton`, `DetailSkeleton`), `Tabs`, `Toast`, `SentinelMark` (brand mark; chevron variant removed) | Generic primitives — props-only, no API calls. All destructive/consequential actions must go through `ConfirmDialog`. Currently guarded: logout, ticket status advance, technician reassign, report approval. |
+| `ui/` | `Badge`, `Button`, `ConfirmDialog`, `Input`, `Modal`, `Skeleton` (`TicketRowSkeleton`, `TechRowSkeleton`, `AuditRowSkeleton`, `DetailSkeleton`), `Tabs`, `Toast`, `SentinelMark` (brand mark; chevron variant removed) | Generic primitives — props-only, no API calls. Unused Card family removed with the UI Library. All destructive/consequential actions must go through `ConfirmDialog`. Currently guarded: logout, ticket status advance, technician reassign, report approval. |
 | `dashboard/` | `Sidebar`, `Header`, `PageTransition` | Shell chrome. Sidebar nav uses `.nav-item` utility class with `data-active` for brand highlight. |
 | `providers/` | `RealtimeProvider` | See [web-realtime.md](./web-realtime.md). |
 | `zones/` | `FileUpload`, `PipelineDiagram`, `OverviewTab`, `StationMap` (free `tile.openstreetmap.org` light + `Esri World_Dark_Gray_Base` dark, no key; flagged `10px` red + dual halo `20/14px` vs typical `5px` dim, `station-label--flagged` red tint, `bringToFront()`), `StationChart`, `DataTable`, `NeighborGroupsTab`, `AnomalyReportTab`, `DateComparisonChart` | Pipeline result visualizations. `leaflet` for the map ( `react-leaflet` removed); `recharts` for charts. CSV preview is local (`lib/csv.ts`) — `papaparse` removed. |
@@ -141,8 +143,8 @@ Minimal reading selection (2026-10-26): AnomalyReportTab uses an 80% --brand-sof
 - Pages are the leaves of the route tree — only the layout wraps them.
 
 ## Key invariants
-- UI Library drafts remain in browser storage and apply only inside the preview frame. `library.ts` validates settings and generates CSS from fixed keys/targets; shared primitives expose inert `data-ui` attributes so an override also applies inside composed previews. The standalone frame supplies synthetic Auth/Theme context values, a separate SWR cache with fixture middleware, blocked link navigation and a fetch boundary that handles only explicit sample ticket creation/assignment endpoints locally, rejecting all other API requests. Reset restores defaults; source defaults are not written by visual edits.
-- `Sidebar` accepts optional `storageKey` (default `sidebar-collapsed`); the playground supplies its own key so a design session cannot change the website's collapse preference. AuthContext/ThemeContext are exported for fixture provider composition without running the live AuthProvider. Chart preview variables have the original chart colors as fallbacks.
+- UI Library editor/preview code, its fake API and gallery-only tests are removed. Shared primitive `data-ui` attributes and chart preview overrides have no remaining consumers and were removed with it.
+- `Sidebar` uses the existing `sidebar-collapsed` preference and retains `resultsReady`. Auth/Theme contexts are private to their modules; their existing providers/hooks remain public. Charts keep their previous operational light/dark colors.
 - Zones `OverviewTab` shows `incomplete_days` as a Daily exclusion and includes it in the cleaning summary. Hourly days need all 24 hours after allowed interpolation. `rows_filled` shows hourly estimates made before daily exclusions; interpolation-only runs must not claim that no cleaning was needed. New counters use `?? 0` against older API results.
 - **Components don't call `lib/api/` directly.** Data flows through hooks or page-level handlers passed as props.
 - **`TicketDetailBody` is shared.** Editing it affects both the Tickets and Reports pages.
@@ -309,3 +311,145 @@ Station summary warning count (2026-10-26): tab count uses danger-soft/danger-on
 
 
 Station panel refinement (2026-10-26): Nearby stations uses a quiet selected-station inset and compact nearest-first rows with stronger distance numbers/quiet units. Removed repeated instruction sentence. Station summary uses tighter rows/soft separators, right-aligned status badges, smaller evidence text and a shared help tooltip for map-selection/review guidance. Full station IDs, severity order, high/low counts and visible evidence remain. Shared map selection and empty states unchanged.
+
+
+History visual alignment (2026-10-26): search/date controls now sit in the same white panel as Saved runs, below its heading. Compact rounded search matches Data; date fields have visible From/To labels and native calendars without a redundant icon. Apply filters retains submit-based fetching. List icons/headers/dividers are quieter; titles remain exact with full-title hover. Review statuses retain counts and add slim accessible progress (complete uses success). Row links, Asia/Manila processed times, pagination, SWR/error/empty states unchanged. Reference: https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines .
+
+
+Automatic History filters and sorting (2026-10-26): replaced static Latest first text with the shared Select (Latest first/Oldest first). Search applies after 300ms with cleanup; dates apply immediately, and all changes reset pagination. Clear removes search/dates while preserving sort. Removed Apply filters/form submit. Background queries retain existing rows; aria-busy announces updates. Sorting is requested from the API so it applies across all pages.
+
+
+Zones result indicator (2026-10-26): Sidebar accepts resultsReady (false default), displaying Ready only for retained processed results. Dashboard layout wires existing context through private WorkspaceSidebar; gallery previews the ready state. No API or persistence added.
+
+
+History toolbar alignment (2026-10-26): moved sorting from the isolated heading corner to the right of the search/date toolbar. Removed redundant sort glyph and date-range dash. From/To now use separate consistently outlined 34px controls matching search/sort heights, including dark theme. Reduced heading-to-toolbar gap; filtering/sorting behavior unchanged.
+
+
+Search consistency (2026-10-26): History, Zones Data/Review, Tickets, Technicians, Audit and UI Library use shared data-search-field chrome. Parent layouts retain widths; Audit keeps blur/Enter handlers. History date labels use data-filter-field so focus surrounds the complete label/input. Native dates and filtering semantics remain intact.
+
+
+Search behavior repair (2026-10-26): shared lib/search.ts matches trimmed case-insensitive words across fields and ignores station separators. Data searches all displayed columns before pagination, including numeric rainfall; Raw explicitly searches the capped server preview. Review stays scoped to current direction/status/station. Tickets preserves exact TKT-number matching and accepts TKT # forms; Technicians searches name/username/email; UI Library searches names/groups/sources. Audit automatically debounces search into server search, rather than treating it as exact IP.
+
+
+Data search ranking (2026-10-26): DataTable ranks prefix matches in the first searchable (station) column ahead of other substring matches before slicing pages. Searching N now surfaces Napindan ahead of Mandaluyong; clearing restores input order. Matching rows are retained and the original data array is not mutated.
+
+
+Prefix filtering correction (2026-10-26; supersedes ranking above): shared matchesSearch now matches field/word beginnings only. N excludes Mandaluyong and matches Napindan; DataTable removes prefix ranking entirely and filters before pagination in original row order. Blank search restores rows. Case and station separators remain normalized; numeric/date prefixes and multiword field queries remain supported. Applies to Data, Review, Tickets free text, Technicians and UI Library. Server History/Audit search is unchanged.
+
+
+History search correction (2026-10-26): server search now follows the visible run name (title or legacy first filename), so h excludes a titled test run even if its hidden source filenames/stations contain h. Existing debounce/date/sort flow retained. Ticket free text already uses the shared prefix matcher.
+
+
+Ticket numeric prefix correction (2026-10-26): matchesTicketSearch delegates letters and numbers to the same prefix matcher as Zones, replacing exact-number branches. 2/TKT-2/TKT #2/#2 match ticket 24; 4 does not. Combined number/station queries and technician-name prefixes work; status/priority scopes remain. History already accepts numeric prefixes of displayed run names.
+
+
+Search optimization (2026-10-26): shared matchesSearch exits immediately for blank queries, normalizes query words once, and checks fields lazily until a prefix matches. matchesTicketSearch also skips field access for blank queries. Existing client consumers inherit this without UI/behavior changes. Local 100k-comparison sample: blank 521→8ms, N 473→140ms, date prefix 444→97ms, same counts; synthetic timings only.
+
+
+Table header refinement (2026-10-26): shared DataTable removes the tinted header band, using the same surface as its body with a single bottom divider. Labels use font-sm/600 and row-h with consistent cell insets/vertical alignment. Raw, Cleaned and Flagged tables in Zones/History plus gallery inherit it. Numeric right alignment, status centering and table semantics are retained.
+
+
+Dashboard-wide table headers (2026-10-26): shared .table-heading now styles DataTable, History list/details, Technicians loaded/skeleton tables, Audit column headers and Nearby stations comparison headings. Removed tinted bands and uppercase/tracking overrides; labels use font-sm/600, row-h and a single divider. Page grids/insets and explicit numeric/status alignments remain local. Technician headers now declare scope=col.
+
+
+History/Data heading parity (2026-10-26): explicit font-sm/600/text-secondary declarations on History runColumns and DataTable th remove dependence on div inheritance versus browser th defaults. History retains its column grid and a visible bottom divider; responsive hide rules remain.
+
+
+Compact History run summary (2026-10-26): detailBody caps reading width at 72rem and reduces section gaps. Summary uses a compact two-column metric/review area; counts cluster in a 2x2 grid and progress sits beside them. Related-ticket empty state becomes left-aligned inline content rather than a tall centered block. Header actions wrap below the title at narrower widths; metrics/review stack on mobile. File disclosure, review counts, exports, linked-ticket table and pagination remain.
+
+
+History detail readability (2026-10-26): expanded Files and processing details now has two responsive groups: Source files/stations and Data cleaning. Filenames use compact normal-weight ellipsis with exact title text and aligned sizes; all originals remain in markup. Cleaning totals use a compact label/value list, followed by readable summary text and subdued version metadata. Native disclosure and all facts remain; no additional toggle or nested cards.
+
+
+History detail canvas correction (2026-10-26): separated full-width dashboard-content/detailWorkspace from width-limited inner detailBody. Background fills the available workspace while summary/ticket cards keep their existing 72rem centered width. Page is a flex column with an internally scrolling workspace; no new colored surface or panel.
+
+
+History summary back navigation (2026-10-26): moved All runs from the content column into Header.leading as an icon-only topbar-btn linking to /history. Tooltip and aria-label read Back to saved runs. Matches results-page navigation and removes the extra content row.
+
+
+History back-button refinement (2026-10-26): summary/results arrows use the same borderless circular topbar modifier and 16px/2.25-stroke icon. Header breadcrumb spacing is tighter beside leading navigation; links and tooltip/aria labels unchanged.
+
+
+History back-link position restored (2026-10-26): at user request All runs is again a visible link above the summary card in detailBody, with no summary Header.leading control. Results-page back navigation remains in its existing Header.
+
+## Website typography rollout (2026-10-26)
+All shared controls and page typography inherit Roboto and the approved readable scale from globals.css. Removed small local overrides in badges, login, Sidebar, UI Library and map popups. Ordinary dates/identifiers/charts use Roboto with tabular data alignment; code/version remains monospace. Charts accept the CSS font-size token directly, avoiding rem-to-number parsing errors, with wider Y-axis labels. Shared Modal now caps its card to the viewport and permits internal scrolling on shorter screens. History date fields have more room and wrap.
+UI Library's draft parser retains non-font settings while raising legacy small font values to the readable floor. ComponentPreview sends computed body pixels to the existing editor sliders; generated typography uses the same body/support/heading/metric offsets. The editor's own text and inspector widths are larger. Regression checks cover legacy drafts, computed rem defaults and shared text contrast. Existing split views, processing/reviews/export logic and large metric watermark icons are preserved. Fresh review findings were fixed; browser appearance/zoom could not be verified.
+
+Reading-list badge removal (2026-10-26): all Needs review/Reviewed/All queue rows now show only station, date and rainfall. Review status remains screen-reader text; the selected reading's decision badge remains in the detail panel. Shared Zones/History/gallery implementation and selection styling are unchanged. Focused regression covers all three queue filters.
+
+Reading-list badge scope (2026-10-26; supersedes removal above): Needs review keeps compact rows with screen-reader-only status. Reviewed and All show the existing status badges, including pending status in mixed All results. The shared component covers Zones, saved History results and the gallery. Focused filter regression passed; no CSS or selection changes.
+
+Map selection and movement repair (2026-10-26): Overview/quality no longer pass a remembered station highlight to StationMap. Summary and Nearby stations retain their controlled selection when revisited; only the active station uses blue, with neutral neighbor outlines and updated help text. All foreground outlines reset on each selection change and refresh for theme changes. StationMap caches sorted coordinate pairs and refits only when locations change, preventing reading-total updates or station ordering from snapping pan/zoom back. Each newly created map resets this cache for development effect remounts. Existing marker radii, red/green status fills, static halos, zoom animation suppression and resize cleanup remain. Regression coverage includes rapid select/clear, tab changes, nearby styling, metadata updates, moved locations and development remounts; live animation playback was not checked.
+
+Flagged-station glow (2026-10-26): both flagged halo layers now use station-map-halo, which pulses opacity and a danger-colored drop shadow over 2.4 seconds. Foreground dots/labels never animate; radii and Leaflet transforms remain fixed. The same StationMap covers summary and nearby views. Slightly stronger halo fills make the effect visible. Reduced-motion users receive a steady halo. Ten map regressions, CSS parsing and TypeScript passed; live playback was not checked.
+
+
+History opening performance (2026-10-26): list-row clicks seed existing summary metadata before navigation; summary renders that data during background refresh. Known empty ticket sections make no request. Hover/focus/click on Open results enables the existing SWR results hook, sharing its request/cache with the results page. No full-result downloads for every listed run, layout redesign or feature removal. Focused tests cover cache separation, revalidation, conditional reads and intent-triggered loading.
+
+Tickets revamp proposal (2026-10-26; planning only): docs/TICKETS_WORKSPACE_PLAN.md specifies a compact queue, Details/Inspection/Activity sections, contextual actions, preserved ticket/review/assignment features, canonical colors and responsive/draft-safe behavior. No runtime implementation changes.
+
+
+Tickets redesign rollback (2026-10-26): reverted the unapproved visual result at the user's request. Restored the original split view, stacked filters, continuous detail body and action dock. Removed Tickets.module.css and the added section/draft-navigation wiring. Earlier search, typography, theme and complete-list pagination changes are retained. The workspace proposal remains documentation only. Shared-candidates and orphans checked; no new runtime modules remain.
+
+
+## Tickets layout refinement (2026-10-26)
+The user selected a restrained cleanup instead of the larger tabbed redesign proposal. Tickets keeps its existing continuous list/detail split and selection behavior. The queue now groups search and shared status/priority Selects (with existing counts), displays ID/status, a two-line title, station, then team/update time. Clear filters occupies the heading's existing row without growing the toolbar. Ticket-only rounded selection uses a quieter tint and no inherited blue streak; other list-row consumers are unaffected.
+TicketDetailBody retains every section and workflow, with one prominent status badge, quiet priority/zone metadata, station/team before compact dates, readable line length and plain section headings without decorative bars/rules. PDF is a labelled shared Button. TicketActionDock keeps default-open pending review, assignments, reasons, validations, confirmations and portal pickers; its duplicate pill/avatars/animated handle become one labelled header and chevron. The dock is shrinkable and capped to 55% of its detail pane; its body has min-height:0 and scrolls internally, keeping controls reachable within short stacked panes. Skeletons follow the updated queue/detail hierarchy. New Tickets.module.css is consumed by page/detail/dock, which also reach existing gallery specimens.
+Verification: 37 focused component/search checks, CSS parsing/token-reference assertion and TypeScript passed. Live light/dark and short-screen appearance was not verified because browser access remains unavailable. No API, lifecycle, detector or mobile changes.
+
+
+Ticket dock visibility (2026-10-26): the existing expandable control now uses a rounded inset surface-alt background, stronger foreground text, a small white/brand-text icon tile and larger chevron. Hover/expanded use surface-sunken; no shadow, animation or duplicate action added. Existing pane-relative height cap and internal scrolling remain. CSS and targeted dock checks passed; browser appearance unverified.
+
+
+Ticket dock contrast correction (2026-10-26; supersedes tinted toggle above): removed the background-matching gray fill. The control keeps surface white in light mode, a border-strong neutral outline, dark text/chevron and a small brand-soft icon tile. Hover changes the border only; expansion does not dim the control. Same sizing, semantics and workflow.
+
+
+Ticket dock integration correction (2026-10-26; supersedes framed toggle): restored a flush surface footer with one top divider. Plain icon, Assignment/Inspection review label and count sit left; an existing secondary Button labelled Manage/Review (Hide when open) sits right. Removed the rejected rounded frame, inset margins and colored icon tile. Kept pane-relative cap/internal scroll and existing expansion/management/review handlers.
+
+
+Ticket report hierarchy (2026-10-26): the shared detail body now distinguishes its fixed heading from scrolling content with one divider. Station/team/dates share one restrained surface-sunken information band. Existing major sections gain named accessible regions, 18px heading-role text, consistent spacing and light separators between sections only. Renamed Details to Reading details and normalized inspection/history heading case. Current inspection findings precede past assignments; archived rounds, files, photos, timeline and all actions remain. No added tabs, section toggles, blue accents or shadows. A rendering regression verifies named groups, ordering and retained field content. All 32 gallery/component checks, CSS parsing and TypeScript passed; live browser appearance unverified.
+
+
+Compact ticket queue (2026-10-26): removed technician names/icons/team-count suffixes from left queue rows only. Rows now show ID/status/priority, title, then station/update time, with 4px gaps and 8px vertical padding. Title/station full labels, status selection, search and exact time tooltips remain. Matching TicketRowSkeleton shortened. Assignment/detail/history identities remain untouched. Right-pane changes are proposed only in docs/superpowers/plans/2026-10-26-ticket-report-density.md.
+
+
+Ticket row balance/separators (2026-10-26): replaced rejected dense 4px gaps/8px vertical padding with moderate 8px gaps and 12px padding. ID/status/update age share the first line, title leads visually, and station/optional high priority share the last line. Technician names remain omitted. At user request, adjacent ticket wrappers have one faint --divider rule, without outlines or blue streaks. Matching skeleton updated.
+
+
+Ticket separator/selection junction (2026-10-26): inset faint row separators to the text edges and leave 2px wrapper padding above/below each highlight. Lines no longer touch or extend past rounded selection corners. No selection, row content or action changes.
+
+
+Separator correction (2026-10-26; supersedes junction change): reverted inset pseudo-lines and added wrapper spacing. Restored original faint borders, with rounded overflow clipping on each wrapper to cut excess at the corners. Row density/content unchanged; focus outline is already inset within each button.
+
+
+Straight ticket separator (2026-10-26; supersedes rounded clipping): removed rounded/overflow styling from row wrappers. Separators are only a straight 1px divider border between adjacent wrappers. No added spacing, pseudo-elements or enclosing shapes.
+
+
+Ticket separator length (2026-10-27): shortened only the straight divider ends by the selected row radius (--r-lg, 10px). A transparent original-width border preserves row height; the absolutely positioned line supplies the shorter visible stroke. No wrapper rounding/clipping, padding, gaps or selection changes.
+
+
+Report density implementation (2026-10-27): applied the existing density plan to TicketDetailBody. Removed full-width gray follow-up/context bands; facts wrap at natural widths with compact exact date/time rows. Follow-up/cancellation text uses named compact notices; derived relative ages remain in date tooltips. Active findings/attachments precede one History section containing prior rounds, previous assignments and activity. SubHeading now renders h4 beneath major h3 sections. Tightened findings/timeline/section gaps and matching skeleton; no smaller body text. All existing content/links/photo and archived-round handlers, dock sizing and mutations retained. Source review found no material findings; browser appearance unverified.
+
+Ticket Manage icon (2026-10-27): TicketActionDock reuses the existing Users icon at 16px before the Manage/Hide label for assignment controls. The inspection-review button retains its existing presentation. No behavior, dependencies or new shared/orphan candidate.
+
+Ticket assigned avatars (2026-10-27; supersedes Manage icon): removed the added Users glyph inside Manage. Existing StackAvatar renders assigned technician initials immediately beside the button, up to three with a named overflow count. Existing name tooltips, sizes and colors are reused. No assignment behavior changes or new modules.
+
+Ticket detail readability (2026-10-27; supersedes compact fact layout): used the old report as a layout reference while retaining current theme tokens. Header ID/priority/zone use compact existing badges; the context panel aligns station, assignee, created and updated in four columns (two/one by detail-container width), with dates and times on separate lines. Follow-up uses a restrained danger-tinted bordered notice. Major section headers have faint rules and more vertical breathing room; History retains its grouped evidence and current actions. No decorative heading bars, new data behavior or modules. TypeScript and all 35 render checks passed; browser appearance unverified. Shared candidates/orphans checked: existing helpers and local stylesheet reused; removed unused headerMeta class.
+
+Ticket content indentation (2026-10-27): descriptions, inspection prose and the activity timeline use a 12px logical start inset via the local indentedContent class. Headings, fact panel, cards and controls retain their alignment. No behavior or new shared/orphan candidate.
+
+Ticket indentation fix (2026-10-27): --space-3 was undefined, so the browser discarded indentation and heading-padding declarations. Replaced both references with calc(--space-2 + --space-1), giving the intended 12px from existing tokens. Added a failing-then-passing regression checking that Tickets.module.css references defined spacing primitives. All five surface-theme checks pass; browser appearance unverified.
+
+Ticket indentation refinement (2026-10-27): increased indentedContent from 12px to the existing 24px --space-6 token so paragraphs clearly start inward from their headings. Headings/facts retain alignment. No new references or shared candidates.
+
+Priority colors (2026-10-27): ticket detail priority badges now show green/amber/red for Low/Medium/High through canonical PRIORITY_TONE and existing Badge theme tokens. No new styling or components.
+
+Ticket queue priority removal (2026-10-27): removed the repeated High priority text from left-list rows and its unused local CSS class. Priority filtering and detail-header badges remain available. No new shared candidate or orphan module.
+
+Ticket update stability (2026-10-27): detail rendering waits for initial report/files, then keeps the same ticket component through background revalidation. Ticket-ID keys reset local forms only on selection changes. Removed entrance/scale classes and follow-up autoFocus from ticket forms/pickers/body, disabled automatic scroll anchoring in detail/list, stabilized Manage/Hide width and reason-chip weight. Dock expansion is scoped to review/management mode, so completing review cannot flash an expanded assignment drawer. Successful assignment clears its prompt alongside the cache update before waiting on revalidation. Shared Button keeps its label in flow, overlays a busy spinner and transitions colors/opacity only; ticket action labels remain constant while busy. Existing confirms/data/error paths retained. Seven focused stability regressions plus gallery/theme/library/History renders passed; browser playback unavailable because local browser access is disabled in Work settings.
+
+## Saved-results initial work (2026-10-27)
+History list/summary links prefetch on intent; nested loading boundaries show route progress. Results workspace and ticket dialog use Next dynamic imports; Overview charting is deferred. The hidden Data panel mounts only after its first visit; full reviewed CSV conversion runs only when exporting. Existing review state, tab persistence, exports and run isolation remain covered by History regressions. Isolated build first-load JS for the History results route fell from about 299 kB to 148 kB; deferred content still downloads when used.
+
+Instant result-tab selection (2026-10-27): shared Tab removes color/underline transitions and TabPanel removes its entry fade. Active underline, selected colors, ARIA links and keepMounted behavior remain intact. This covers main result tabs and Overview's inner section tabs in Zones and saved History. Inline transition:none overrides the global button transition rule.

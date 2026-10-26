@@ -33,6 +33,7 @@ export interface AuditStatEntry {
 }
 
 export interface AuditFilters {
+  search?: string;
   event?: string;
   user_id?: string;
   entity_type?: string;

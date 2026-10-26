@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import useSWR, { mutate as globalMutate } from "swr";
+import useSWR, { mutate as globalMutate, preload, unstable_serialize, useSWRConfig } from "swr";
 import { historyApi, type HistoryFilters } from "@/lib/api/history";
+import type { HistoryRun } from "@/types/history";
 import { readingKey, type AnomalyReview, type AnomalyReviews } from "@/lib/anomalyReview";
 
 export function invalidateHistory() {
@@ -11,16 +12,30 @@ export function invalidateHistory() {
 }
 
 export function useHistoryList(filters: HistoryFilters) {
-  return useSWR(["/api/history", filters], () => historyApi.list(filters));
+  const { mutate } = useSWRConfig();
+  const state = useSWR(["/api/history", filters], () => historyApi.list(filters));
+  function selectRun(run: HistoryRun) {
+    // The list already contains the full summary; refresh it after navigation.
+    void mutate([`/api/history/${run.id}`], (current: HistoryRun | undefined) => current ?? run, { revalidate: false });
+  }
+  return { ...state, selectRun };
 }
 export function useHistoryRun(id: string) {
-  return useSWR([`/api/history/${id}`], () => historyApi.get(id), { keepPreviousData: false });
+  return useSWR([`/api/history/${id}`], () => historyApi.get(id), { keepPreviousData: false, revalidateOnMount: true });
 }
-export function useHistoryResults(id: string) {
-  return useSWR([`/api/history/${id}/results`], () => historyApi.results(id), { keepPreviousData: false, revalidateIfStale: false });
+export function useHistoryResults(id: string, enabled = true) {
+  return useSWR(enabled ? [`/api/history/${id}/results`] : null, () => historyApi.results(id), { keepPreviousData: false, revalidateIfStale: false });
 }
-export function useHistoryTickets(id: string, offset: number) {
-  return useSWR([`/api/history/${id}/tickets`, offset], () => historyApi.tickets(id, offset));
+export function usePrefetchHistoryResults(id: string) {
+  const { cache } = useSWRConfig();
+  return () => {
+    const key = [`/api/history/${id}/results`];
+    const cached = cache.get(unstable_serialize(key))?.data;
+    return cached !== undefined ? Promise.resolve(cached) : preload(key, () => historyApi.results(id));
+  };
+}
+export function useHistoryTickets(id: string, offset: number, enabled = true) {
+  return useSWR(enabled ? [`/api/history/${id}/tickets`, offset] : null, () => historyApi.tickets(id, offset), { keepPreviousData: false });
 }
 
 export function useSaveHistoryRun() {

@@ -1,19 +1,13 @@
 import type { Metadata } from "next";
-import { Geist, Fraunces, JetBrains_Mono } from "next/font/google";
+import { Roboto, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/context/ThemeContext";
 import "./globals.css";
 
-const geist = Geist({
+const roboto = Roboto({
   subsets: ["latin"],
-  variable: "--font-geist",
+  variable: "--font-roboto",
   display: "swap",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-  axes: ["opsz", "SOFT"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const jetbrains = JetBrains_Mono({
@@ -32,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geist.variable} ${fraunces.variable} ${jetbrains.variable}`}
+      className={`${roboto.variable} ${jetbrains.variable}`}
     >
       <head>
         {/* No-flash bootstrap — apply saved theme before paint so the choice

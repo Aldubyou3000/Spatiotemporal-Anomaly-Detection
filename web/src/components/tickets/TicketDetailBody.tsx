@@ -13,13 +13,14 @@ import {
   Download,
   ExternalLink,
   FileText,
-  Loader2,
   Plus,
   RefreshCw,
   UserPlus,
   WifiOff,
   X,
 } from "lucide-react";
+import styles from "@/components/tickets/Tickets.module.css";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { STATUS_LABEL, STATUS_TONE, PRIORITY_TONE, SEVERITY_TONE } from "@/lib/ticketStatus";
 
@@ -109,10 +110,6 @@ export interface DetailModel {
 // the import above) so the detail panel can never disagree with the list.
 // Zone coloring is detail-only and stays local.
 
-const ZONE_TONE: Record<string, "success" | "warning" | "danger"> = {
-  A: "success", B: "warning", C: "danger",
-};
-
 const PHOTO_GRADIENTS = [
   ["#1E6FD9","#7C3AED"],["#0D9488","#22C55E"],["#D97706","#DC2626"],
   ["#3B82F6","#0EA5E9"],["#7C3AED","#EC4899"],["#16A34A","#0891B2"],
@@ -179,7 +176,7 @@ function AssigneeCell({ assignees, assigneeName }: { assignees?: DetailAssignee[
         type="button"
         onClick={() => canExpand && setExpanded((x) => !x)}
         style={{
-          display: "flex", alignItems: "center", gap: 0, background: "none", border: "none",
+          display: "flex", alignItems: "center", gap: 0, maxWidth: "100%", minWidth: 0, background: "none", border: "none",
           padding: 0, cursor: canExpand ? "pointer" : "default", textAlign: "left",
         }}
       >
@@ -237,16 +234,14 @@ function AssigneeCell({ assignees, assigneeName }: { assignees?: DetailAssignee[
 
 function Section({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) {
   return (
-    <section>
-      <div
+    <section aria-label={title} className={styles.detailSection}>
+      <div className={styles.sectionHeading}
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
           marginBottom: 12,
-          paddingBottom: 8,
-          borderBottom: "1px solid var(--border)",
         }}
       >
         <h3
@@ -257,19 +252,18 @@ function Section({ title, badge, children }: { title: string; badge?: string; ch
             gap: 9,
             margin: 0,
             fontSize: "var(--font-lg)",
-            fontWeight: 700,
+            fontWeight: 600,
             color: "var(--text)",
             letterSpacing: "-0.012em",
           }}
         >
-          <span aria-hidden style={{ position: "absolute", left: -10, width: 3, height: 15, borderRadius: 2, background: "var(--brand)" }} />
           {title}
         </h3>
         {badge && (
           <span style={{
             display: "inline-flex", alignItems: "center", height: 24, padding: "0 9px",
             borderRadius: "var(--r-sm)", fontSize: "var(--font-xs)", fontWeight: 500,
-            fontFamily: "var(--font-mono)", color: "var(--text-secondary)",
+            fontFamily: "var(--font-ui)", color: "var(--text-secondary)",
             background: "var(--surface-sunken)", border: "1px solid var(--border)",
             fontVariantNumeric: "tabular-nums",
           }}>
@@ -286,12 +280,12 @@ function Section({ title, badge, children }: { title: string; badge?: string; ch
 
 function SubHeading({ children }: { children: React.ReactNode }) {
   return (
-    <div
+    <h4
       style={{
         display: "flex",
         alignItems: "center",
         gap: 8,
-        marginBottom: 6,
+        margin: "0 0 var(--space-2)",
         fontSize: "var(--font-base)",
         fontWeight: 600,
         color: "var(--text-secondary)",
@@ -299,7 +293,7 @@ function SubHeading({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-    </div>
+    </h4>
   );
 }
 
@@ -307,8 +301,8 @@ function SubHeading({ children }: { children: React.ReactNode }) {
 
 function Prop({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 6 }}>
+    <div className={styles.property}>
+      <div style={{ fontSize: "var(--font-xs)", fontWeight: 400, color: "var(--text-secondary)", marginBottom: "var(--space-1)" }}>
         {label}
       </div>
       {children}
@@ -325,7 +319,7 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
   return (
     <div style={{ padding: "14px 16px", background: "var(--surface-sunken)", borderRadius: "var(--r-md)", border: "1px solid var(--border)" }}>
       <div style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: "var(--font-metric)", color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontFamily: "var(--font-ui)", fontWeight: 700, fontSize: "var(--font-metric)", color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
     </div>
   );
 }
@@ -358,7 +352,7 @@ function AnomalyMetrics({ data, zone }: { data: Record<string, unknown> | null |
   if (cards.length === 0) return null;
 
   return (
-    <Section title="Details" badge={zone ? `Checked vs nearby` : undefined}>
+    <Section title="Reading details" badge={zone ? `Checked vs nearby` : undefined}>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(cards.length, 4)}, 1fr)`, gap: 10 }}>
         {cards.slice(0, 8).map((c) => <Metric key={c.label} {...c} />)}
       </div>
@@ -368,9 +362,9 @@ function AnomalyMetrics({ data, zone }: { data: Record<string, unknown> | null |
 
 // ─── Prose ────────────────────────────────────────────────────────────────────
 
-function Prose({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
+function Prose({ children, muted, indented }: { children: React.ReactNode; muted?: boolean; indented?: boolean }) {
   return (
-    <p style={{ margin: 0, fontSize: "var(--font-base)", lineHeight: 1.6, color: muted ? "var(--text-muted)" : "var(--text-secondary)", fontStyle: muted ? "italic" : "normal" }}>
+    <p className={indented ? styles.indentedContent : undefined} style={{ margin: 0, maxWidth: "75ch", fontSize: "var(--font-base)", lineHeight: 1.6, color: muted ? "var(--text-muted)" : "var(--text-secondary)", fontStyle: muted ? "italic" : "normal" }}>
       {children}
     </p>
   );
@@ -488,7 +482,7 @@ function ActivityTimeline({ model }: { model: DetailModel }) {
     <div style={{ position: "relative", paddingLeft: 26 }}>
       <div style={{ position: "absolute", left: 10, top: 8, bottom: 8, width: 2, background: "var(--divider)" }} />
       {events.map((evt, i) => (
-        <div key={evt.id} style={{ position: "relative", paddingBottom: i === events.length - 1 ? 0 : 20 }}>
+        <div key={evt.id} style={{ position: "relative", paddingBottom: i === events.length - 1 ? 0 : "calc(var(--space-2) + var(--space-1))" }}>
           <div style={{
             position: "absolute", left: -26, top: 1,
             width: 20, height: 20, borderRadius: 999,
@@ -497,7 +491,7 @@ function ActivityTimeline({ model }: { model: DetailModel }) {
           }}>
             {timelineIcon(evt.kind)}
           </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+          <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
             <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>{evt.who}</span>
             <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>· {fmtTime(evt.ts)} {fmtDate(evt.ts)}</span>
           </div>
@@ -530,7 +524,7 @@ function PhotoGrid({ photos, onOpen }: { photos: DetailPhoto[]; onOpen: (u: stri
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p.photo_url} alt={`Attachment ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px", background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)", fontSize: "var(--font-xs)", color: "white", fontFamily: "var(--font-mono)" }}>
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px", background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)", fontSize: "var(--font-xs)", color: "white", fontFamily: "var(--font-ui)" }}>
               IMG_{String(i + 1).padStart(3, "0")}
             </div>
           </button>
@@ -563,7 +557,7 @@ function PriorRoundCard({ round: r, onOpenPhoto }: { round: PriorRound; onOpenPh
           <span style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)", flexShrink: 0 }}>{fmtDate(r.submittedAt)}</span>
         )}
         {r.issueResolved != null && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", fontWeight: 600, color: r.issueResolved ? "var(--success)" : "var(--danger)", flexShrink: 0 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "var(--font-xs)", fontFamily: "var(--font-ui)", fontWeight: 600, color: r.issueResolved ? "var(--success)" : "var(--danger)", flexShrink: 0 }}>
             {r.issueResolved ? <CheckCircle2 size={12} strokeWidth={2.5} /> : <WifiOff size={12} />}
             {r.issueResolved ? "Resolved" : "Unresolved"}
           </span>
@@ -584,19 +578,19 @@ function PriorRoundCard({ round: r, onOpenPhoto }: { round: PriorRound; onOpenPh
           {r.notes && (
             <div style={{ padding: "12px 0" }}>
               <SubHeading>Field Observations</SubHeading>
-              <Prose>{r.notes}</Prose>
+              <Prose indented>{r.notes}</Prose>
             </div>
           )}
           {r.rootCause && (
             <div style={{ padding: "12px 0" }}>
               <SubHeading>Root Cause</SubHeading>
-              <Prose>{r.rootCause}</Prose>
+              <Prose indented>{r.rootCause}</Prose>
             </div>
           )}
           {r.correctiveAction && (
             <div style={{ padding: "12px 0" }}>
               <SubHeading>Corrective Action &amp; Recommendations</SubHeading>
-              <Prose>{r.correctiveAction}</Prose>
+              <Prose indented>{r.correctiveAction}</Prose>
             </div>
           )}
           {photos.length > 0 && (
@@ -690,19 +684,17 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
   const round = r?.round ?? 1;
 
   return (
-    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", flex: 1, minHeight: 0 }}>
+    <div className={styles.detailRoot} style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", flex: 1, minHeight: 0 }}>
 
       {/* ── HEADER BAR ── */}
-      <div style={{ flexShrink: 0, display: "flex", alignItems: "stretch" }}>
+      <div className={styles.detailHeading}>
         <div style={{ flex: 1, minWidth: 0, padding: "var(--pad-y) var(--pad-x)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 7px", borderRadius: "var(--r-sm)", background: "var(--surface-sunken)", border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.03em" }}>
-                {prefix}-{model.refId}
-              </span>
+              <Badge tone="neutral">{prefix}-{model.refId}</Badge>
               <Badge tone={STATUS_TONE[model.status]} dot>{STATUS_LABEL[model.status]}</Badge>
               {model.priority && <Badge tone={PRIORITY_TONE[model.priority]}>{model.priority[0].toUpperCase() + model.priority.slice(1)} priority</Badge>}
-              {model.zone && <Badge tone={ZONE_TONE[model.zone] ?? "info"}>Zone {model.zone}</Badge>}
+              {model.zone && <Badge tone="neutral">Zone {model.zone}</Badge>}
               {round > 1 && (
                 <span style={{ display: "inline-flex", alignItems: "center", height: 20, padding: "0 7px", borderRadius: "var(--r-sm)", background: "color-mix(in oklab, var(--warning) 10%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 25%, transparent)", fontSize: "var(--font-xs)", fontWeight: 600, color: "var(--warning-on)", letterSpacing: "0.02em" }}>
                   Round {round}
@@ -719,7 +711,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
                   <>
                     {model.subtitle && <span style={{ color: "var(--text-tertiary)" }}>·</span>}
                     <span>linked to</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-xs)", fontWeight: 700, color: "var(--brand)", background: "var(--brand-soft)", padding: "1px 6px", borderRadius: "var(--r-sm)" }}>
+                    <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--font-xs)", fontWeight: 700, color: "var(--brand)", background: "var(--brand-soft)", padding: "1px 6px", borderRadius: "var(--r-sm)" }}>
                       TKT-{model.linkedTicketNum ?? model.linkedTicketId?.slice(0, 8).toUpperCase()}
                     </span>
                   </>
@@ -728,111 +720,79 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
             )}
           </div>
           {model.onDownload && (
-            <button onClick={model.onDownload} disabled={model.downloading} title="Download PDF" className="topbar-btn" style={{ flexShrink: 0, marginTop: 2 }}>
-              {model.downloading ? <Loader2 size={13} style={{ animation: "spin 700ms linear infinite" }} /> : <Download size={13} />}
-            </button>
+            <Button variant="secondary" size="sm" onClick={model.onDownload} loading={model.downloading} aria-label={`Download ${model.kind} PDF`}>
+              <Download size={16} aria-hidden="true" />PDF
+            </Button>
           )}
         </div>
       </div>
 
       {/* ── SCROLLING BODY ── */}
-      <div style={{ overflowY: "auto", flex: 1, minHeight: 0, minWidth: 0 }}>
+      <div style={{ overflowY: "auto", flex: 1, minHeight: 0, minWidth: 0, scrollbarGutter: "stable", overflowAnchor: "none" }}>
 
-        {/* Cancelled callout banner */}
         {model.status === "cancelled" && (
-          <div style={{ margin: "var(--pad-y) var(--pad-x) 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", display: "flex", alignItems: "flex-start", gap: 12 }}>
-            <X size={15} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 1 }} />
-            <div>
-              <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>
-                This ticket was cancelled
-              </p>
-              {model.cancellationReason && (
-                <p style={{ margin: "4px 0 0", fontSize: "var(--font-sm)", color: "var(--text-secondary)", lineHeight: 1.55 }}>
-                  {model.cancellationReason}
-                </p>
-              )}
-            </div>
-          </div>
+          <section aria-label="Cancellation reason" className={styles.ticketNotice}>
+            <X size={18} aria-hidden="true" />
+            <div><h3>This ticket was cancelled</h3>{model.cancellationReason && <p>{model.cancellationReason}</p>}</div>
+          </section>
         )}
-
-        {/* Revisit callout banner — only when status is follow_up */}
         {isFollowUp && (
-          <div style={{ margin: "var(--pad-y) var(--pad-x) 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "color-mix(in oklab, var(--warning) 8%, var(--surface))", border: "1px solid color-mix(in oklab, var(--warning) 30%, transparent)", display: "flex", alignItems: "flex-start", gap: 12 }}>
-            <RefreshCw size={15} style={{ color: "var(--warning-on)", flexShrink: 0, marginTop: 1 }} />
+          <section aria-label="Follow-up instructions" className={`${styles.ticketNotice} ${styles.followUpNotice}`}>
+            <RefreshCw size={18} aria-hidden="true" />
             <div>
-              <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--warning-on)" }}>
-                Revisit needed{(model.followUpCount ?? 0) > 1 ? ` (${model.followUpCount} total)` : ""}
-              </p>
-              {model.followUpNotes && (
-                <p style={{ margin: "4px 0 0", fontSize: "var(--font-sm)", color: "var(--text-secondary)", lineHeight: 1.55 }}>
-                  {model.followUpNotes}
-                </p>
-              )}
+              <h3>Follow-up instructions{(model.followUpCount ?? 0) > 1 ? ` · ${model.followUpCount} revisits` : ""}</h3>
+              {model.followUpNotes && <p>{model.followUpNotes}</p>}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Property strip */}
-        <div style={{ padding: "var(--pad-y) var(--pad-x)", background: "var(--surface-sunken)", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "var(--gap-card)", marginTop: isFollowUp ? 12 : 0 }}>
+        <section aria-label={`${model.kind === "report" ? "Report" : "Ticket"} information`} className={styles.ticketContext}>
+        <div className={styles.properties}>
+          <Prop label="Station">
+            <div style={{ fontSize: "var(--font-base)", fontWeight: 500, color: "var(--text)" }}>{model.stationName ?? model.stationId}</div>
+            {model.stationName && <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--font-sm)", color: "var(--text-muted)", marginTop: 2 }}>{model.stationId}</div>}
+          </Prop>
           <Prop label={`Assignee${(model.assignees?.length ?? 0) > 1 ? "s" : ""}`}>
             <AssigneeCell assignees={model.assignees} assigneeName={model.assigneeName} />
           </Prop>
-          <Prop label="Station">
-            <div style={{ fontSize: "var(--font-base)", fontWeight: 500, color: "var(--text)" }}>{model.stationName ?? model.stationId}</div>
-            {model.stationName && <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)", color: "var(--text-muted)", marginTop: 2 }}>{model.stationId}</div>}
-          </Prop>
+        </div>
+        <div className={styles.dates}>
           <Prop label="Created">
             {model.createdAt ? (
-              <>
-                <div style={{ fontSize: "var(--font-base)", fontWeight: 500, color: "var(--text)" }}>{fmtDate(model.createdAt)}</div>
-                <div style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)", marginTop: 2 }}>{fmtTime(model.createdAt)} · {fmtRelative(model.createdAt)}</div>
-              </>
+              <time dateTime={model.createdAt} title={`${new Date(model.createdAt).toLocaleString()} · ${fmtRelative(model.createdAt)}`}>
+                <span>{fmtDate(model.createdAt)}</span><span>{fmtTime(model.createdAt)}</span>
+              </time>
             ) : <span style={{ fontSize: "var(--font-base)", color: "var(--text-muted)" }}>—</span>}
           </Prop>
           <Prop label="Updated">
             {model.updatedAt ? (
-              <>
-                <div style={{ fontSize: "var(--font-base)", fontWeight: 500, color: "var(--text)" }}>{fmtDate(model.updatedAt)}</div>
-                <div style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)", marginTop: 2 }}>{fmtTime(model.updatedAt)} · {fmtRelative(model.updatedAt)}</div>
-              </>
+              <time dateTime={model.updatedAt} title={`${new Date(model.updatedAt).toLocaleString()} · ${fmtRelative(model.updatedAt)}`}>
+                <span>{fmtDate(model.updatedAt)}</span><span>{fmtTime(model.updatedAt)}</span>
+              </time>
             ) : <span style={{ fontSize: "var(--font-base)", color: "var(--text-muted)" }}>—</span>}
           </Prop>
         </div>
 
-        <div style={{ padding: "var(--pad-y) var(--pad-x)", display: "flex", flexDirection: "column", gap: "var(--gap-section)", minWidth: 0 }}>
+        </section>
+
+        <div className={styles.detailSections}>
 
           {model.description && (
             <Section title="Description">
-              <Prose>{model.description}</Prose>
+              <Prose indented>{model.description}</Prose>
             </Section>
           )}
 
           <AnomalyMetrics data={model.anomalyData} zone={model.zone} />
 
-          {(model.assigneesHistory?.length ?? 0) > 0 && (
-            <Section title="Previously Assigned">
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {model.assigneesHistory!.map((a) => (
-                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", border: "1px solid var(--border)" }}>
-                    <span style={{ opacity: 0.55, display: "flex", flexShrink: 0 }}>
-                      <Avatar name={a.name} size={22} />
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: "var(--font-base)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
-                    <Badge tone="danger">Removed</Badge>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
           {hasFindings && (
-            <Section title={round > 1 ? `Inspection Findings · Round ${round}` : "Inspection Findings"}>
+            <Section title={round > 1 ? `Inspection findings · Round ${round}` : "Inspection findings"}>
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {/* Status row — issue resolved + severity badges */}
                 {hasReport && (r?.issueResolved != null || r?.severity) && (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingBottom: 12 }}>
                     {r?.issueResolved != null && (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)", fontWeight: 600, color: r.issueResolved ? "var(--success)" : "var(--danger)" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--font-sm)", fontFamily: "var(--font-ui)", fontWeight: 600, color: r.issueResolved ? "var(--success)" : "var(--danger)" }}>
                         {r.issueResolved ? <CheckCircle2 size={13} strokeWidth={2.5} /> : <WifiOff size={13} />}
                         Issue {r.issueResolved ? "Resolved" : "Unresolved"}
                       </span>
@@ -843,21 +803,21 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
                 {/* Finding rows — each is a self-contained block with label + content */}
                 {r?.notes && (
-                  <div style={{ padding: "12px 0" }}>
+                  <div style={{ padding: "var(--space-2) 0" }}>
                     <SubHeading>Field Observations</SubHeading>
-                    <Prose>{r.notes}</Prose>
+                    <Prose indented>{r.notes}</Prose>
                   </div>
                 )}
                 {r?.rootCause && (
-                  <div style={{ padding: "12px 0" }}>
+                  <div style={{ padding: "var(--space-2) 0" }}>
                     <SubHeading>Root Cause</SubHeading>
-                    <Prose>{r.rootCause}</Prose>
+                    <Prose indented>{r.rootCause}</Prose>
                   </div>
                 )}
                 {r?.correctiveAction && (
-                  <div style={{ padding: "12px 0", borderBottom: approved ? "1px solid var(--divider)" : "none" }}>
+                  <div style={{ padding: "var(--space-2) 0", borderBottom: approved ? "1px solid var(--divider)" : "none" }}>
                     <SubHeading>Corrective Action &amp; Recommendations</SubHeading>
-                    <Prose>{r.correctiveAction}</Prose>
+                    <Prose indented>{r.correctiveAction}</Prose>
                   </div>
                 )}
 
@@ -873,18 +833,6 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
                       : <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--text-muted)", fontStyle: "italic" }}>No remarks added.</p>}
                   </div>
                 )}
-              </div>
-            </Section>
-          )}
-
-          {/* Previous Rounds — full history, oldest-first, subordinate to the
-              current findings above. Each round collapses to a quiet summary. */}
-          {(model.priorRounds?.length ?? 0) > 0 && (
-            <Section title="Previous Rounds" badge={String(model.priorRounds!.length)}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {model.priorRounds!.map((pr) => (
-                  <PriorRoundCard key={pr.id} round={pr} onOpenPhoto={setLightbox} />
-                ))}
               </div>
             </Section>
           )}
@@ -912,8 +860,41 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
             </Section>
           )}
 
-          <Section title="Activity">
-            <ActivityTimeline model={model} />
+          <Section title="History">
+            <div className={styles.historyGroups}>
+          {(model.priorRounds?.length ?? 0) > 0 && (
+            <section aria-label="Previous rounds">
+              <SubHeading>Previous rounds <Badge tone="neutral">{model.priorRounds!.length}</Badge></SubHeading>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {model.priorRounds!.map((pr) => (
+                  <PriorRoundCard key={pr.id} round={pr} onOpenPhoto={setLightbox} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {(model.assigneesHistory?.length ?? 0) > 0 && (
+            <section aria-label="Previously assigned">
+              <SubHeading>Previously assigned</SubHeading>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {model.assigneesHistory!.map((a) => (
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", border: "1px solid var(--border)" }}>
+                    <span style={{ opacity: 0.55, display: "flex", flexShrink: 0 }}>
+                      <Avatar name={a.name} size={22} />
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: "var(--font-base)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
+                    <Badge tone="danger">Removed</Badge>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+              <section aria-label="Activity">
+                <SubHeading>Activity</SubHeading>
+                <div className={styles.indentedContent}><ActivityTimeline model={model} /></div>
+              </section>
+            </div>
           </Section>
         </div>
       </div>

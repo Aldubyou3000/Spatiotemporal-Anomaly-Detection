@@ -31,3 +31,6 @@ The browser half of the SSE contract. Mounts exactly one `EventSource` to `GET /
 
 ## History integration (2026-10-25)
 Added history resource matching /api/history except immutable /results keys. Ticket and report signals also refresh History list/detail/linked-ticket data and saved reviews. The existing single EventSource remains the only transport.
+
+## Shared session recovery (2026-10-27)
+SSE error recovery calls the existing client `refreshSession()` single-flight promise, sharing cookie rotation with REST 401 recovery and retaining CSRF/timeout/error handling. The backend idle-heartbeat fix prevents periodic unnecessary reconnects. `web/tests/session-refresh.test.cjs` verifies concurrent recovery shares one rotation.

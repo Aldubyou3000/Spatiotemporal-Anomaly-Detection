@@ -126,12 +126,12 @@ test('failed saving leaves navigation pending and the unsaved run intact', async
 test('leaving the shared workspace retains the destructive warning', () => {
   const h = harness();
   try {
-    h.click('http://localhost:3000/ui-library');
+    h.click('http://localhost:3000/login');
     const reminder = find(h.render(), node => node.props?.title === 'Save this run?');
     assert.equal(reminder.props.confirmLabel, 'Discard'); assert.equal(reminder.props.isDangerous, true);
     reminder.props.onConfirm();
     assert.equal(h.resets(), 1); assert.equal(h.state.result, null);
-    assert.deepEqual(h.navigations, ['/ui-library']);
+    assert.deepEqual(h.navigations, ['/login']);
   } finally { h.close(); }
 });
 

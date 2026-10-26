@@ -42,16 +42,13 @@ export function StationChart({ data, neighbors = [], height = 200, anomalyColor,
 
   const axis = "var(--text-secondary)";
   const gridColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
-  const areaColor = `var(--chart-brand, ${isDark ? "#3B82F6" : "#2563EB"})`;
+  const areaColor = isDark ? "#3B82F6" : "#2563EB";
   // Allow parent to pass explicit color; otherwise pick red for high, teal for silent.
-  const modeColor = (anomalyColor as string | undefined) ?? `var(--chart-high, ${isDark ? "#FF6B6B" : "#E53535"})`;
+  const modeColor = (anomalyColor as string | undefined) ?? (isDark ? "#FF6B6B" : "#E53535");
   const dangerColor = modeColor;
   const neighborPalette = isDark ? NEIGHBOR_COLORS_DARK : NEIGHBOR_COLORS_LIGHT;
 
-  const fontXs =
-    typeof window !== "undefined"
-      ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--font-xs") || "12")
-      : 12;
+  const fontXs = "var(--font-xs)";
 
   const hasNeighbors = neighbors.length > 0;
 
@@ -118,16 +115,16 @@ export function StationChart({ data, neighbors = [], height = 200, anomalyColor,
           dataKey="label"
           axisLine={false}
           tickLine={false}
-          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-jetbrains)" }}
+          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-ui)" }}
           interval={tickInterval}
-          minTickGap={24}
+          minTickGap={32}
           tickMargin={8}
         />
         <YAxis
           axisLine={false}
           tickLine={false}
-          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-jetbrains)" }}
-          width={44}
+          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-ui)" }}
+          width={56}
           tickMargin={6}
         />
         <Tooltip
@@ -136,7 +133,7 @@ export function StationChart({ data, neighbors = [], height = 200, anomalyColor,
             border: "1px solid var(--border)",
             borderRadius: 8,
             boxShadow: "var(--shadow-md)",
-            fontFamily: "var(--font-geist)",
+            fontFamily: "var(--font-ui)",
             fontSize: fontXs,
             color: "var(--text)",
           }}
@@ -157,7 +154,7 @@ export function StationChart({ data, neighbors = [], height = 200, anomalyColor,
             height={24}
             iconType="plainline"
             iconSize={14}
-            wrapperStyle={{ fontSize: fontXs, fontFamily: "var(--font-geist)", color: "var(--text-secondary)", paddingBottom: 4 }}
+            wrapperStyle={{ fontSize: fontXs, fontFamily: "var(--font-ui)", color: "var(--text-secondary)", paddingBottom: 4 }}
             formatter={(value) =>
               typeof value === "string" && value.startsWith("n_") ? value.slice(2) : "This station"
             }

@@ -22,7 +22,7 @@ export function NeighborGroupsTab({ neighbors, selectedStationId, onSelectStatio
 
   return <section className={styles.card} aria-label="Nearby stations">
     <h3><Compass size={15} aria-hidden="true" />Nearby stations
-      <InfoTip label="About nearby stations" text={`Geographic neighbors from Zone B. Available comparisons can vary by reading date.${onSelectStation ? " On the map, blue outlines the selected station; dark blue outlines its neighbors." : ""}`} />
+      <InfoTip label="About nearby stations" text={`Geographic neighbors from Zone B. Available comparisons can vary by reading date.${onSelectStation ? " On the map, blue outlines the selected station; muted outlines show its neighbors." : ""}`} />
     </h3>
     {stations.length ? <>
       <div className={styles.stationPicker}>
@@ -31,7 +31,7 @@ export function NeighborGroupsTab({ neighbors, selectedStationId, onSelectStatio
         options={stations.map(id => ({ value: id, label: id }))}
         onChange={id => { setLocalStation(id); onSelectStation?.(id); }} />
       </div>
-      <div className={styles.listHeading}><span>Comparison station</span><span>Distance</span></div>
+      <div className={`table-heading ${styles.listHeading}`}><span>Comparison station</span><span>Distance</span></div>
       {nearby.length ? <ul className={styles.list}>
         {nearby.map(neighbor => <li key={neighbor.neighbor_id}>
           <span>{neighbor.neighbor_id}</span>

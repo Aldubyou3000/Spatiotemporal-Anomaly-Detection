@@ -60,7 +60,7 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 
 ## Resolved
 
-*2026-10-25 local UI Library* — reused production components rather than introducing gallery copies. Validation/CSS generation is centralized in components/design/library.ts; fixture data and API responses in fixtures.ts. Inert data-ui attributes on six shared primitives provide common preview styling without another production component abstraction. No additional production rule-of-3 refactor is required.
+*2026-10-25 local UI Library; retired 2026-10-27* — the gallery reused production components rather than copies. The editor, generated preview CSS, fake API and inert data-ui attributes are now removed. Retained regression data is centralized in `web/tests/fixtures.ts`; no new production rule-of-3 extraction is needed.
 
 *2026-08-31 dead-code pass* — not an extraction but a pruning: removed truly dead imports/exports that were inflating the candidate surface — `reports.py` dead `_signed_url`, `zones.py` dead `require_analyst`, `audit_service` dead `datetime`/`timezone`/`settings`, `events_service` dead `Any`, `zone_a` dead `numpy`, `web` dead `papaparse`/`next-themes`/`react-leaflet` deps, `App` dead `expo-blur`/`expo-print`/`expo-symbols` deps (+ wired `buffer` polyfill + `react-native-url-polyfill`). These are logged here so future lint doesn't re-flag them as candidates.
 
@@ -142,3 +142,83 @@ Data quality help (2026-10-26): QualityReportCard now reuses shared accessible I
 
 
 Station panel refinement (2026-10-26): retained existing panel components and shared HelpTip; no new duplicated behavior or additional abstraction.
+
+
+History filter grouping (2026-10-26): reuses shared Button/search focus attributes and existing native dates. No new shared behavior or table framework.
+
+
+History automatic filters (2026-10-26): simple local debounce updates existing SWR filter state; no extra fetching layer or repeated behavior reaching rule-of-3.
+
+
+Zones ready indicator (2026-10-26): reused shared Badge and existing collapsed navigation dot. Sidebar stays provider-independent for gallery reuse; no new context/storage layer.
+
+
+Resolved (2026-10-26): seven search surfaces now share data-search-field styling in globals.css instead of duplicated inline/module rules. Layout widths remain local; date composites share the same chrome through data-filter-field.
+
+
+Resolved (2026-10-26): repeated local text matching in Data/Review/Tickets/Technicians/UI Library now uses lib/search.ts; domain-specific fields and exact ticket-number rules stay at callers.
+
+
+Data prefix ranking (2026-10-26): reuses lib/search.ts normalization inside the shared DataTable; all Zones/History Data views inherit it without duplicated page logic.
+
+
+Prefix correction (2026-10-26): matchesSearch owns actual prefix filtering for its five client consumers. Removed DataTable-specific ranking and exported normalization; no new abstraction.
+
+
+History prefix search (2026-10-26): one server list_runs query owns matching across every History page; no new shared candidate.
+
+
+Ticket numeric prefix (2026-10-26): domain-specific token stripping delegates to existing matchesSearch; no independent matching logic.
+
+
+Search optimization (2026-10-26): optimized existing shared helper once; no new abstraction or per-consumer duplicate fast paths.
+
+
+Table header refinement (2026-10-26): one shared DataTable stylesheet covers all reading-table views; no new repeated styles or helper.
+
+
+Resolved (2026-10-26): table/list header presentation in Data, History, Technicians, Audit and Nearby stations now uses .table-heading instead of duplicated filled/uppercase styles.
+
+
+History/Data heading parity (2026-10-26): both existing scoped selectors explicitly match shared table-heading typography, preventing native th versus generic div inheritance differences. No new component.
+
+
+History summary density (2026-10-26): adjustments are scoped to the existing detail page and its shared CSS module; no new repeated component behavior.
+
+
+History file readability (2026-10-26): source-file rows are local static metadata; no repeated parsing or new rule-of-3 candidate. Existing FileText icon reused.
+
+
+History detail canvas (2026-10-26): reused dashboard-content and an unpainted width-limiting inner container; no new surface token or shared component.
+
+
+History back navigation (2026-10-26): reused existing Header.leading and topbar-btn from saved results; no new navigation component.
+
+
+History back-button refinement (2026-10-26): two routes reuse one global topbar modifier and existing Header.leading; no extra component.
+
+Typography consolidation (2026-10-26): resolved repeated small-font overrides across login, Sidebar, badges, map/chart labels and the UI Library through existing shared role tokens and --font-ui. Density no longer defines a second font scale. Retained the existing UI Library generator rather than adding a new typography component or styling framework.
+
+Map selection repair (2026-10-26): existing OverviewTab owns section-scoped selection; StationMap owns highlight resets and location-based fitting for all callers. No new repeated implementation or shared-candidate extraction needed.
+
+
+Tickets refinement (2026-10-26): removed the bespoke StatusDropdown and reused Select for both filters, retaining status counts in option labels. Page/detail/dock share one ticket CSS module; no new repeated business behavior or extraction candidate.
+
+
+Ticket report hierarchy (2026-10-26): updated the existing private Section helper once for semantic labels/heading hierarchy and one shared CSS rule for major-section separators. No duplicate section implementations or new extraction candidates.
+
+
+Compact ticket queue (2026-10-26): removed unused queue-only technician markup/CSS; kept shared identity data and existing status/search behavior. No new duplicated behavior or abstraction.
+
+
+Report density (2026-10-27): reused Section/Prop/SubHeading and existing history components; compact notices share local ticket CSS. No third duplicate behavior or new extraction required.
+
+Ticket update stability (2026-10-27): spinner footprint preservation belongs in existing shared Button, covering PDF/assignment/review callers without three local fixes. Ticket-specific animation/scroll/drawer handling remains in its existing components. No new extraction required.
+
+History/realtime performance (2026-10-27): reused SWR preload/provider cache, Next dynamic/loading boundaries and the existing API refresh promise. Heartbeat timeout lives once in the broker for both SSE routers. No new rule-of-3 candidate.
+
+Sidebar logo anchoring (2026-10-27): matched the two existing brand slots locally; no new repeated behavior or shared abstraction.
+
+Sidebar toggle icons (2026-10-27): reused installed Lucide icons and native title hints; no new shared candidate.
+
+Instant result tabs (2026-10-27): removed motion once in existing shared Tabs primitive for both callers; no new abstraction.

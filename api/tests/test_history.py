@@ -36,6 +36,51 @@ def result():
 
 
 class HistoryTests(unittest.TestCase):
+    def test_list_sort_reaches_database_before_pagination(self):
+        from datetime import date
+        requests = []
+        def respond(request):
+            requests.append(request)
+            return httpx.Response(200, json=[], headers={"content-range": "0-0/0"})
+        with httpx.Client(transport=httpx.MockTransport(respond)) as transport:
+            sb = SyncPostgrestClient("http://database.test", http_client=transport)
+            for sort, direction in [("latest", "desc"), ("oldest", "asc")]:
+                history.list_runs(sb, "rain", date(2026, 10, 1), date(2026, 10, 26), 20, 20, sort)
+                params = requests[-1].url.params
+                self.assertEqual(params["order"], f"processed_at.{direction},id.asc")
+                self.assertEqual(params["offset"], "20")
+                self.assertEqual(params["limit"], "20")
+                self.assertNotIn("search_text", params)
+                self.assertEqual(params["or"], '(title.ilike."rain%",and(title.is.null,files->0->>name.ilike."rain%"))')
+                self.assertIn("+08:00", params["processed_at"])
+
+    def test_search_h_uses_displayed_name_prefix_not_hidden_station_text(self):
+        requests = []
+        def respond(request):
+            requests.append(request)
+            return httpx.Response(200, json=[], headers={"content-range": "*/0"})
+        with httpx.Client(transport=httpx.MockTransport(respond)) as transport:
+            sb = SyncPostgrestClient("http://database.test", http_client=transport)
+            history.list_runs(sb, " h ", None, None, 20, 0)
+        params = requests[0].url.params
+        self.assertNotIn("search_text", params)
+        self.assertEqual(params["or"], '(title.ilike."h%",and(title.is.null,files->0->>name.ilike."h%"))')
+
+    def test_list_endpoint_validates_sort_choices(self):
+        from app.routers import history as router_module
+        from app.core.dependencies import require_analyst
+        app = FastAPI()
+        app.include_router(router_module.router)
+        app.dependency_overrides[require_analyst] = lambda: USER.model_dump()
+        with patch.object(router_module, "get_supabase"), patch.object(history, "list_runs", return_value={"items": [], "total": 0}) as listing:
+            client = TestClient(app)
+            self.assertEqual(client.get("/api/history?sort=oldest").status_code, 200)
+            self.assertEqual(listing.call_args.args[-1], "oldest")
+            self.assertEqual(client.get("/api/history").status_code, 200)
+            self.assertEqual(listing.call_args.args[-1], "latest")
+            self.assertEqual(client.get("/api/history?sort=invalid").status_code, 422)
+            self.assertEqual(listing.call_count, 2)
+
     def test_snapshot_preserves_flags_and_fingerprints_each_source(self):
         sb = MagicMock()
         original = result()
@@ -196,10 +241,34 @@ class HistoryTests(unittest.TestCase):
         sb = MagicMock()
         batch = sb.table.return_value.select.return_value.in_.return_value.not_.is_.return_value.order.return_value.range.return_value.execute
         batch.return_value.data = [{"id": "prior-report", "ticket_id": "ticket-1", "is_active": False, "submitted_at": "2026-10-24T00:00:00Z"}]
-        with patch.object(history, "get_run"), patch.object(tickets_service, "list_tickets", return_value={"items": [{"id": "ticket-1"}], "total": 1}):
+        with patch.object(history, "_require_run"), patch.object(tickets_service, "list_tickets", return_value={"items": [{"id": "ticket-1"}], "total": 1}):
             response = history.linked_tickets(sb, RUN, 20, 0)
         self.assertIsNotNone(response["items"][0]["inspection"])
         self.assertEqual(response["items"][0]["inspection"]["id"], "prior-report")
+
+    def test_review_reads_check_only_run_identity_and_keep_pagination(self):
+        requests = []
+        rows = [{"station_id": str(i), "date": "2023-01-01"} for i in range(1000)]
+        def respond(request):
+            requests.append(request)
+            if request.url.path == "/processing_runs":
+                self.assertEqual(request.url.params["select"], "id")
+                return httpx.Response(200, json=[{"id": RUN}])
+            self.assertEqual(request.url.path, "/processing_reviews")
+            return httpx.Response(200, json=rows if request.url.params["offset"] == "0" else [])
+        with httpx.Client(transport=httpx.MockTransport(respond)) as transport:
+            sb = SyncPostgrestClient("http://database.test", http_client=transport)
+            self.assertEqual(len(history.get_reviews(sb, RUN)), 1000)
+        self.assertEqual(len(requests), 3)
+        self.assertEqual(requests[-1].url.params["offset"], "1000")
+
+    def test_missing_run_still_returns_404_for_reviews_and_tickets(self):
+        with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=[]))) as transport:
+            sb = SyncPostgrestClient("http://database.test", http_client=transport)
+            for read in [lambda: history.get_reviews(sb, RUN), lambda: history.linked_tickets(sb, RUN, 20, 0)]:
+                with self.assertRaises(HTTPException) as caught:
+                    read()
+                self.assertEqual(caught.exception.status_code, 404)
 
     def test_processing_is_temporary_and_never_saves_to_history_automatically(self):
         from app.routers import zones

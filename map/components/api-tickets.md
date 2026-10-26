@@ -41,3 +41,6 @@ The most surface-heavy backend domain: full ticket CRUD plus multi-technician as
 
 ## Processing-run links (2026-10-25)
 Migration 0008 adds optional run_id/reading_date. TicketCreate validates the station belongs to the saved run and any supplied date is a flagged reading; dates without a run are rejected. Both selects return the link and list_tickets accepts a run filter for History. Existing tickets are not inferred/backfilled. Web Tickets supports ?ticket=<id> and a source-run link. Migration must precede deployment because selects use the new columns.
+
+
+Stable list pagination (2026-10-26): list_tickets adds id as a secondary order after created_at, allowing the web board to page through tied timestamps deterministically.

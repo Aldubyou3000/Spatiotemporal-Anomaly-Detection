@@ -24,18 +24,17 @@ export function Badge({ tone = "neutral", dot, size = "sm", className, style, ch
   const t = TONES[tone];
   return (
     <span
-      data-ui="badge"
       className={cn(className)}
       style={{
         display: "inline-flex",
         alignItems: "center",
         gap: 4,
-        height: size === "md" ? 22 : 20,
+        minHeight: size === "md" ? "1.75rem" : "1.5rem",
         padding: size === "md" ? "0 8px" : "0 7px",
         borderRadius: "var(--r-sm)",
-        fontSize: size === "md" ? 11.5 : 11,
+        fontSize: "var(--font-xs)",
         fontWeight: 500,
-        letterSpacing: "0.01em",
+        lineHeight: 1.4,
         background: t.bg,
         color: t.color,
         border: "1px solid transparent",

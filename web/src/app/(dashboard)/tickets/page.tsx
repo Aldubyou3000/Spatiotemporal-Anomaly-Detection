@@ -1,22 +1,20 @@
 "use client";
+import { matchesTicketSearch } from "@/lib/search";
 
-import { Suspense, useState, useRef, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTicketList, useTicketDetail, useTicketReport, useTicketAttachments, invalidateTicketLists, invalidateReports } from "@/hooks/useTickets";
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
-  Clock,
-  Flag,
   MapPin,
   Search,
   Ticket,
-  User,
   XCircle,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import styles from "@/components/tickets/Tickets.module.css";
 import { Header } from "@/components/dashboard/Header";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -78,8 +76,8 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
   const [approvalError, setApprovalError]   = useState("");
   // Follow-up is confirmed via dialog; its args are staged here until confirmed.
   const [pendingFollowUp, setPendingFollowUp] = useState<{ notes: string; reassign: { addIds: string[]; removeIds: string[] } } | null>(null);
-  const { report, priorRounds, error: reportError, refresh: refreshReport } = useTicketReport(ticket.id);
-  const { attachments, error: attachmentsError, refresh: refreshAttachments } = useTicketAttachments(ticket.id);
+  const { report, priorRounds, isLoading: reportLoading, error: reportError, refresh: refreshReport } = useTicketReport(ticket.id);
+  const { attachments, isLoading: attachmentsLoading, error: attachmentsError, refresh: refreshAttachments } = useTicketAttachments(ticket.id);
 
   async function handleDownloadPdf() {
     setDownloading(true);
@@ -301,7 +299,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
             <button type="button" onClick={() => { setCancelOpen(false); setCancelReason(""); setCancelPreset(null); setCancelError(""); }} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "transparent", fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-muted)", cursor: "pointer", fontFamily: "inherit" }}>
               Back
             </button>
-            <button type="button" onClick={() => { if (cancelFinal) setConfirmCancel(true); }} disabled={!cancelFinal || cancelling} style={{ height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--danger)", fontSize: "var(--font-xs)", fontWeight: 600, color: "#fff", cursor: cancelFinal ? "pointer" : "not-allowed", fontFamily: "inherit", opacity: cancelFinal ? 1 : 0.5 }}>
+            <button type="button" onClick={() => { if (cancelFinal) setConfirmCancel(true); }} disabled={!cancelFinal || cancelling} style={{ minWidth: "10rem", height: 28, padding: "0 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--danger)", fontSize: "var(--font-xs)", fontWeight: 600, color: "#fff", cursor: cancelFinal ? "pointer" : "not-allowed", fontFamily: "inherit", opacity: cancelFinal ? 1 : 0.5 }}>
               {cancelling ? "Cancelling…" : "Confirm Cancel"}
             </button>
           </div>
@@ -314,10 +312,12 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
     <TicketActionDock ticket={ticket} onUpdated={(t) => { updateCache(t); onUpdated(t); }} reviewSlot={reviewSlot} cancelSlot={cancelSlot} />
   ) : undefined;
 
+  if (reportLoading || attachmentsLoading) return <DetailSkeleton />;
+
   return (
     <div
       key={ticket.id}
-      style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 0, background: "var(--surface)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}
+      style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 0, background: "var(--surface)", borderRadius: "var(--r-xl)" }}
     >
       {subResourceError && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", background: "color-mix(in oklab, var(--danger) 8%, var(--surface))", borderBottom: "1px solid color-mix(in oklab, var(--danger) 18%, transparent)", fontSize: "var(--font-xs)", color: "var(--danger)" }}>
@@ -333,7 +333,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
         </div>
       )}
       {ticket.run_id && <div style={{ padding: "8px var(--pad-x)", fontSize: "var(--font-sm)" }}>
-        <Link href={`/history/${ticket.run_id}`} style={{ color: "var(--brand)" }}>View source run →</Link>
+        <Link href={`/history/${ticket.run_id}`} style={{ color: "var(--brand-text)" }}>View source run →</Link>
       </div>}
       <TicketDetailBody model={model} footer={footer} />
       {confirmApprove && (
@@ -370,157 +370,22 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
   );
 }
 
-// ─── Status Dropdown ──────────────────────────────────────────────────────────
-
-function StatusDropdown({
-  value,
-  onChange,
-  statusCounts,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  statusCounts: Record<string, number>;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
-
-  const options = [{ key: "", label: "All Tickets" }, ...ALL_STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s] }))];
-  const selected = options.find((o) => o.key === value) ?? options[0];
-  const selectedCount = statusCounts[value || "all"] ?? 0;
-
-  return (
-    <div ref={ref} style={{ position: "relative", padding: "8px 10px", borderBottom: "1px solid var(--divider)" }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          width: "100%", height: 32, padding: "0 10px",
-          borderRadius: "var(--r-md)",
-          border: "1px solid var(--border)",
-          background: open ? "var(--surface)" : "var(--surface-sunken)",
-          color: "var(--text)",
-          fontSize: "var(--font-xs)", fontWeight: 500,
-          cursor: "pointer", fontFamily: "inherit",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-          transition: "border-color 0.12s, background 0.12s",
-        }}
-        onMouseEnter={(e) => { if (!open) e.currentTarget.style.borderColor = "var(--brand)"; }}
-        onMouseLeave={(e) => { if (!open) e.currentTarget.style.borderColor = "var(--border)"; }}
-      >
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}>Status:</span>
-          <span style={{ color: "var(--text)", fontWeight: 600 }}>{selected.label}</span>
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          <span style={{
-                  fontSize: "var(--font-xs)", fontVariantNumeric: "tabular-nums", fontWeight: 500,
-            padding: "1px 6px", borderRadius: "var(--r-full)",
-            background: "var(--brand-soft)", color: "var(--brand)",
-          }}>
-            {selectedCount}
-          </span>
-          <ChevronDown size={12} style={{ color: "var(--text-muted)", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-        </span>
-      </button>
-
-      {open && (
-        <div
-          className="animate-scale-in"
-          style={{
-            position: "absolute", top: "calc(100% - 2px)", left: 10, right: 10,
-            background: "var(--surface)", border: "1px solid var(--border)",
-            borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-lg)",
-            zIndex: 50, padding: "4px", transformOrigin: "top center",
-            overflow: "hidden",
-          }}
-        >
-          {options.map(({ key, label }) => {
-            const active = value === key;
-            const count = statusCounts[key || "all"] ?? 0;
-            return (
-              <button
-                key={key}
-                onClick={() => { onChange(key); setOpen(false); }}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  width: "100%", height: 30, padding: "0 8px",
-                  borderRadius: "var(--r-md)", border: 0,
-                  background: active ? "var(--brand-soft)" : "transparent",
-                  color: active ? "var(--on-brand-soft)" : "var(--text-secondary)",
-                  fontSize: "var(--font-xs)", fontWeight: active ? 600 : 400,
-                  cursor: "pointer", textAlign: "left", fontFamily: "inherit",
-                  transition: "background 0.1s",
-                }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--surface-sunken)"; }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
-              >
-                <span>{label}</span>
-                <span style={{
-            fontSize: "var(--font-xs)", fontVariantNumeric: "tabular-nums", fontWeight: 500,
-                  minWidth: 18, textAlign: "center", padding: "1px 5px",
-                  borderRadius: "var(--r-full)",
-                  background: active ? "color-mix(in oklab, var(--brand) 18%, transparent)" : "var(--surface-sunken)",
-                  color: active ? "var(--brand)" : "var(--text-muted)",
-                }}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Ticket Row ───────────────────────────────────────────────────────────────
 
 function TicketRow({ ticket, selected, onClick }: { ticket: TicketListItem; selected: boolean; onClick: () => void }) {
   const ticketNum = ticket.ticket_number;
-  const techCount = ticket.technicians?.length ?? 0;
-  const primaryTech = ticket.technician?.full_name ?? (techCount > 0 ? ticket.technicians[0].full_name : null);
 
   return (
-    <button onClick={onClick} className="list-row" data-selected={selected ? "true" : undefined} style={{ padding: "11px 16px 11px 19px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-        <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-muted)", letterSpacing: "0.04em", flexShrink: 0 }}>
-          TKT-{ticketNum}
-        </span>
-        {/* Status is the one badge that always carries color — it's the primary signal */}
+    <button type="button" onClick={onClick} className={styles.ticketRow} aria-pressed={selected} data-selected={selected ? "true" : undefined}>
+      <span className={styles.rowHeading}>
+        <span className={styles.ticketId}>TKT-{ticketNum}</span>
         <Badge tone={STATUS_TONE[ticket.status]} dot>{STATUS_LABEL[ticket.status]}</Badge>
-        {/* Priority only earns a colored chip when high; low/medium are quiet text */}
-        {ticket.priority === "high" && <Badge tone="danger">High</Badge>}
-      </div>
-      <div style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)", lineHeight: 1.35, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {ticket.title}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-          <span style={{ color: "var(--text-tertiary)" }}><MapPin size={10} /></span>
-          <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", flexShrink: 0 }}>{ticket.station_id}</span>
-          {primaryTech && (
-            <>
-              <span style={{ color: "var(--divider)", flexShrink: 0 }}>·</span>
-              <span style={{ color: "var(--text-tertiary)" }}><User size={10} /></span>
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {primaryTech}{techCount > 1 ? ` +${techCount - 1}` : ""}
-              </span>
-            </>
-          )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          <span style={{ color: "var(--text-tertiary)" }}><Clock size={10} /></span>
-          <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>{fmtRelative(ticket.updated_at)}</span>
-        </div>
-      </div>
+        <time dateTime={ticket.updated_at} title={new Date(ticket.updated_at).toLocaleString()}>{fmtRelative(ticket.updated_at)}</time>
+      </span>
+      <span className={styles.rowTitle} title={ticket.title}>{ticket.title}</span>
+      <span className={styles.rowFooter}>
+        <span className={styles.station} title={ticket.station_id}><MapPin size={14} aria-hidden="true" /><span>{ticket.station_id}</span></span>
+      </span>
     </button>
   );
 }
@@ -558,19 +423,7 @@ function TicketsWorkspace() {
     setSelectedId((prev) => (prev === id ? null : id));
   }
 
-  const matchedItems = query.trim()
-    ? items.filter((t) => {
-        const raw = query.trim().toLowerCase();
-        // If the user typed a TKT-N pattern, match ticket_number exactly
-        const tktMatch = raw.match(/^tkt-?(\d+)$/i);
-        if (tktMatch) return t.ticket_number === Number(tktMatch[1]);
-        // Plain number alone → exact ticket_number match
-        if (/^\d+$/.test(raw)) return t.ticket_number === Number(raw);
-        // Otherwise free-text across title, station, technician names
-        const techNames = (t.technicians ?? []).map((a) => a.full_name).join(" ");
-        return `${t.title} ${t.station_id} ${techNames}`.toLowerCase().includes(raw);
-      })
-    : items;
+  const matchedItems = items.filter(ticket => matchesTicketSearch(ticket, query));
 
   // Highest-priority statuses float to the top (Pending Review, then Follow-up,
   // then active work), each group newest-first. See byImportance in lib/ticketStatus.
@@ -589,56 +442,35 @@ function TicketsWorkspace() {
 
   if (authLoading) return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
-      <p style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)" }}>Loading session…</p>
+      <p style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)", fontFamily: "var(--font-ui)" }}>Loading session…</p>
     </div>
   );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
       <Header title="Tickets" />
-      <div className="dashboard-content" style={{ display: "grid", gridTemplateColumns: "clamp(260px, 30%, 420px) minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr)", alignItems: "stretch", gap: "var(--gap-card)", flex: 1, minHeight: 0, padding: "var(--gap-card)", overflow: "hidden" }}>
+      <div className={`dashboard-content ${styles.workspace}`}>
 
         {/* Left list */}
         <div role="region" aria-label="Ticket list" style={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0, minWidth: 0, background: "var(--surface)", borderRadius: "var(--r-2xl)" }}>
-          {/* Search */}
-          <div style={{ padding: "12px 12px 10px", borderBottom: "1px solid var(--divider)" }}>
-            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-              <Search size={13} style={{ position: "absolute", left: 10, color: "var(--text-muted)", pointerEvents: "none" }} />
-              <input data-search-field aria-label="Search tickets"
-                placeholder="Search by TKT-#, title, station…"
-                value={query} onChange={(e) => setQuery(e.target.value)}
-                style={{ width: "100%", height: 32, paddingLeft: 30, paddingRight: 12, borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "var(--surface-sunken)", color: "var(--text)", fontSize: "var(--font-sm)", outline: "none", fontFamily: "inherit" }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--brand)"; e.currentTarget.style.background = "var(--surface)"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--surface-sunken)"; }}
-              />
+          <div className={styles.queueToolbar}>
+            <div className={styles.queueHeading}>
+              <h2>Tickets</h2><span>{filteredItems.length}</span>
+              <button type="button" className={styles.clearFilters} style={{ visibility: filterStatus || filterPriority || query ? "visible" : "hidden" }} onClick={() => { setFilterStatus(""); setFilterPriority(""); setFilterStation(""); setQuery(""); }}>Clear filters</button>
+            </div>
+            <div data-search-field style={{ width: "100%", maxWidth: "100%" }}>
+              <Search size={16} aria-hidden="true" />
+              <input aria-label="Search tickets" placeholder="Search tickets or stations…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+            <div className={styles.queueFilters}>
+              <Select value={filterStatus} onChange={setFilterStatus} width="100%" ariaLabel="Filter by status"
+                options={[{value:"",label:`All statuses (${statusCounts.all})`}, ...ALL_STATUSES.map(status => ({value:status,label:`${STATUS_LABEL[status]} (${statusCounts[status] ?? 0})`}))]} />
+              <Select value={filterPriority} onChange={setFilterPriority} width="100%" ariaLabel="Filter by priority"
+                options={[{value:"",label:"All priorities"}, ...ALL_PRIORITIES.map(priority => ({value:priority,label:priority.charAt(0).toUpperCase()+priority.slice(1)}))]} />
             </div>
           </div>
-
-          {/* Filters */}
-          <div style={{ padding: "10px 10px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
-            <Select
-              value={filterPriority}
-              onChange={setFilterPriority}
-              width="100%"
-              ariaLabel="Filter by priority"
-              options={[{ value: "", label: "All priorities" }, ...ALL_PRIORITIES.map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))]}
-            />
-            {(filterStatus || filterPriority || query) && (
-              <button onClick={() => { setFilterStatus(""); setFilterPriority(""); setFilterStation(""); setQuery(""); }} style={{ width: "100%", height: 30, padding: "0 10px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)", fontSize: "var(--font-xs)", fontWeight: 500, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                Reset filters
-              </button>
-            )}
-          </div>
-
-          {/* Status dropdown */}
-          <StatusDropdown
-            value={filterStatus}
-            onChange={setFilterStatus}
-            statusCounts={statusCounts}
-          />
-
-          <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
-            {loading ? (
+          <div className={styles.queueList}>
+            {loading && items.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => <TicketRowSkeleton key={i} />)
             ) : error ? (
               <div style={{ padding: 24, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
@@ -665,23 +497,10 @@ function TicketsWorkspace() {
                 return (
                   <div key={ticket.id}>
                     {showReviewHeader && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px 6px", fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-secondary)" }}>
-                        <Flag size={11} fill="var(--danger)" color="var(--danger)" strokeWidth={2} />
-                        Needs Review
-                        <span style={{
-                          fontSize: "var(--font-xs)", fontWeight: 600, fontVariantNumeric: "tabular-nums",
-                          color: "#fff", background: "var(--danger)",
-                          padding: "1px 6px", borderRadius: "var(--r-full)",
-                          minWidth: 17, textAlign: "center", letterSpacing: 0,
-                        }}>
-                          {reviewCount}
-                        </span>
-                      </div>
+                      <div className={styles.groupHeading}>Needs review <span>{reviewCount}</span></div>
                     )}
                     {showSplit && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 16px 6px", fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginTop: 2 }}>
-                        All Tickets
-                      </div>
+                      <div className={styles.groupHeading}>Other tickets</div>
                     )}
                     <TicketRow ticket={ticket} selected={ticket.id === selectedId} onClick={() => openTicket(ticket.id)} />
                   </div>
@@ -694,12 +513,12 @@ function TicketsWorkspace() {
 
         {/* Right detail */}
         <div role="region" aria-label="Ticket details" style={{ overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: "var(--surface)", borderRadius: "var(--r-2xl)" }}>
-          {detailLoading ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}>
+          {detailLoading && !detailTicket ? (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)", borderRadius: "var(--r-xl)" }}>
               <DetailSkeleton />
             </div>
           ) : detailTicket ? (
-            <DetailPanel ticket={detailTicket} onUpdated={updateCache} updateCache={updateCache} />
+            <DetailPanel key={detailTicket.id} ticket={detailTicket} onUpdated={updateCache} updateCache={updateCache} />
           ) : (
             <div style={{ flex: 1, display: "grid", placeItems: "center", background: "var(--surface)", borderRadius: "var(--r-xl)" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center", padding: "0 32px" }}>

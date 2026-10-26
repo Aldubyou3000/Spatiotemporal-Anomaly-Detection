@@ -48,7 +48,7 @@ grep "^## \[" map/log.md | tail -5
 
 ## Navigation rules (for future sessions)
 
-Local design playground: [UI Library guide](../docs/UI_LIBRARY.md), [implementation record](../.scratch/ui-library/implementation.md). Open `/ui-library` during web development; the earlier [decision map](../.scratch/ui-library/map.md) records the local-only scope.
+The development-only UI Library and its preview routes were removed on 2026-10-27. Shared components still used by dashboard routes remain; regression fixtures live under `web/tests/`.
 
 - **Before editing a component**: read its page here first.
 - **After editing**: update that page (and any pages it now affects), re-check rule-of-3, update orphans if references changed, append a `log.md` entry.

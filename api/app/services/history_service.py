@@ -9,11 +9,12 @@ from pathlib import Path
 from fastapi import HTTPException
 from ..core.dependencies import get_supabase
 from ..schemas.auth import UserProfile
-from ..schemas.history import ReviewChange, SaveRunRequest, SourceFile
+from ..schemas.history import HistoryRun, ReviewChange, SaveRunRequest, SourceFile
 from ..schemas.zones import ProcessResult
 from .audit_service import audit
 
 logger = logging.getLogger("history")
+HISTORY_COLUMNS = ",".join(HistoryRun.model_fields)
 
 
 @lru_cache(maxsize=1)
@@ -62,25 +63,27 @@ def try_save_run(run_id: str, result: ProcessResult, files: list[SourceFile], us
             "history_error": "Couldn't save to History. Please try again."})
 
 
-def list_runs(sb, search: str, start: date | None, end: date | None, limit: int, offset: int) -> dict:
+def list_runs(sb, search: str, start: date | None, end: date | None, limit: int, offset: int, sort: str = "latest") -> dict:
     if start and end and start > end:
         raise HTTPException(422, "The end date must be on or after the start date.")
-    query = sb.table("processing_history").select("*", count="exact")
+    query = sb.table("processing_history").select(HISTORY_COLUMNS, count="exact")
     if search.strip():
         term = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        query = query.ilike("search_text", f"%{term}%")
+        pattern = json.dumps(f"{term}%")
+        # Match the displayed title; only untitled legacy runs display a filename.
+        query = query.or_(f"title.ilike.{pattern},and(title.is.null,files->0->>name.ilike.{pattern})")
     # The dashboard labels these as processing dates in Asia/Manila (UTC+8).
     local = timezone(timedelta(hours=8))
     if start:
         query = query.gte("processed_at", datetime.combine(start, time.min, local).isoformat())
     if end:
         query = query.lt("processed_at", datetime.combine(end + timedelta(days=1), time.min, local).isoformat())
-    response = query.order("processed_at", desc=True).order("id").range(offset, offset + limit - 1).execute()
+    response = query.order("processed_at", desc=sort != "oldest").order("id").range(offset, offset + limit - 1).execute()
     return {"items": response.data or [], "total": response.count or 0}
 
 
 def get_run(sb, run_id: str) -> dict:
-    rows = sb.table("processing_history").select("*").eq("id", run_id).limit(1).execute().data
+    rows = sb.table("processing_history").select(HISTORY_COLUMNS).eq("id", run_id).limit(1).execute().data
     if not rows:
         raise HTTPException(404, "Saved run not found.")
     return rows[0]
@@ -93,8 +96,13 @@ def get_result(sb, run_id: str) -> ProcessResult:
     return ProcessResult.model_validate(rows[0]["result"])
 
 
+def _require_run(sb, run_id: str) -> None:
+    if not sb.table("processing_runs").select("id").eq("id", run_id).limit(1).execute().data:
+        raise HTTPException(404, "Saved run not found.")
+
+
 def get_reviews(sb, run_id: str) -> list[dict]:
-    get_run(sb, run_id)
+    _require_run(sb, run_id)
     # Supabase caps individual queries at 1,000; a multi-year run may exceed that.
     rows = []
     while True:
@@ -140,7 +148,7 @@ def save_review(sb, run_id: str, change: ReviewChange, user: UserProfile) -> dic
 
 def linked_tickets(sb, run_id: str, limit: int, offset: int) -> dict:
     from .tickets_service import list_tickets
-    get_run(sb, run_id)
+    _require_run(sb, run_id)
     result = list_tickets(sb, run_id=run_id, limit=limit, offset=offset)
     ids = [ticket["id"] for ticket in result["items"]]
     latest_reports = {}

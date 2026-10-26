@@ -2,10 +2,10 @@ import { apiClient } from "@/lib/api/client";
 import type { HistoryRun, HistoryTicket, SavedReview } from "@/types/history";
 import type { ProcessResult } from "@/types/zones";
 
-export interface HistoryFilters { search: string; start: string; end: string; offset: number }
+export interface HistoryFilters { search: string; start: string; end: string; offset: number; sort: "latest" | "oldest" }
 export const historyApi = {
   list: (filters: HistoryFilters) => apiClient.get<{ items: HistoryRun[]; total: number }>("/api/history", {
-    params: { search: filters.search || undefined, start: filters.start || undefined, end: filters.end || undefined, offset: filters.offset, limit: 20 },
+    params: { search: filters.search || undefined, start: filters.start || undefined, end: filters.end || undefined, offset: filters.offset, limit: 20, sort: filters.sort },
   }),
   get: (id: string) => apiClient.get<HistoryRun>(`/api/history/${id}`),
   results: (id: string) => apiClient.get<ProcessResult>(`/api/history/${id}/results`),

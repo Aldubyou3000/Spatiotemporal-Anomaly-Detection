@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  ChevronLeft, ChevronRight, Clock3, FileCheck2, Inbox, Layers2, UserRound,
+  Clock3, FileCheck2, Inbox, Layers2, PanelLeftClose, PanelLeftOpen, UserRound,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
+import { Badge } from "@/components/ui/Badge";
 import { SentinelMark } from "@/components/ui/SentinelMark";
 
 
@@ -16,6 +17,7 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
   count?: number;
+  ready?: boolean;
 }
 
 // Portalled tooltip — escapes overflow:hidden and any stacking context
@@ -44,13 +46,14 @@ function SideTooltip({ label, anchor }: { label: string; anchor: DOMRect | null 
   );
 }
 
-function NavTooltip({ label, children }: { label: string; children: React.ReactNode }) {
+function NavTooltip({ label, children, style }: { label: string; children: React.ReactNode; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
 
   return (
     <div
       ref={ref}
+      style={style}
       onMouseEnter={() => ref.current && setAnchor(ref.current.getBoundingClientRect())}
       onMouseLeave={() => setAnchor(null)}
     >
@@ -60,25 +63,25 @@ function NavTooltip({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: string } = {}) {
+export function Sidebar({ resultsReady = false }: { resultsReady?: boolean } = {}) {
   const pathname = usePathname();
   const { pending } = useReports();
   const [collapsed, setCollapsed] = useState(false);
 
   // Sync from localStorage after mount only — avoids SSR/client hydration mismatch
   useEffect(() => {
-    const stored = localStorage.getItem(storageKey);
+    const stored = localStorage.getItem("sidebar-collapsed");
     if (stored === "true") setCollapsed(true);
-  }, [storageKey]);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(storageKey, String(collapsed));
-  }, [collapsed, storageKey]);
+    localStorage.setItem("sidebar-collapsed", String(collapsed));
+  }, [collapsed]);
 
   const pendingCount = pending.length || undefined;
 
   const nav: NavItem[] = [
-    { href: "/zones",       label: "Zones",       icon: Layers2 },
+    { href: "/zones",       label: "Zones",       icon: Layers2, ready: resultsReady },
     { href: "/history",     label: "History",     icon: Clock3 },
     { href: "/tickets",     label: "Tickets",     icon: Inbox, count: pendingCount },
     { href: "/technicians", label: "Technicians", icon: UserRound },
@@ -96,7 +99,7 @@ export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: str
       background: active ? "var(--brand-soft)" : "transparent",
       border: 0, cursor: "pointer",
       transition: "background 0.12s ease",
-      color: active ? "var(--brand)" : "var(--text-muted)",
+      color: active ? "var(--on-brand-soft)" : "var(--text)",
       flexShrink: 0,
     };
   }
@@ -118,14 +121,14 @@ export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: str
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: W, flexShrink: 0, height: "100%", padding: "12px 0", gap: 2 }}>
 
           {/* Brand icon — CSS geometric mark (white bg blue shapes) */}
-          <NavTooltip label="AWS Sentinel — Anomaly Detector">
+          <NavTooltip label="AWS Sentinel — Anomaly Detector" style={{ alignSelf: "flex-start", marginLeft: 12 }}>
             <div style={{
-              width: 40, height: 40, flexShrink: 0,
+              width: 44, height: 40, flexShrink: 0,
               display: "grid", placeItems: "center",
-              color: "var(--brand)",
+              color: "var(--brand-text)",
               marginBottom: 10,
             }}>
-              <SentinelMark size={36} />
+              <SentinelMark size={44} />
             </div>
           </NavTooltip>
 
@@ -134,11 +137,12 @@ export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: str
             <button
               onClick={() => setCollapsed(false)}
               aria-label="Expand sidebar"
+              title="Expand sidebar"
               style={iconBtn()}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
             >
-              <ChevronRight size={18} strokeWidth={2.5} />
+              <PanelLeftOpen size={18} strokeWidth={2.5} />
             </button>
           </NavTooltip>
 
@@ -150,27 +154,27 @@ export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: str
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return (
-              <NavTooltip key={item.href} label={item.count != null ? `${item.label} (${item.count})` : item.label}>
+              <NavTooltip key={item.href} label={item.count != null ? `${item.label} (${item.count})` : item.ready ? "Zones — processed results available" : item.label}>
                 <div style={{ position: "relative" }}>
                   <Link
                     href={item.href}
-                    aria-label={item.label}
+                    aria-label={item.ready ? "Zones — processed results available" : item.label}
                     aria-current={active ? "page" : undefined}
                     style={{
                       ...iconBtn(active),
                       textDecoration: "none",
-                      color: active ? "var(--brand)" : "var(--text-muted)",
+                      color: active ? "var(--on-brand-soft)" : "var(--text)",
                     }}
                     onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
-                    onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; } }}
+                    onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
                   >
-                    <Icon size={20} strokeWidth={2.5} />
+                    <Icon size={18} strokeWidth={2.5} />
                   </Link>
-                  {item.count != null && (
-                    <span style={{
+                  {(item.count != null || item.ready) && (
+                    <span aria-hidden="true" style={{
                       position: "absolute", top: 3, right: 3,
                       width: 8, height: 8, borderRadius: 999,
-                      background: "var(--danger)",
+                      background: item.ready ? "var(--success)" : "var(--danger)",
                       pointerEvents: "none",
                     }} />
                   )}
@@ -185,61 +189,43 @@ export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: str
         /* ── Expanded layout ── */
         <div style={{ display: "flex", flexDirection: "column", width: W, flexShrink: 0, height: "100%", padding: "12px 12px", gap: 4 }}>
 
-          {/* Brand row — geometric mark + wordmark (logo.html geometry, Geist type) */}
+          {/* Brand row — geometric mark + wordmark (logo.html geometry, Roboto type) */}
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
-            height: 40, flexShrink: 0, padding: "0 2px",
+            height: 40, flexShrink: 0,
             marginBottom: 8,
             minWidth: 0,
           }}>
             <div style={{
-              flexShrink: 0,
+              width: 44, height: 40, flexShrink: 0,
               display: "grid", placeItems: "center",
-              color: "var(--brand)",
+              color: "var(--brand-text)",
             }}>
-              <SentinelMark size={36} />
+              <SentinelMark size={44} />
             </div>
             <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", gap: 3, lineHeight: 1 }}>
               <div style={{
-                fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
-                fontSize: "15.5px", fontWeight: 800, letterSpacing: "-0.02em",
+                fontFamily: "var(--font-ui)",
+                fontSize: "var(--font-base)", fontWeight: 700, letterSpacing: "normal",
                 color: "var(--text)", textTransform: "none",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                lineHeight: 1,
-                fontFeatureSettings: '"ss01", "cv01"',
+                lineHeight: 1.25,
+
               }}>
                 AWS Sentinel
-              </div>
-              <div style={{
-                fontFamily: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
-                fontSize: "9px", fontWeight: 600, letterSpacing: "0.13em",
-                color: "var(--text-muted)", textTransform: "uppercase",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                marginRight: "-0.13em",
-                lineHeight: 1,
-              }}>
-                ANOMALY DETECTOR
               </div>
             </div>
             <button
               onClick={() => setCollapsed(true)}
               aria-label="Collapse sidebar"
+              title="Collapse sidebar"
               style={{ ...iconBtn(), width: 28, height: 28, flexShrink: 0, marginLeft: 2 }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
             >
-              <ChevronLeft size={18} strokeWidth={2.5} />
+              <PanelLeftClose size={18} strokeWidth={2.5} />
             </button>
           </div>
-
-          {/* Section label */}
-          <span style={{
-            fontSize: "var(--font-xs)", fontWeight: 600, letterSpacing: "0.06em",
-            color: "var(--text-tertiary)", textTransform: "uppercase",
-            padding: "4px 10px 6px",
-          }}>
-            Workspace
-          </span>
 
           {/* Nav items */}
           <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -250,24 +236,26 @@ export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: str
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-label={item.ready ? "Zones — processed results available" : undefined}
                   aria-current={active ? "page" : undefined}
                   style={{
                     display: "flex", alignItems: "center", gap: 10,
                     padding: "8px 10px", height: 38,
                     borderRadius: "var(--r-md)",
-                    fontSize: "var(--font-base)", fontWeight: 500,
+                    fontSize: "var(--font-xs)", fontWeight: 500,
                     textDecoration: "none",
                     transition: "background 0.12s ease, color 0.12s ease",
                     background: active ? "var(--brand-soft)" : "transparent",
-                    color: active ? "var(--on-brand-soft)" : "var(--text-secondary)",
+                    color: active ? "var(--on-brand-soft)" : "var(--text)",
                   }}
                   onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
-                  onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; } }}
+                  onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
                 >
-                  <span style={{ color: active ? "var(--brand)" : "var(--text-muted)", flexShrink: 0, display: "flex" }}>
-                    <Icon size={20} strokeWidth={2.5} />
+                  <span style={{ color: "inherit", flexShrink: 0, display: "flex" }}>
+                    <Icon size={18} strokeWidth={2.5} />
                   </span>
                   <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.ready && <Badge tone="success" dot>Ready</Badge>}
                   {item.count != null && (
                     <span style={{
                       fontSize: "var(--font-xs)", fontWeight: 500,

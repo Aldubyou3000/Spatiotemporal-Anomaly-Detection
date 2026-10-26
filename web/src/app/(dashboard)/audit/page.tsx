@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 import {
   AlertTriangle,
@@ -224,7 +224,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
             </span>
           )}
           {entry.actor_role && (
-            <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 6px", borderRadius: "4px", background: "var(--surface-sunken)", color: "var(--text-muted)", textTransform: "uppercase" }}>
+            <span style={{ fontSize: "var(--font-xs)", fontWeight: 600, padding: "2px 6px", borderRadius: "4px", background: "var(--surface-sunken)", color: "var(--text-muted)", textTransform: "uppercase" }}>
               {entry.actor_role}
             </span>
           )}
@@ -237,10 +237,10 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
 
         {/* Timestamp */}
         <div style={{ textAlign: "right" }}>
-          <p style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text)", margin: 0, fontVariantNumeric: "tabular-nums" }}>
+          <p style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-ui)", color: "var(--text)", margin: 0, fontVariantNumeric: "tabular-nums" }}>
             {time}
           </p>
-          <p style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-muted)", margin: 0, fontVariantNumeric: "tabular-nums" }}>
+          <p style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-ui)", color: "var(--text-muted)", margin: 0, fontVariantNumeric: "tabular-nums" }}>
             {date}
           </p>
         </div>
@@ -285,10 +285,10 @@ export default function AuditPage() {
   const { entries, total, isLoading: loading, error: fetchError, refresh } = useAuditLogs(filters, PAGE_SIZE, offset);
   const error = fetchError?.message ?? null;
 
-  function applyFilters(event: string, outcome: string, ip: string) {
+  function applyFilters(event: string, outcome: string, search: string) {
     const f: AuditFilters = {};
     if (event) f.event = event;
-    if (ip) f.ip = ip;
+    if (search.trim()) f.search = search.trim();
     if (outcome === "true") f.success = true;
     if (outcome === "false") f.success = false;
     setFilters(f);
@@ -297,21 +297,16 @@ export default function AuditPage() {
 
   function handleEventChange(val: string) {
     setEventFilter(val);
-    applyFilters(val, outcomeFilter, query);
   }
 
   function handleOutcomeChange(val: string) {
     setOutcomeFilter(val);
-    applyFilters(eventFilter, val, query);
   }
 
-  function handleQueryBlur() {
-    applyFilters(eventFilter, outcomeFilter, query);
-  }
-
-  function handleQueryKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") applyFilters(eventFilter, outcomeFilter, query);
-  }
+  useEffect(() => {
+    const timer = setTimeout(() => applyFilters(eventFilter, outcomeFilter, query), 300);
+    return () => clearTimeout(timer);
+  }, [query, eventFilter, outcomeFilter]);
 
   function handleReset() {
     setQuery("");
@@ -391,30 +386,14 @@ export default function AuditPage() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               {/* Search */}
-              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <Search size={12} style={{ position: "absolute", left: 8, color: "var(--text-muted)", pointerEvents: "none" }} />
-                <input data-search-field aria-label="Search audit log"
+              <div data-search-field style={{ width: "180px", maxWidth: "100%" }}>
+                <Search size={16} aria-hidden="true" />
+                <input aria-label="Search audit log"
                   type="text"
-                  placeholder="Search…"
+                  placeholder="Search name, email or IP…"
+                  maxLength={200}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  onBlur={handleQueryBlur}
-                  onKeyDown={handleQueryKeyDown}
-                  style={{
-                    height: 30,
-                    paddingLeft: 26,
-                    paddingRight: 8,
-                    width: 140,
-                    borderRadius: "var(--r-md)",
-                    border: "1px solid var(--border)",
-                    background: "var(--surface-alt)",
-                    color: "var(--text)",
-                    fontSize: "var(--font-sm)",
-                    fontFamily: "inherit",
-                    outline: "none",
-                    transition: "border-color 0.12s ease",
-                  }}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
                 />
               </div>
 
@@ -453,15 +432,13 @@ export default function AuditPage() {
           </div>
 
           {/* Column header */}
-          <div
+          <div className="table-heading"
             style={{
               display: "grid",
               gridTemplateColumns: "24px 1fr 160px 20px",
               alignItems: "center",
               gap: 14,
               padding: "8px 20px",
-              background: "var(--surface-alt)",
-              borderBottom: "1px solid var(--border)",
             }}
           >
             {["", "Activity", "When", ""].map((col, i) => (
@@ -469,11 +446,6 @@ export default function AuditPage() {
                 key={i}
                 style={{
                   margin: 0,
-                  fontSize: "var(--font-xs)",
-                  fontWeight: 600,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "var(--text-muted)",
                   textAlign: i === 2 ? "right" : "left",
                 }}
               >
@@ -529,7 +501,7 @@ export default function AuditPage() {
             </div>
             {totalPages > 1 && (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
+                <span style={{ fontSize: "var(--font-xs)", fontFamily: "var(--font-ui)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
                   Page {currentPage} of {totalPages}
                 </span>
                 {(["Prev", "Next"] as const).map((label) => {

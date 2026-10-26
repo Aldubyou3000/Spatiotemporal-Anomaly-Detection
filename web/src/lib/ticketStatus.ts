@@ -50,13 +50,11 @@ export const STATUS_TONE: Record<TicketStatus, BadgeTone> = {
   cancelled: "neutral",
 };
 
-// ── Priority — muted by default; only "high" earns a warm color ──────────────
-// Low/medium are background noise in a list; surfacing them in color competes
-// with the status. High priority is the only level worth a colored chip.
+// ── Priority — consistent low / medium / high badge colors ──────────────────
 
 export const PRIORITY_TONE: Record<TicketPriority, BadgeTone> = {
-  low: "neutral",
-  medium: "neutral",
+  low: "success",
+  medium: "warning",
   high: "danger",
 };
 

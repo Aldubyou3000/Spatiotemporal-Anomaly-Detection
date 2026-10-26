@@ -20,7 +20,6 @@ other ``/api/mobile/*`` route. The token is sent in the ``Authorization`` header
 by the client (react-native-sse) — never in the URL.
 """
 
-import asyncio
 import json
 
 from fastapi import APIRouter, Depends, Request
@@ -36,23 +35,19 @@ _HEARTBEAT_SECONDS = 20.0
 
 async def _mobile_event_stream(request: Request):
     """SSE wire format for one technician — every event is sanitized first."""
-    agen = events_service.subscribe()
+    agen = events_service.subscribe(_HEARTBEAT_SECONDS)
     yield "retry: 5000\n\n"
     try:
         while True:
             if await request.is_disconnected():
                 break
             try:
-                event = await asyncio.wait_for(agen.__anext__(), timeout=_HEARTBEAT_SECONDS)
-            except asyncio.TimeoutError:
-                yield ": ping\n\n"
-                continue
+                event = await anext(agen)
             except StopAsyncIteration:
                 break
-            except RuntimeError as exc:
-                if isinstance(exc.__cause__, StopAsyncIteration) or "StopAsyncIteration" in str(exc):
-                    break
-                raise
+            if event is None:
+                yield ": ping\n\n"
+                continue
             if event.get("_close"):
                 break
             projected = events_service.project_for_mobile(event)

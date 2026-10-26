@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { AlertTriangle, ChevronDown, Download, LayoutGrid, Table2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
@@ -7,12 +8,15 @@ import { Badge } from "@/components/ui/Badge";
 import { createPortal } from "react-dom";
 import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { DataTable, type FilterField } from "@/components/zones/DataTable";
-import { OverviewTab } from "@/components/zones/OverviewTab";
 import { AnomalyReportTab } from "@/components/zones/AnomalyReportTab";
 import { InfoTip } from "@/components/zones/InfoTip";
 import { DECISION_LABEL, exportReviewedReadings, flaggedReadings, type AnomalyReview, type AnomalyReviews } from "@/lib/anomalyReview";
 import type { ProcessResult } from "@/types/zones";
 import styles from './ZoneResults.module.css';
+
+const OverviewTab = dynamic(() => import("@/components/zones/OverviewTab").then(module => module.OverviewTab), {
+  loading: () => <div role="status">Loading overview…</div>,
+});
 
 function ExportMenu({ children }: { children: React.ReactNode }) {
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
@@ -64,10 +68,15 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
   fitViewport?: boolean;
 }) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState(defaultTab === "raw" || defaultTab === "cleaned" ? "data" : defaultTab === "neighbors" ? "overview" : defaultTab);
+  const [activeTab, setTab] = useState(defaultTab === "raw" || defaultTab === "cleaned" ? "data" : defaultTab === "neighbors" ? "overview" : defaultTab);
+  const [dataVisited, setDataVisited] = useState(activeTab === "data");
+  function setActiveTab(tab: string) {
+    if (tab === "data") setDataVisited(true);
+    setTab(tab);
+  }
   const [dataView, setDataView] = useState<"raw" | "cleaned" | "flagged">(defaultTab === "raw" ? "raw" : "cleaned");
-  const reviewedRows = useMemo(() => exportReviewedReadings(result.flagged_data, reviews), [result.flagged_data, reviews]);
-  const reportRows = useMemo(() => exportReviewedReadings(flaggedReadings(result.flagged_data), reviews), [result.flagged_data, reviews]);
+  const reportRows = useMemo(() => dataVisited && dataView === "flagged"
+    ? exportReviewedReadings(flaggedReadings(result.flagged_data), reviews) : [], [result.flagged_data, reviews, dataVisited, dataView]);
   const cleanedColumns = useMemo(() => [
     { key: "station_id" as const, header: "Station", width: "20%" },
     { key: "date" as const, header: "Date", width: "16%" },
@@ -117,21 +126,6 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
     }));
   }, [result.raw_preview]);
 
-  // Raw table: prefer station/date columns; fall back to all string-valued columns
-  const rawSearchKeys = useMemo(() => {
-    if (result.raw_preview.length === 0) return undefined;
-    const sample = result.raw_preview[0];
-    const keys = Object.keys(sample);
-    const preferred = keys.filter(
-      (k) => k === "station_id" || k === "date" ||
-             k.toLowerCase().includes("station") ||
-             k.toLowerCase().includes("date"),
-    );
-    if (preferred.length > 0) return preferred as (keyof Record<string, unknown> & string)[];
-    // Fall back to columns whose values are strings
-    return keys.filter((k) => typeof sample[k] === "string") as (keyof Record<string, unknown> & string)[];
-  }, [result.raw_preview]);
-
   const cleanedFilterFields = useMemo<FilterField[]>(() => [
     {
       key: "interpolated_flag",
@@ -170,7 +164,7 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
         </div>
         <div className={styles.content}>
           <TabPanel value="overview" className={`${styles.panel} ${styles.overview}`}><OverviewTab key={result.run_id ?? result.processed_at} result={result} fillHeight={fitViewport} defaultSection={defaultTab === "neighbors" ? "neighbors" : "overview"} onReviewReadings={() => setActiveTab("anomalies")} /></TabPanel>
-          <TabPanel value="data" className={styles.panel} keepMounted>
+          <TabPanel value="data" className={styles.panel} keepMounted={dataVisited}>
             <div className={styles.dataToolbar}>
               <div className={styles.dataSwitch} role="group" aria-label="Data version">
                 {(["raw", "cleaned", "flagged"] as const).map(view => <button key={view} type="button" aria-pressed={dataView === view} onClick={() => setDataView(view)}>
@@ -182,18 +176,18 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
                 <button type="button" className="menu-item" onClick={() => import("@/lib/csv").then(m => m.downloadCsv("cleaned_data.csv", result.cleaned_data as unknown as Record<string, unknown>[]))}>Cleaned data CSV</button>
                 <button type="button" className="menu-item" disabled={!reviewsReady || reviewBusy}
                   title="All daily readings, original system flags, and analyst review decisions"
-                  onClick={() => import("@/lib/csv").then(m => m.downloadCsv("reviewed_results.csv", reviewedRows))}>Results with reviews CSV</button>
+                  onClick={() => import("@/lib/csv").then(m => m.downloadCsv("reviewed_results.csv", exportReviewedReadings(result.flagged_data, reviews)))}>Results with reviews CSV</button>
               </ExportMenu>}
             </div>
             <DataTable<Record<string, unknown>>
               data={(dataView === "raw" ? result.raw_preview : dataView === "cleaned" ? result.cleaned_data : reportRows) as unknown as Record<string, unknown>[]}
               columns={dataView === "raw" ? rawColumns : dataView === "cleaned" ? cleanedColumns : flaggedColumns} pageSize={10}
               caption={dataView === "raw"
-                ? `${result.raw_preview.length.toLocaleString()} of ${result.raw_total_rows.toLocaleString()} uploaded rows`
+                ? `${result.raw_preview.length.toLocaleString()} of ${result.raw_total_rows.toLocaleString()} uploaded rows (preview only)`
                 : dataView === "cleaned" ? `After Zone A — ${result.cleaned_data.length.toLocaleString()} validated daily readings`
                 : `${reportRows.length.toLocaleString()} flagged readings · ${!reviewsReady ? "Loading reviews…" : reviewBusy ? "Saving reviews…" : "Includes high and low flags"}`}
               emptyMessage={dataView === "raw" ? "No rows in the uploaded file." : dataView === "cleaned" ? "No validated daily readings." : "No flagged readings to list."}
-              searchKeys={dataView === "raw" ? rawSearchKeys : ["station_id", "date"]}
+              searchPlaceholder={dataView === "raw" ? "Search preview rows…" : "Search readings…"}
               filterFields={dataView === "cleaned" ? cleanedFilterFields : dataView === "flagged" ? flaggedFilterFields : undefined} />
           </TabPanel>
           <TabPanel value="anomalies" className={styles.anomalies}>

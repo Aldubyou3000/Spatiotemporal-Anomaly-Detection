@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { mutate as globalMutate } from "swr";
+import { refreshSession } from "@/lib/api/client";
 
 /**
  * Real-time sync — opens ONE EventSource to the FastAPI SSE endpoint and routes
@@ -88,14 +89,7 @@ export function useRealtimeSync(): { connected: boolean } {
       // for a user-initiated API call.
       if (!refreshingRef.current) {
         refreshingRef.current = true;
-        const csrfMatch = typeof document !== "undefined" ? document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/) : null;
-        const csrfTok = csrfMatch ? decodeURIComponent(csrfMatch[1]) : "";
-        const hdr: Record<string, string> | undefined = csrfTok ? { "X-CSRF-Token": csrfTok } : undefined;
-        fetch(new URL("/api/auth/refresh", apiBase()).toString(), {
-          method: "POST",
-          credentials: "include",
-          ...(hdr ? { headers: hdr } : {}),
-        }).finally(() => { refreshingRef.current = false; });
+        void refreshSession().finally(() => { refreshingRef.current = false; });
       }
     };
 

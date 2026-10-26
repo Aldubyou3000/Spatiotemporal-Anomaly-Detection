@@ -63,7 +63,7 @@ export function ReasonPicker({
               background: bg,
               color,
               fontSize: "var(--font-xs)",
-              fontWeight: active ? 600 : 500,
+              fontWeight: 500,
               cursor: "pointer",
               fontFamily: "inherit",
               whiteSpace: "nowrap",

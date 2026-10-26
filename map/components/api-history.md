@@ -31,3 +31,12 @@ Processing now returns an unsaved run ID without database/audit writes. Only POS
 
 ## Review-save JSONB filter fix (2026-10-25)
 `validate_reading` must pass a JSON-encoded string to PostgREST `contains` for the flagged_readings JSONB array. Passing a Python list of dicts hit the installed client's SQL-array branch and raised TypeError before HTTP execution. The shared validator covers review save/Undo and ticket links with reading dates. Encoding with json.dumps preserves exact station/day validation, including quoted station names. Added a real SyncPostgrestClient + MockTransport endpoint regression; all 20 History tests pass. The configured live client now validates the screenshot's saved reading and reaches the RPC's deliberately stale revision conflict without writing a decision. A separate SQL save probe was rolled back. API health/preflight passed and the running process uses --reload. Authenticated browser resubmission was not performed; no schema, privilege, algorithm or mobile changes. Shared candidates/orphans unchanged.
+
+
+History list ordering (2026-10-26): GET /api/history accepts validated sort=latest|oldest (latest default). list_runs orders processed_at descending/ascending before range pagination, with id ascending as a stable tie-break. Search and Asia/Manila date boundaries are unchanged; no schema migration.
+
+
+History prefix search (2026-10-26): list_runs now filters displayed title beginnings with case-insensitive LIKE; legacy null-title rows match their first source filename instead. Removed broad search_text matching that let hidden stations/files match a named run such as test. Quoted and LIKE-escaped patterns remain server-side before counts/pagination; no migration.
+
+
+History read optimization (2026-10-26): list/detail select only HistoryRun response fields instead of internal search/creation columns. Review/ticket existence checks read processing_runs.id instead of recomputing all six aggregate counts in processing_history. Missing runs still return 404; review pagination, attribution, ticket inspections and revision validation remain. No schema or data change. Baseline warm reads: summary 0.174s; 3,029-row result ~0.6s (1.44MB).

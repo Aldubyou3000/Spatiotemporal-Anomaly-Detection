@@ -316,3 +316,23 @@ These are real but low-priority or require more significant work:
 - **Token refresh has no retry on transient errors:** If the API is momentarily unavailable, a
   failed token refresh immediately shows "Session expired" even though the user's session is fine.
   Future fix: retry once with exponential backoff before prompting re-login.
+
+### Bug: Ticket controls briefly grow or move after updates
+**Causes:** Loading spinners were extra flex children in auto-sized buttons, while `transition: all` animated geometry. Ticket forms/pickers replayed entrance animations. An expanded review dock carried its open state into assignment management after review completion. Initial report/files arrived after the main body, adding content in stages; global SWR previous-data behavior could also display another ticket briefly.
+
+**Fix:** Overlay the shared Button spinner while retaining label dimensions and restrict transitions to color/opacity. Keep ticket action labels and disclosure width stable, remove ticket entrance/scale animations and automatic textarea focus, scope drawer expansion to its current mode, and clear saved assignment prompts with the update. Load initial detail resources before rendering the body; retain cached content on background refresh and disallow previous-key data. Disable list/detail scroll anchoring to avoid unintended jumps.
+
+**Verification:** `node tests/ticket-stability.test.cjs` covers busy buttons, mode changes, collapsed-state preservation, cache isolation, initial loading, background refresh and review drafts. Component/theme/History render checks also pass. Live browser motion was not inspected because local browser access is disabled in Work settings.
+
+## 2026-10-27: Idle realtime reconnects and repeated History work
+The SSE routers used `asyncio.wait_for` around the subscription generator next call. Every idle timeout cancelled and closed that generator, removing its subscriber. The browser reconnected and independently refreshed auth cookies, adding background traffic and racing normal API refresh. Timeout now applies inside the broker to the queue read; idle heartbeats preserve the connection. Web reconnect recovery shares the existing single-flight REST refresh. Regression tests exercise repeated heartbeats, subsequent events, cleanup, mobile filtering and concurrent refresh.
+
+History now reuses immutable snapshots during prefetch, defers unused charts/dialogs/hidden Data tables, and converts full CSV rows only on export. Build comparison: initial results-route JavaScript about 299 kB to 148 kB. These fixes do not establish the cause of an intermittent 12.5-second Next development route stall: after stopping extra profiling servers, eight warm route probes took 0.22–0.73 seconds. Browser end-to-end latency remains unverified. No algorithm, database schema or data changes.
+
+## 2026-10-27: Next.js development build-manifest ENOENT
+
+**Symptom:** Navigating to History repeatedly failed to open `.next/static/development/_buildManifest.js.tmp.*`.
+
+**Cause:** Development and production builds shared `.next`. A production build clears that directory before generating its output, removing files beneath the live dev server. Local process/output timestamps and the earlier build-collision logs corroborated this; the installed Next.js build code calls `recursiveDelete(distDir)`.
+
+**Fix:** `web/next.config.ts` sends development output to `.next-dev`; production build/start keep `.next`. Git ignores the dev folder. TypeScript excludes that cache from globbing so stale dev validators cannot break a production build after a route is removed; `next-env.d.ts` still references route declarations directly. Generated page-export checks run on fresh `.next` types during production builds. Changing the config restarts Next automatically; if an old terminal remains stuck, Ctrl+C and `npm run dev` starts a fresh dev cache. No dependency upgrade or application-data cleanup is required. Keep one dev server per checkout, and stop a production server before rebuilding its output. `node tests/web-security.test.cjs` checks directory separation and Git/TypeScript cache settings.

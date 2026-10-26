@@ -17,7 +17,7 @@ const StationMap = dynamic(() => import("./StationMap").then((m) => m.StationMap
   ssr: false,
   loading: () => (
     <div style={{ flex: 1, borderRadius: "var(--r-lg)", background: "var(--surface-sunken)", display: "grid", placeItems: "center" }}>
-      <p style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>Loading map…</p>
+      <p style={{ fontSize: "var(--font-xs)", color: "var(--text-tertiary)", fontFamily: "var(--font-ui)" }}>Loading map…</p>
     </div>
   ),
 });
@@ -405,7 +405,7 @@ export function OverviewTab({ result, fillHeight = false, onReviewReadings, defa
               <MapPin size={14} strokeWidth={2.2} style={{ color: "var(--text-secondary)" }} />
               <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>Station Map</span>
               <span style={{ color: "var(--text-tertiary)" }}>·</span>
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{stationPoints.length} stations</span>
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-ui)" }}>{stationPoints.length} stations</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>
               <InlineTip tip="No flagged days — this station tracked its 3 nearest neighbors. Dots are green; station review summary in the popup may still show Monitor/Needs attention.">
@@ -423,7 +423,7 @@ export function OverviewTab({ result, fillHeight = false, onReviewReadings, defa
             </div>
           </div>
           <div style={{ padding: 10, flex: 1, display: "flex", minHeight: 0 }}>
-            <StationMap stations={stationPoints} selectedStationId={section === "neighbors" ? neighborStation : selectedStationId} highlightedStationIds={highlightedStationIds} height="100%" style={{ flex: 1 }} />
+            <StationMap stations={stationPoints} selectedStationId={section === "neighbors" ? neighborStation : section === "stations" ? selectedStationId : undefined} highlightedStationIds={highlightedStationIds} height="100%" style={{ flex: 1 }} />
           </div>
         </section>
 

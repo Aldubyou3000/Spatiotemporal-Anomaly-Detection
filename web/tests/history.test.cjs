@@ -14,6 +14,81 @@ function load(source, overrides) {
 const helpers = load("lib/anomalyReview.ts", {});
 const key = '["A","2023-01-01"]';
 const stored = { station_id: "A", date: "2023-01-01", status: "anomaly", note: "", reviewer_id: "old", reviewed_by: "Old analyst", reviewed_at: "2026-10-24T00:00:00Z", revision: 3 };
+
+test("results prefetch starts immediately and shares one request across repeated intent", async () => {
+  // Exercise SWR's real browser preloader; its Node/server implementation is a no-op.
+  const internalFile = require.resolve("swr/_internal");
+  const internalRequire = require("node:module").createRequire(internalFile);
+  const browser = { exports: {} };
+  new Function("require", "exports", "module", fs.readFileSync(internalFile, "utf8"))((name) => {
+    const value = internalRequire(name);
+    return name.startsWith("./config-context") ? { ...value, IS_SERVER: false } : value;
+  }, browser.exports, browser);
+  let calls = 0;
+  let finish;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const { usePrefetchHistoryResults } = load("hooks/useHistory.ts", {
+    swr: { ...require("swr"), preload: browser.exports.preload, useSWRConfig: () => ({ cache: new Map() }) },
+    "@/lib/api/history": { historyApi: { results: id => { calls++; assert.equal(id, "prefetch-regression"); return pending; } } },
+    "@/lib/anomalyReview": helpers,
+  });
+  assert.equal(typeof usePrefetchHistoryResults, "function");
+  const prefetch = usePrefetchHistoryResults("prefetch-regression");
+  const first = prefetch();
+  const repeated = prefetch();
+  assert.equal(calls, 1, "start the read in the event handler, without waiting for a page state update");
+  assert.equal(first, repeated, "hover, focus and navigation must share the pending read");
+  finish({ run_id: "prefetch-regression" });
+  assert.equal((await first).run_id, "prefetch-regression");
+});
+
+test("returning to cached immutable results does not download the snapshot again", async () => {
+  const swr = require("swr");
+  const cached = { run_id: "cached-run", history_saved: true };
+  const cache = new Map([[swr.unstable_serialize(["/api/history/cached-run/results"]), { data: cached }]]);
+  const { usePrefetchHistoryResults } = load("hooks/useHistory.ts", {
+    swr: { ...swr, useSWRConfig: () => ({ cache }), preload: () => { throw new Error("must not prefetch cached results"); } },
+    "@/lib/api/history": { historyApi: { results: () => { throw new Error("must not read cached results"); } } },
+    "@/lib/anomalyReview": helpers,
+  });
+  assert.equal(typeof usePrefetchHistoryResults, "function");
+  assert.equal(await usePrefetchHistoryResults("cached-run")(), cached);
+});
+
+test("opening a listed run seeds its own summary cache without replacing a fresher summary", async () => {
+  const cached = new Map();
+  const requests = [];
+  const hooks = load("hooks/useHistory.ts", {
+    swr: { __esModule: true, default: (key, fetcher, options) => { requests.push({ key, options }); return { data: undefined }; },
+      useSWRConfig: () => ({ mutate: async (key, update, options) => {
+        assert.equal(options.revalidate, false);
+        const id = JSON.stringify(key); cached.set(id, update(cached.get(id)));
+      } }) },
+    "@/lib/api/history": { historyApi: {} }, "@/lib/anomalyReview": helpers,
+  });
+  const list = hooks.useHistoryList({});
+  list.selectRun({ id: "A", reviewed_count: 1 });
+  list.selectRun({ id: "B", reviewed_count: 2 });
+  list.selectRun({ id: "A", reviewed_count: 0 });
+  assert.equal(cached.get('["/api/history/A"]').reviewed_count, 1);
+  assert.equal(cached.get('["/api/history/B"]').reviewed_count, 2);
+  hooks.useHistoryRun("A");
+  assert.equal(requests.at(-1).options.revalidateOnMount, true, "cached summaries must still refresh live counts");
+});
+
+test("history prefetch is opt-in, shares the results key, and can skip empty tickets", () => {
+  const keys = [];
+  const hooks = load("hooks/useHistory.ts", {
+    swr: { __esModule: true, default: key => { keys.push(key); return {}; } },
+    "@/lib/api/history": { historyApi: {} }, "@/lib/anomalyReview": helpers,
+  });
+  hooks.useHistoryResults("A", false);
+  hooks.useHistoryResults("A", true);
+  hooks.useHistoryResults("A");
+  hooks.useHistoryTickets("A", 0, false);
+  hooks.useHistoryTickets("B", 20);
+  assert.deepEqual(keys, [null, ["/api/history/A/results"], ["/api/history/A/results"], null, ["/api/history/B/tickets", 20]]);
+});
 function harness(data, write) {
   let cache = data;
   let reloads = 0;

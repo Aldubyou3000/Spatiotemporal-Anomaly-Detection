@@ -12,13 +12,12 @@ export function useTicketList(params: { status?: string; priority?: string; stat
   }];
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     key,
-    () => ticketsApi.list({
+    () => ticketsApi.listAll({
       status: params.status || undefined,
       priority: params.priority || undefined,
       station_id: params.station_id || undefined,
-      limit: 50,
     }),
-    { dedupingInterval: 8_000 },
+    { dedupingInterval: 8_000, keepPreviousData: false },
   );
   return {
     items: data?.items ?? [],
@@ -34,7 +33,7 @@ export function useTicketDetail(id: string | null) {
   const { data, error, isLoading, mutate } = useSWR(
     id ? [`/api/tickets/${id}`] : null,
     () => ticketsApi.get(id!),
-    { dedupingInterval: 10_000, revalidateOnFocus: false },
+    { dedupingInterval: 10_000, revalidateOnFocus: false, keepPreviousData: false },
   );
   return {
     // When no ticket is selected (id === null) SWR retains the last `data`, so
@@ -51,7 +50,7 @@ export function useTicketReport(ticketId: string | null) {
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     ticketId ? [`/api/tickets/${ticketId}/report`] : null,
     () => ticketsApi.report(ticketId!),
-    { dedupingInterval: 30_000, revalidateOnFocus: false },
+    { dedupingInterval: 30_000, revalidateOnFocus: false, keepPreviousData: false },
   );
   return {
     // `report` stays the active round so the approval flow (report.id) is unchanged.
@@ -68,7 +67,7 @@ export function useTicketAttachments(ticketId: string | null) {
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     ticketId ? [`/api/tickets/${ticketId}/attachments`] : null,
     () => ticketsApi.attachments(ticketId!),
-    { dedupingInterval: 30_000, revalidateOnFocus: false },
+    { dedupingInterval: 30_000, revalidateOnFocus: false, keepPreviousData: false },
   );
   return { attachments: (data ?? []) as TicketAttachment[], isLoading, isValidating, error: error as Error | undefined, refresh: mutate };
 }

@@ -39,3 +39,6 @@ In-process async pub/sub broker feeding two Server-Sent Events endpoints (web co
 
 ## History signals (2026-10-25)
 processing_run_saved and processing_review_saved map to the analyst-only history resource through the existing audit hook. Mobile projection remains tickets/reports only. Web also revalidates history metadata/tickets on ticket/report signals; immutable result snapshots are excluded.
+
+## Idle connection fix (2026-10-27)
+`subscribe(heartbeat_seconds)` times out individual queue reads and yields `None` for heartbeats. Both routers convert that to SSE comments. Never wrap `agen.__anext__()` in `wait_for`: cancellation closes the subscription at the first idle timeout, causing reconnect/auth churn. `api/tests/test_events.py` covers repeated heartbeats, subsequent delivery, mobile projection, shutdown and subscriber cleanup.

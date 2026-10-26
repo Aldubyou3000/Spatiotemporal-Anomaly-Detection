@@ -17,11 +17,14 @@ const run = {
 const ticket = { id: "t-1", ticket_number: 27, title: "Check unusual rainfall", station_id: "ScienceGarden", reading_date: "2023-10-22", status: "follow_up",
   technicians: [{ full_name: "Assigned Technician" }], inspection: { submitted_at: "2026-10-25T03:00:00Z", profiles: { full_name: "Inspecting Technician" }, round: 1, analyst_approved_at: null } };
 const hooks = {
-  useHistoryList: () => ({ data: { items: [run], total: 1 }, mutate: () => {} }),
+  useHistoryList: () => ({ data: { items: [run], total: 1 }, mutate: () => {}, selectRun: () => {} }),
   useHistoryRun: () => ({ data: run, mutate: () => {} }),
+  useHistoryResults: () => ({}),
+  usePrefetchHistoryResults: () => () => Promise.resolve(),
   useHistoryTickets: () => ({ data: { items: [ticket], total: 1 }, mutate: () => {} }),
 };
 const cache = new Map();
+const navigation = { prefetch: () => {} };
 let reactOverride;
 function load(source) {
   const base = path.resolve(__dirname, "../src", source);
@@ -36,7 +39,7 @@ function load(source) {
     : name === "@/hooks/useHistory" ? hooks
     : name === "@/context/AuthContext" ? { useAuth: () => ({ user: { full_name: "Analyst One", username: "analyst" }, logout: () => {} }) }
     : name === "@/context/ThemeContext" ? { useTheme: () => ({ theme: "light", setTheme: () => {} }) }
-    : name === "next/navigation" ? { useParams: () => ({ id: run.id }), usePathname: () => "/history" }
+    : name === "next/navigation" ? { useParams: () => ({ id: run.id }), usePathname: () => "/history", useRouter: () => navigation }
     : name.startsWith("@/") ? load(name.slice(2))
     : name.startsWith(".") ? load(path.relative(path.resolve(__dirname, "../src"), path.resolve(path.dirname(file), name))) : require(name);
   new Function("require", "module", "exports", code)(req, mod, mod.exports);
@@ -46,6 +49,42 @@ const List = load("app/(dashboard)/history/page").default;
 const Detail = load("app/(dashboard)/history/[id]/page").default;
 const { ToastProvider } = load("components/ui/Toast");
 const render = (Component) => renderToStaticMarkup(React.createElement(ToastProvider, null, React.createElement(Component)));
+
+test("opening saved results does not initialize the results workspace or ticket dialog before data loads", () => {
+  cache.clear();
+  try {
+    load("app/(dashboard)/history/[id]/results/page");
+    const initialized = [...cache.keys()].map(file => path.relative(path.resolve(__dirname, "../src"), file).replaceAll("\\", "/"));
+    assert.ok(!initialized.includes("components/zones/ZoneResults.tsx"), "the route must load independently of the charting workspace");
+    assert.ok(!initialized.includes("components/zones/CreateTicketModal.tsx"), "opening results must not initialize an unused ticket dialog");
+  } finally { cache.clear(); }
+});
+
+test("the initial readings review does not render the hidden Data table", () => {
+  cache.clear();
+  try {
+    const { ZoneResults } = load("components/zones/ZoneResults");
+    const { result } = load("../tests/fixtures");
+    const html = renderToStaticMarkup(React.createElement(ToastProvider, null,
+      React.createElement(ZoneResults, { result, defaultTab: "anomalies" })));
+    assert.match(html, /Review Readings/);
+    assert.equal(/<table\b/.test(html), false, "the full Data table should mount only after its first visit");
+  } finally { cache.clear(); }
+});
+
+test("opening review does not build CSV exports for every daily reading", () => {
+  cache.clear();
+  let exportReads = 0;
+  reactOverride = { ...React, useMemo: fn => fn(), useState: initial => [typeof initial === "function" ? initial() : initial, () => {}] };
+  try {
+    const { ZoneResults } = load("components/zones/ZoneResults");
+    const { result } = load("../tests/fixtures");
+    const normal = { ...result.flagged_data[0], is_anomaly: false, is_low_anomaly: false, is_dry_stuck: false };
+    Object.defineProperty(normal, "station_id", { enumerable: true, get() { exportReads++; return "Normal station"; } });
+    ZoneResults({ result: { ...result, flagged_data: [normal] }, defaultTab: "anomalies" });
+    assert.equal(exportReads, 0, "normal daily rows should be converted only when exporting results");
+  } finally { reactOverride = undefined; cache.clear(); }
+});
 
 test("Data defaults to Cleaned and preserves search and cleaned filters across version changes", () => {
   cache.clear();
@@ -63,7 +102,7 @@ test("Data defaults to Cleaned and preserves search and cleaned filters across v
   }
   try {
     const { ZoneResults } = load("components/zones/ZoneResults");
-    const { result } = load("components/design/fixtures");
+    const { result } = load("../tests/fixtures");
     const renderResults = () => { scope = "results"; cursor = 0; return ZoneResults({ result, defaultTab: "data" }); };
     const tableElement = tree => find(tree, n => n.type?.name === "DataTable");
     const renderTable = tree => { scope = "table"; cursor = 0; const el = tableElement(tree); return el.type(el.props); };
@@ -106,7 +145,7 @@ test("review opens the flagged Data view and keeps exports out of review", () =>
   }
   try {
     const { ZoneResults } = load("components/zones/ZoneResults");
-    const { result: fixture } = load("components/design/fixtures");
+    const { result: fixture } = load("../tests/fixtures");
     const high = { station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true };
     const low = { station_id: "B", date: "2023-01-01", rainfall: 0, is_anomaly: false, is_low_anomaly: true };
     const normal = { station_id: "C", date: "2023-01-01", rainfall: 3, is_anomaly: false };
@@ -138,6 +177,9 @@ test("history keeps a multi-file processing run in a single row with review and 
   assert.match(html, /Analyst One/);
   assert.match(html, /18 of 75/);
   assert.match(html, /57 remaining/);
+  assert.match(html, /<progress[^>]*value="18"[^>]*max="75"[^>]*aria-label="18 of 75 readings reviewed"/);
+  assert.match(html, /<label data-filter-field="true"><span>From<\/span><input[^>]*aria-label="Processed from"/);
+  assert.match(html, /<label data-filter-field="true"><span>To<\/span><input[^>]*aria-label="Processed to"/);
   assert.match(html, new RegExp(`/history/${run.id}`));
 });
 
@@ -314,7 +356,7 @@ test("review actions explain an unsaved run and keep both judgments neutral and 
   } finally { reactOverride = undefined; cache.delete(reportPath); }
 });
 
-test("the pending queue removes repeated visible badges but All restores individual review statuses", () => {
+test("Reviewed and All show status badges while Needs review stays compact", () => {
   const reportPath = path.resolve(__dirname, "../src/components/zones/AnomalyReportTab.tsx");
   cache.delete(reportPath);
   const cells = []; let cursor = 0;
@@ -328,14 +370,25 @@ test("the pending queue removes repeated visible badges but All restores individ
   try {
     const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
     const result = { flagged_data: ["A", "B"].map(station_id => ({ station_id, date: "2023-01-01", rainfall: 30, is_anomaly: true })) };
-    const render = () => { cursor = 0; return AnomalyReportTab({ result }); };
+    const reviews = {};
+    const render = () => { cursor = 0; return AnomalyReportTab({ result, reviews }); };
     let tree = render();
     const queue = () => all(tree, node => node.props?.className === "queueList")[0];
     assert.equal(all(queue(), node => node.type?.name === "ReviewBadge").length, 0);
     assert.equal(all(queue(), node => node.props?.className === "sr-only" && node.props.children === "Needs review").length, 2);
+    const { readingKey } = load("lib/anomalyReview");
+    reviews[readingKey(result.flagged_data[0])] = { status: "anomaly", note: "", reviewed_by: "Analyst", reviewer_id: "analyst", reviewed_at: "2026-10-26T00:00:00Z" };
+    all(tree, node => node.type === "button" && node.props.children?.[0] === "Reviewed")[0].props.onClick();
+    tree = render();
+    const reviewedBadges = all(queue(), node => node.type?.name === "ReviewBadge");
+    assert.equal(reviewedBadges.length, 1);
+    assert.equal(reviewedBadges[0].props.review.status, "anomaly");
     all(tree, node => node.type === "button" && node.props.children?.[0] === "All")[0].props.onClick();
     tree = render();
-    assert.equal(all(queue(), node => node.type?.name === "ReviewBadge").length, 2);
+    const mixedBadges = all(queue(), node => node.type?.name === "ReviewBadge");
+    assert.equal(mixedBadges.length, 2);
+    assert.equal(mixedBadges.filter(node => !node.props.review).length, 1);
+    assert.equal(mixedBadges.filter(node => node.props.review?.status === "anomaly").length, 1);
   } finally { reactOverride = undefined; cache.delete(reportPath); }
 });
 
@@ -351,7 +404,7 @@ test("Data exports remain neutral and results are unavailable while reviews load
   }
   try {
     const { ZoneResults } = load("components/zones/ZoneResults");
-    const { result: fixture } = load("components/design/fixtures");
+    const { result: fixture } = load("../tests/fixtures");
     const high = { station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true };
     const low = { station_id: "B", date: "2023-01-01", rainfall: 0, is_anomaly: false, is_low_anomaly: true };
     const result = { ...fixture, run_id: "saved-run", history_saved: true, flagged_data: [high, low] };
@@ -389,4 +442,128 @@ test("routine review save feedback stays out of layout while errors stay visible
   assert.match(renderToStaticMarkup(failed), /Review was not saved/);
   const loadError = ReviewSaveStatus({ state: { ...base, error: new Error("offline") } });
   assert.match(renderToStaticMarkup(loadError), /Retry/);
+});
+
+
+test("History applies search automatically and preserves sorting through filters and pagination", t => {
+  cache.clear();
+  const values = []; let cursor = 0, lastDeps, effect, cleanup, requested;
+  const previousHook = hooks.useHistoryList;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  reactOverride = { ...React,
+    useState(initial) { const index = cursor++; if (!(index in values)) values[index] = initial;
+      return [values[index], next => { values[index] = typeof next === "function" ? next(values[index]) : next; }]; },
+    useEffect(fn, deps) { if (!lastDeps || deps.some((value, i) => value !== lastDeps[i])) { effect = fn; lastDeps = deps; } },
+  };
+  hooks.useHistoryList = filters => { requested = filters; return previousHook(); };
+  const find = (node, match) => {
+    if (!node || typeof node !== "object") return null;
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
+    return null;
+  };
+  try {
+    const Page = load("app/(dashboard)/history/page").default;
+    const renderPage = () => { cursor = 0; const tree = Page(); if (effect) { cleanup?.(); cleanup = effect(); effect = null; } return tree; };
+    let tree = renderPage();
+    assert.equal(find(tree, n => n.props?.type === "submit"), null);
+    find(tree, n => n.props?.["aria-label"] === "Search saved runs").props.onChange({ target: { value: "rain" } });
+    renderPage(); t.mock.timers.tick(299);
+    assert.equal(requested.search, "");
+    t.mock.timers.tick(1); tree = renderPage();
+    assert.equal(requested.search, "rain");
+    find(tree, n => n.props?.["aria-label"] === "Processed from").props.onChange({ target: { value: "2026-10-01" } });
+    tree = renderPage(); assert.equal(requested.start, "2026-10-01");
+    find(tree, n => n.type?.name === "HistoryPagination").props.onChange(20);
+    tree = renderPage(); assert.equal(requested.offset, 20);
+    find(tree, n => n.props?.ariaLabel === "Sort saved runs").props.onChange("oldest");
+    tree = renderPage(); assert.equal(requested.sort, "oldest"); assert.equal(requested.offset, 0);
+    assert.equal(requested.start, "2026-10-01");
+    find(tree, n => n.props?.["aria-label"] === "Search saved runs").props.onChange({ target: { value: "rainfall" } });
+    renderPage(); t.mock.timers.tick(300); tree = renderPage();
+    assert.equal(requested.search, "rainfall"); assert.equal(requested.sort, "oldest");
+    find(tree, n => n.props?.type === "button" && React.Children.toArray(n.props.children).includes(" Clear")).props.onClick();
+    tree = renderPage();
+    assert.equal(requested.search, ""); assert.equal(requested.start, ""); assert.equal(requested.sort, "oldest");
+  } finally { cleanup?.(); hooks.useHistoryList = previousHook; reactOverride = undefined; cache.clear(); }
+});
+
+
+test("Data search finds numeric values beyond the current page and combines words with filters", () => {
+  cache.clear();
+  let cursor = 0; const values = [];
+  reactOverride = { ...React, useMemo: fn => fn(), useState(initial) {
+    const index = cursor++;
+    if (!(index in values)) values[index] = typeof initial === "function" ? initial() : initial;
+    return [values[index], next => { values[index] = typeof next === "function" ? next(values[index]) : next; }];
+  } };
+  const find = (node, match) => {
+    if (!node || typeof node !== "object") return null;
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
+    return null;
+  };
+  try {
+    const { DataTable } = load("components/zones/DataTable");
+    const data = Array.from({ length: 25 }, (_, i) => ({ station: "Mandaluyong", date: "2023-12-31", rainfall: i === 24 ? 775.5 : i, flag: i === 24 ? "high" : "low" }));
+    const props = { data, columns: ["station", "date", "rainfall"].map(key => ({ key, header: key })), filterFields: [{ key: "flag", label: "Flag", options: [] }] };
+    const renderTable = () => { cursor = 0; return DataTable(props); };
+    let tree = renderTable();
+    find(tree, n => n.props?.["aria-label"] === "Search table").props.onChange({ target: { value: " mandaluyong 775.5 " } });
+    tree = renderTable();
+    assert.match(renderToStaticMarkup(tree), /775.5/);
+    assert.match(renderToStaticMarkup(tree), /1–1 of 1 rows/);
+    find(tree, n => n.type?.name === "Select").props.onChange("low");
+    tree = renderTable(); assert.match(renderToStaticMarkup(tree), /0 rows/);
+    find(tree, n => n.props?.children === "Clear filters").props.onClick();
+    tree = renderTable(); assert.match(renderToStaticMarkup(tree), /1–10 of 25 rows/);
+    data.push({ station: "Napindan_II", date: "2023-12-31", rainfall: 42, flag: "low" });
+    find(tree, n => n.props?.["aria-label"] === "Search table").props.onChange({ target: { value: "N" } });
+    tree = renderTable();
+    const markup = renderToStaticMarkup(tree);
+    assert.match(markup, /Napindan_II/);
+    assert.doesNotMatch(markup, />Mandaluyong</);
+    assert.match(markup, /1–1 of 1 rows/);
+    assert.equal(data[0].station, "Mandaluyong", "search must not reorder source data");
+    find(tree, n => n.props?.["aria-label"] === "Search table").props.onChange({ target: { value: "" } });
+    tree = renderTable(); assert.doesNotMatch(renderToStaticMarkup(tree), /Napindan_II/);
+
+  } finally { reactOverride = undefined; cache.clear(); }
+});
+
+test("saved summaries show cached data during refresh, skip empty tickets, and prefetch only on intent", () => {
+  cache.clear();
+  const original = { ...hooks };
+  let cursor = 0; const states = [], reads = [], routes = [];
+  const originalPrefetch = navigation.prefetch;
+  navigation.prefetch = route => routes.push(route);
+  reactOverride = { ...React, useState(initial) {
+    const index = cursor++;
+    if (!(index in states)) states[index] = typeof initial === "function" ? initial() : initial;
+    return [states[index], next => { states[index] = typeof next === "function" ? next(states[index]) : next; }];
+  } };
+  const find = (node, match) => {
+    if (!node || typeof node !== "object") return null;
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
+    return null;
+  };
+  hooks.useHistoryRun = () => ({ data: { ...run, open_tickets: 0, verified_tickets: 0, cancelled_tickets: 0 }, isLoading: true });
+  hooks.useHistoryTickets = (id, offset, enabled) => { reads.push({ resource: "tickets", enabled }); return {}; };
+  hooks.usePrefetchHistoryResults = id => () => { reads.push({ resource: "results", id }); return Promise.resolve(); };
+  try {
+    const Page = load("app/(dashboard)/history/[id]/page").default;
+    const renderPage = () => { cursor = 0; return Page(); };
+    let tree = renderPage();
+    assert.ok(find(tree, n => n.props?.href === `/history/${run.id}/results`), "cached summary is visible during revalidation");
+    assert.deepEqual(reads, [{ resource: "tickets", enabled: false }]);
+    assert.deepEqual(routes, []);
+    find(tree, n => n.props?.href === `/history/${run.id}/results`).props.onFocus();
+    assert.deepEqual(reads.at(-1), { resource: "results", id: run.id }, "prefetch must start before another render or navigation");
+    assert.deepEqual(routes, [`/history/${run.id}/results`]);
+    tree = renderPage();
+    hooks.useHistoryRun = () => ({ data: run });
+    renderPage();
+    assert.equal(reads.at(-1).enabled, true, "linked tickets are still fetched when present");
+  } finally { Object.assign(hooks, original); navigation.prefetch = originalPrefetch; reactOverride = undefined; cache.clear(); }
 });

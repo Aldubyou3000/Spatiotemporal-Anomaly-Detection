@@ -71,14 +71,13 @@ export function Tab({ value, children, icon, className }: TabProps) {
   return (
     <button
       role="tab"
-      data-ui="tab"
       aria-selected={selected}
       aria-controls={`${baseId}-panel-${value}`}
       id={`${baseId}-tab-${value}`}
       onClick={() => setValue(value)}
+      style={{ transition: "none" }}
       className={cn(
-        "relative inline-flex items-center gap-2 px-4 py-3 text-[13px] font-medium",
-        "transition-colors duration-150",
+        "relative inline-flex items-center gap-2 px-4 py-3 text-[length:var(--font-sm)] font-medium",
         "whitespace-nowrap shrink-0",
         selected
           ? "text-text"
@@ -90,8 +89,8 @@ export function Tab({ value, children, icon, className }: TabProps) {
       {children}
       <span
         className={cn(
-          "absolute left-0 right-0 -bottom-px h-[2px] origin-center transition-transform duration-200",
-          selected ? "bg-brand scale-x-100" : "bg-transparent scale-x-0"
+          "absolute left-0 right-0 -bottom-px h-[2px]",
+          selected ? "bg-brand" : "bg-transparent"
         )}
       />
     </button>
@@ -114,7 +113,7 @@ export function TabPanel({ value, children, className, keepMounted = false }: Ta
       hidden={active !== value}
       id={`${baseId}-panel-${value}`}
       aria-labelledby={`${baseId}-tab-${value}`}
-      className={cn("animate-fade-in", className)}
+      className={className}
     >
       {children}
     </div>

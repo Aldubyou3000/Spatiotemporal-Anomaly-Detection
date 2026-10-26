@@ -58,7 +58,9 @@ export function Modal({
           border: "1px solid var(--border)",
           borderRadius: "var(--r-2xl)",
           boxShadow: "var(--shadow-xl)",
-          overflow: "hidden",
+          maxWidth: "100%",
+          maxHeight: "calc(100dvh - 32px)",
+          overflowY: "auto",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -75,11 +77,11 @@ export function Modal({
               id="modal-title"
               style={{
                 margin: 0,
-                fontSize: "var(--font-lg)",
+                fontSize: "var(--font-xl)",
                 fontWeight: 600,
-                letterSpacing: "-0.015em",
+                lineHeight: 1.4,
                 color: "var(--text)",
-                lineHeight: 1.2,
+
               }}
             >
               {title}

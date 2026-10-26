@@ -12,7 +12,6 @@ No CSRF is required: this is a GET, and CSRF only guards mutating methods.
 A periodic heartbeat comment keeps proxies and the TCP connection alive.
 """
 
-import asyncio
 import json
 
 from fastapi import APIRouter, Depends, Request
@@ -30,7 +29,7 @@ _HEARTBEAT_SECONDS = 20.0
 
 async def _event_stream(request: Request):
     """Async generator producing the SSE wire format for one client."""
-    agen = events_service.subscribe()
+    agen = events_service.subscribe(_HEARTBEAT_SECONDS)
     # Tell the browser to wait 5 s before reconnecting after a drop.
     yield "retry: 5000\n\n"
     try:
@@ -39,20 +38,12 @@ async def _event_stream(request: Request):
             if await request.is_disconnected():
                 break
             try:
-                event = await asyncio.wait_for(agen.__anext__(), timeout=_HEARTBEAT_SECONDS)
-            except asyncio.TimeoutError:
-                # No event in the window — send a heartbeat comment (ignored by
-                # EventSource) to keep the connection open through proxies.
+                event = await anext(agen)
+            except StopAsyncIteration:
+                break
+            if event is None:
                 yield ": ping\n\n"
                 continue
-            except StopAsyncIteration:
-                # Generator exhausted (client closed / broker shutdown)
-                break
-            except RuntimeError as exc:
-                # Python 3.7+ converts StopAsyncIteration inside async gen to RuntimeError
-                if isinstance(exc.__cause__, StopAsyncIteration) or "StopAsyncIteration" in str(exc):
-                    break
-                raise
             if event.get("_close"):
                 break
             yield f"data: {json.dumps(event)}\n\n"

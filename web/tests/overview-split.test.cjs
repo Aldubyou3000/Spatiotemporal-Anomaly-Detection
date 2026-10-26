@@ -33,7 +33,7 @@ function find(node, predicate) {
 
 test('overview exposes four related sections and keeps warning and quality guidance discoverable', () => {
   const { OverviewTab } = load('components/zones/OverviewTab');
-  const { result } = load('components/design/fixtures');
+  const { result } = load('../tests/fixtures');
   const html = renderToStaticMarkup(React.createElement(OverviewTab, { result }));
   assert.match(html, /role="tab"[^>]*aria-selected="true"[^>]*>Overview/);
   assert.match(html, /Station summary/);
@@ -56,7 +56,7 @@ test('section changes leave the map outside the tabs and station selection reach
   } };
   try {
     const { OverviewTab } = load('components/zones/OverviewTab');
-    const { result } = load('components/design/fixtures');
+    const { result } = load('../tests/fixtures');
     const render = () => { cursor = 0; return OverviewTab({ result }); };
     const first = render();
     const map = find(first, n => n.type?.name === 'MapStub');
@@ -77,6 +77,11 @@ test('section changes leave the map outside the tabs and station selection reach
     assert.deepEqual(find(selected, n => n.type?.name === 'MapStub').props.highlightedStationIds, result.neighbors[station].map(n => n.neighbor_id));
     tabs.props.onValueChange('overview');
     assert.deepEqual(find(render(), n => n.type?.name === 'MapStub').props.highlightedStationIds, []);
+    assert.equal(find(render(), n => n.type?.name === 'MapStub').props.selectedStationId, undefined);
+    tabs.props.onValueChange('quality');
+    assert.equal(find(render(), n => n.type?.name === 'MapStub').props.selectedStationId, undefined);
+    tabs.props.onValueChange('stations');
+    assert.equal(find(render(), n => n.type?.name === 'MapStub').props.selectedStationId, station, 'returning to station summary restores its selection');
   } finally { hookOverride = undefined; cache.clear(); }
 });
 
@@ -93,7 +98,7 @@ test('nearby station panel shows distances in order and handles empty neighbor l
 
 test('an empty run retains navigation and an honest empty station summary', () => {
   const { OverviewTab } = load('components/zones/OverviewTab');
-  const { result } = load('components/design/fixtures');
+  const { result } = load('../tests/fixtures');
   const html = renderToStaticMarkup(React.createElement(OverviewTab, { result: {
     ...result, flagged_data: [], station_health: [], station_stuck_health: [],
   } }));
@@ -112,7 +117,7 @@ test('data quality leads with affected checks and can reveal zero-count checks',
   } };
   try {
     const { OverviewTab } = load('components/zones/OverviewTab');
-    const { result } = load('components/design/fixtures');
+    const { result } = load('../tests/fixtures');
     const quality = { ...result.quality_report, rows_filled: 127,
       exclusion_details: Object.fromEntries(Object.keys(result.quality_report.exclusion_details).map(key => [key, 0])) };
     quality.exclusion_details.multi_hour_gaps = 9023;
@@ -141,7 +146,7 @@ test('data quality leads with affected checks and can reveal zero-count checks',
 
 test('interpolation-only quality keeps the fill count visible without reporting exclusions', () => {
   const { OverviewTab } = load('components/zones/OverviewTab');
-  const { result } = load('components/design/fixtures');
+  const { result } = load('../tests/fixtures');
   const quality = { ...result.quality_report, rows_filled: 12, stations_excluded: 0, rows_excluded: 0,
     exclusion_details: Object.fromEntries(Object.keys(result.quality_report.exclusion_details).map(key => [key, 0])) };
   const html = renderToStaticMarkup(React.createElement(OverviewTab, { result: { ...result, quality_report: quality } }));

@@ -33,7 +33,7 @@ export const ticket: TicketDetail = {
 export const detail: DetailModel = {
   kind:'ticket',refId:'TKT-24',title:ticket.title,status:'pending_review',priority:'high',zone:'C',stationId:stations[0],createdAt:ticket.created_at,updatedAt:ticket.updated_at,
   description:ticket.description,assignees:[{id:technicians[0].id,name:technicians[0].full_name}],anomalyData:ticket.anomaly_data,
-  report:{submittedAt:ticket.completed_at,severity:'medium',notes:'Sample inspection notes for the component gallery.',rootCause:'Debris near the rain gauge.',correctiveAction:'Cleaned the gauge and checked its alignment.',issueResolved:true,round:1},
+  report:{submittedAt:ticket.completed_at,severity:'medium',notes:'Sample inspection notes.',rootCause:'Debris near the rain gauge.',correctiveAction:'Cleaned the gauge and checked its alignment.',issueResolved:true,round:1},
 };
 
 export function fixtureFor(key: unknown): unknown {
@@ -41,26 +41,4 @@ export function fixtureFor(key: unknown): unknown {
   if (path === '/api/technicians' || path === '/api/tickets/technicians') return technicians;
   if (path === '/api/reports') return { pending: [], follow_up: [], approved: [] };
   return [];
-}
-
-export function createFixtureApi() {
-  let sample = structuredClone(ticket);
-  return async (request: Request): Promise<Response | undefined> => {
-    const path = new URL(request.url).pathname;
-    if (request.method === 'POST' && path === '/api/tickets') {
-      const body = await request.json();
-      return Response.json({ ...sample, ...body, id: 'design-ticket', ticket_number: 24, status: 'assigned' });
-    }
-    if (path === '/api/tickets/design-ticket/technicians' && request.method === 'POST') {
-      const body = await request.json();
-      sample = { ...sample, technicians: technicians.filter(tech=>body.technician_ids.includes(tech.id)).map(tech=>({...tech,assigned_at:'2023-10-01T00:00:00Z'})) };
-      return Response.json(sample);
-    }
-    if (path.startsWith('/api/tickets/design-ticket/technicians/') && request.method === 'DELETE') {
-      const id = path.split('/').at(-1);
-      sample = { ...sample, technicians: sample.technicians.filter(tech=>tech.id!==id) };
-      return Response.json(sample);
-    }
-    return undefined;
-  };
 }

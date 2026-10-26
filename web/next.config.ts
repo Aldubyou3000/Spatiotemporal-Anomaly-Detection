@@ -39,13 +39,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Keep production builds from clearing a running development server's files.
+  distDir: isDev ? ".next-dev" : ".next",
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
-      ...(process.env.NODE_ENV === "development" ? [{ source: "/ui-library/preview", headers: [
-        { key: "X-Frame-Options", value: "SAMEORIGIN" },
-        { key: "Content-Security-Policy", value: csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
-      ] }] : []),
     ];
   },
   async rewrites() {

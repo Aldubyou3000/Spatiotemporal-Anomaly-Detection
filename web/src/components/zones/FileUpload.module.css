@@ -3,7 +3,7 @@
 .hasFiles .uploadIcon { display: none; }
 .dragOver { border-color: var(--brand); background: var(--brand-soft); }
 .disabled { opacity: .5; }
-.uploadIcon { display: grid; place-items: center; flex-shrink: 0; width: var(--row-h); height: var(--row-h); border-radius: var(--r-lg); color: var(--brand); background: var(--brand-soft); }
+.uploadIcon { display: grid; place-items: center; flex-shrink: 0; width: var(--row-h); height: var(--row-h); border-radius: var(--r-lg); color: var(--brand-text); background: var(--brand-soft); }
 .uploadText { min-width: 0; }
 .hasFiles .uploadText { flex: 1; }
 .uploadTitle { margin: 0; font-size: var(--font-base); font-weight: 600; color: var(--text); }

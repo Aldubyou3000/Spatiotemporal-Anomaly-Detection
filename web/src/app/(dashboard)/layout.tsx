@@ -2,7 +2,7 @@
 
 import { SWRConfig } from "swr";
 import { AuthProvider } from "@/context/AuthContext";
-import { ZonesProvider } from "@/context/ZonesContext";
+import { ZonesProvider, useZones } from "@/context/ZonesContext";
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { Sidebar } from "@/components/dashboard/Sidebar";
@@ -16,6 +16,11 @@ function shouldRetryOnError(err: unknown): boolean {
   if (/Session expired|Not authenticated|Invalid or expired token|Account is disabled|CSRF/i.test(msg)) return false;
   // SWR error object's message is "Request failed" for 5xx; let it retry.
   return true;
+}
+
+function WorkspaceSidebar() {
+  const { result, running } = useZones();
+  return <Sidebar resultsReady={!!result && !running} />;
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -41,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <ToastProvider>
               <RunSaveController />
               <div className="h-screen flex bg-bg text-text relative overflow-hidden">
-                <Sidebar />
+                <WorkspaceSidebar />
                 <main className="dashboard-workspace flex-1 min-w-0 flex flex-col relative z-10 overflow-hidden">
                   <OfflineBanner />
                   <PageTransition>{children}</PageTransition>

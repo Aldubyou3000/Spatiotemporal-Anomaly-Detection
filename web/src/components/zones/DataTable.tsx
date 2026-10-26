@@ -1,4 +1,5 @@
 "use client";
+import { matchesSearch } from "@/lib/search";
 
 import { useMemo, useState } from "react";
 import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, Download, Search, X } from "lucide-react";
@@ -30,6 +31,7 @@ interface DataTableProps<T> {
   onDownload?: () => void;
   downloadLabel?: string;
   caption?: React.ReactNode;
+  searchPlaceholder?: string;
   /** Keys to search with the free-text box. Defaults to all columns. */
   searchKeys?: (keyof T & string)[];
   /** Column-specific dropdown filters shown beside the search box. */
@@ -44,6 +46,7 @@ export function DataTable<T>({
   onDownload,
   downloadLabel = "Download CSV",
   caption,
+  searchPlaceholder = "Search readings…",
   searchKeys,
   filterFields,
 }: DataTableProps<T>) {
@@ -60,14 +63,7 @@ export function DataTable<T>({
     const keys = searchKeys && searchKeys.length > 0 ? searchKeys : columns.map((c) => c.key);
 
     return data.filter((row) => {
-      if (q) {
-        const textMatch = keys.some((k) => {
-          const raw = (row as Record<string, unknown>)[k];
-          if (raw === null || raw === undefined) return false;
-          return String(raw).toLowerCase().includes(q);
-        });
-        if (!textMatch) return false;
-      }
+      if (q && !matchesSearch(keys.map(key => (row as Record<string, unknown>)[key]), q)) return false;
       for (const field of filterFields ?? []) {
         const chosen = dropdowns[field.key];
         if (!chosen) continue;
@@ -115,7 +111,7 @@ export function DataTable<T>({
         <div className={styles.search} data-search-field>
           <Search size={16} aria-hidden="true" />
           <input type="search" aria-label="Search table" value={search}
-            onChange={(e) => handleSearchChange(e.target.value)} placeholder="Search readings…" />
+            onChange={(e) => handleSearchChange(e.target.value)} placeholder={searchPlaceholder} />
           {search && <button type="button" onClick={() => handleSearchChange("")} aria-label="Clear search"><X size={14} /></button>}
         </div>
         {(filterFields ?? []).map((field) => (
@@ -134,7 +130,7 @@ export function DataTable<T>({
 
       <div className={styles.scroll}>
         <table className={styles.table}>
-          <thead><tr>{columns.map((c) => (
+          <thead><tr className="table-heading">{columns.map((c) => (
             <th key={c.key} scope="col" style={{ width: c.width, textAlign: c.align ?? "left" }}>{c.header}</th>
           ))}</tr></thead>
           <tbody>

@@ -3,6 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const css = fs.readFileSync(path.join(__dirname,'../src/app/globals.css'),'utf8');
+test('ticket spacing references defined theme tokens',()=>{
+  const ticketCss = fs.readFileSync(path.join(__dirname,'../src/components/tickets/Tickets.module.css'),'utf8');
+  const defined = new Set([...css.matchAll(/(--space-[\w-]+)\s*:/g)].map(match=>match[1]));
+  for (const [,token] of ticketCss.matchAll(/var\((--space-[\w-]+)\)/g)) assert.ok(defined.has(token),`${token} is undefined, so the browser ignores its spacing`);
+});
 function tokens(theme) {
   const body = css.match(new RegExp(`\\[data-theme="${theme}"\\]\\s*\\{([^}]+)`))[1];
   return Object.fromEntries([...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map(([,key,value])=>[key,value.trim()]));
@@ -18,8 +23,8 @@ function contrast(a,b) {
 for(const theme of ['light','dark']) test(`${theme} surfaces have distinct levels and readable supporting text`,()=>{
   const values=tokens(theme);
   assert.ok(contrast(values['--bg'],values['--surface'])>=1.15,'canvas and content should be visibly distinct');
-  for(const foreground of ['--text','--text-secondary','--text-muted']) {
-    for(const background of ['--bg','--surface','--surface-alt']) assert.ok(contrast(values[foreground],values[background])>=4.5,`${foreground} on ${background}`);
+  for(const foreground of ['--text','--text-secondary','--text-muted','--text-tertiary','--brand-text']) {
+    for(const background of ['--bg','--surface','--surface-alt','--surface-sunken']) assert.ok(contrast(values[foreground],values[background])>=4.5,`${foreground} on ${background}`);
   }
   for(const size of ['xs','sm','md','lg','xl']) assert.equal(values[`--shadow-${size}`],'none');
 });

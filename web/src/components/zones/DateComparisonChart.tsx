@@ -43,15 +43,12 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
 
   const axis = "var(--text-secondary)";
   const gridColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
-  const brandColor = `var(--chart-brand, ${isDark ? "#3B82F6" : "#2563EB"})`;
-  const dangerColor = `var(--chart-high, ${isDark ? "#FF6B6B" : "#E53535"})`;
-  const tealColor = `var(--chart-low, ${isDark ? "#2DD4BF" : "#0D9488"})`;
+  const brandColor = isDark ? "#3B82F6" : "#2563EB";
+  const dangerColor = isDark ? "#FF6B6B" : "#E53535";
+  const tealColor = isDark ? "#2DD4BF" : "#0D9488";
   const neutralColor = "var(--text-tertiary)";
 
-  const fontXs =
-    typeof window !== "undefined"
-      ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--font-xs") || "12")
-      : 12;
+  const fontXs = "var(--font-xs)";
 
   function barColor(b: DateComparisonBar): string {
     if (!b.isSelected) return neutralColor;
@@ -79,15 +76,15 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
           dataKey="stationId"
           axisLine={false}
           tickLine={false}
-          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-jetbrains)" }}
+          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-ui)" }}
           interval={0}
           tickMargin={8}
         />
         <YAxis
           axisLine={false}
           tickLine={false}
-          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-jetbrains)" }}
-          width={44}
+          tick={{ fontSize: fontXs, fill: axis, fontFamily: "var(--font-ui)" }}
+          width={56}
           tickMargin={6}
         />
         <Tooltip
@@ -97,7 +94,7 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
             border: "1px solid var(--border)",
             borderRadius: 8,
             boxShadow: "var(--shadow-md)",
-            fontFamily: "var(--font-geist)",
+            fontFamily: "var(--font-ui)",
             fontSize: fontXs,
             color: "var(--text)",
           }}
@@ -133,7 +130,7 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
                   y={ly}
                   textAnchor="middle"
                   fontSize={fontXs}
-                  fontFamily="var(--font-jetbrains)"
+                  fontFamily="var(--font-ui)"
                   fill="var(--text-secondary)"
                 >
                   {value}

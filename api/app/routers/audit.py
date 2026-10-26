@@ -45,10 +45,11 @@ def _build_query(
     from_dt: str | None,
     to_dt: str | None,
     enriched: bool = True,
+    search: str | None = None,
 ):
     """Return a supabase-py query builder with all filters applied."""
     table = "audit_log_enriched" if enriched else "audit_log"
-    q = sb.table(table).select("*")
+    q = sb.table(table).select("*", count="exact")
 
     # Hide backend/system events from the Audit Logs page
     hidden_events = [
@@ -63,6 +64,14 @@ def _build_query(
     ]
     for hidden in hidden_events:
         q = q.neq("event", hidden)
+
+    if search and search.strip():
+        term = search.strip().replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+        pattern = json.dumps(f"%{term}%")
+        fields = ["event", "entity_type", "ip", "credential"]
+        if enriched:
+            fields += ["actor_name", "actor_email"]
+        q = q.or_(",".join(f"{field}.ilike.{pattern}" for field in fields))
 
     if event:
         q = q.eq("event", event)
@@ -94,6 +103,7 @@ def list_audit_logs(
     entity_type: str | None = Query(None, description="e.g. 'ticket', 'inspection_report'"),
     entity_id: str | None = Query(None),
     ip: str | None = Query(None),
+    search: str | None = Query(None, max_length=200),
     success: bool | None = Query(None),
     from_dt: str | None = Query(None, description="ISO-8601 lower bound, e.g. '2026-01-01T00:00:00Z'"),
     to_dt: str | None = Query(None, description="ISO-8601 upper bound"),
@@ -106,29 +116,12 @@ def list_audit_logs(
     q = _build_query(
         sb,
         event=event, user_id=user_id, entity_type=entity_type,
-        entity_id=entity_id, ip=ip, success=success,
+        entity_id=entity_id, ip=ip, success=success, search=search,
         from_dt=_parse_dt(from_dt), to_dt=_parse_dt(to_dt),
     )
 
-    # Total count (Supabase returns count via a separate head request)
-    count_res = q.order("id", desc=True).execute()
-    total = len(count_res.data or [])
-
-    # Paginated page
-    rows = (
-        _build_query(
-            sb,
-            event=event, user_id=user_id, entity_type=entity_type,
-            entity_id=entity_id, ip=ip, success=success,
-            from_dt=_parse_dt(from_dt), to_dt=_parse_dt(to_dt),
-        )
-        .order("id", desc=True)
-        .range(offset, offset + limit - 1)
-        .execute()
-        .data or []
-    )
-
-    return {"total": total, "items": rows}
+    response = q.order("id", desc=True).range(offset, offset + limit - 1).execute()
+    return {"total": response.count or 0, "items": response.data or []}
 
 @router.get("/export")
 @limiter.limit("5/minute")
@@ -140,6 +133,7 @@ def export_audit_csv(
     entity_type: str | None = Query(None),
     entity_id: str | None = Query(None),
     ip: str | None = Query(None),
+    search: str | None = Query(None, max_length=200),
     success: bool | None = Query(None),
     from_dt: str | None = Query(None),
     to_dt: str | None = Query(None),
@@ -150,7 +144,7 @@ def export_audit_csv(
         _build_query(
             sb,
             event=event, user_id=user_id, entity_type=entity_type,
-            entity_id=entity_id, ip=ip, success=success,
+            entity_id=entity_id, ip=ip, success=success, search=search,
             from_dt=_parse_dt(from_dt), to_dt=_parse_dt(to_dt),
         )
         .order("id", desc=True)

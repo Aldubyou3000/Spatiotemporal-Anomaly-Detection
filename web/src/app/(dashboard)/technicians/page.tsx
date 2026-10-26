@@ -1,4 +1,5 @@
 "use client";
+import { matchesSearch } from "@/lib/search";
 
 import { useMemo, useState } from "react";
 import { useTechnicianProfiles, useTicketTechnicians } from "@/hooks/useTechnicians";
@@ -199,9 +200,9 @@ function CreateModal({
           message={
             <>
               An account for <strong style={{ color: "var(--text)" }}>{fullName.trim()}</strong> (
-              <span style={{ fontFamily: "var(--font-mono)" }}>@{username.trim().toLowerCase()}</span>) will be created and
+              <span style={{ fontFamily: "var(--font-ui)" }}>@{username.trim().toLowerCase()}</span>) will be created and
               can sign in immediately with the temporary password you set. Make sure the email{" "}
-              <span style={{ fontFamily: "var(--font-mono)" }}>{email.trim().toLowerCase()}</span> is correct.
+              <span style={{ fontFamily: "var(--font-ui)" }}>{email.trim().toLowerCase()}</span> is correct.
             </>
           }
           confirmLabel="Create account"
@@ -252,7 +253,7 @@ function TechRow({ technician, workload }: { technician: TechnicianProfile; work
             <div style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" }}>
               {technician.full_name}
             </div>
-            <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+            <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", fontFamily: "var(--font-ui)" }}>
               @{technician.username}
             </div>
           </div>
@@ -320,19 +321,13 @@ export default function TechniciansPage() {
 
   const filtered = useMemo(() => {
     if (!query.trim()) return technicians;
-    const q = query.toLowerCase();
-    return technicians.filter(
-      (t) =>
-        t.full_name.toLowerCase().includes(q) ||
-        t.username.toLowerCase().includes(q) ||
-        t.email.toLowerCase().includes(q)
-    );
+    return technicians.filter(t => matchesSearch([t.full_name, t.username, t.email], query));
   }, [technicians, query]);
 
   if (authLoading) {
     return (
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
-        <p style={{ color: "var(--text-tertiary)", fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)" }}>Loading session…</p>
+        <p style={{ color: "var(--text-tertiary)", fontSize: "var(--font-sm)", fontFamily: "var(--font-ui)" }}>Loading session…</p>
       </div>
     );
   }
@@ -391,32 +386,13 @@ export default function TechniciansPage() {
               </span>
             </div>
             {/* Search */}
-            <div style={{ position: "relative", display: "flex", alignItems: "center", width: 240 }}>
-              <Search
-                size={13}
-                style={{ position: "absolute", left: 10, color: "var(--text-muted)", pointerEvents: "none" }}
-              />
-              <input data-search-field aria-label="Search technicians"
+            <div data-search-field style={{ width: "240px", maxWidth: "100%" }}>
+              <Search size={16} aria-hidden="true" />
+              <input aria-label="Search technicians"
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search technicians…"
-                style={{
-                  width: "100%",
-                  height: 30,
-                  paddingLeft: 30,
-                  paddingRight: 10,
-                  borderRadius: "var(--r-md)",
-                  border: "1px solid var(--border)",
-                  background: "var(--surface-alt)",
-                  color: "var(--text)",
-                  fontSize: "var(--font-sm)",
-                  outline: "none",
-                  fontFamily: "inherit",
-                  transition: "border-color 0.12s ease",
-                }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
               />
             </div>
           </div>
@@ -426,21 +402,10 @@ export default function TechniciansPage() {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ background: "var(--surface-alt)" }}>
+                  <tr className="table-heading">
                     {["Account", "Email / Phone", "Active Load", "Status", "Joined"].map((col) => (
                       <th
-                        key={col}
-                        style={{
-                          padding: "9px 20px",
-                          fontSize: "var(--font-xs)",
-                          fontWeight: 600,
-                          letterSpacing: "0.06em",
-                          textTransform: "uppercase",
-                          color: "var(--text-muted)",
-                          textAlign: "left",
-                          borderBottom: "1px solid var(--border)",
-                          whiteSpace: "nowrap",
-                        }}
+                        key={col} scope="col"
                       >
                         {col}
                       </th>
@@ -491,21 +456,10 @@ export default function TechniciansPage() {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ background: "var(--surface-alt)" }}>
+                  <tr className="table-heading">
                     {["Account", "Email / Phone", "Active Load", "Status", "Joined"].map((col) => (
                       <th
-                        key={col}
-                        style={{
-                          padding: "9px 20px",
-                          fontSize: "var(--font-xs)",
-                          fontWeight: 600,
-                          letterSpacing: "0.06em",
-                          textTransform: "uppercase",
-                          color: "var(--text-muted)",
-                          textAlign: "left",
-                          borderBottom: "1px solid var(--border)",
-                          whiteSpace: "nowrap",
-                        }}
+                        key={col} scope="col"
                       >
                         {col}
                       </th>

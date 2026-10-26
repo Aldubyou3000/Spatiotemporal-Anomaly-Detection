@@ -133,7 +133,7 @@ web/src/
 │   └── page.tsx                      ← Redirects to /zones or /login
 │
 ├── components/
-│   ├── ui/                           ← Generic primitives (Badge, Button, Card, Modal, ConfirmDialog, Tabs…)
+│   ├── ui/                           ← Generic primitives (Badge, Button, Modal, ConfirmDialog, Tabs…)
 │   ├── dashboard/                    ← Shell components (Sidebar, Header, PageTransition)
 │   ├── providers/                    ← RealtimeProvider (mounts the SSE EventSource once)
 │   ├── zones/                        ← Pipeline result tabs (OverviewTab, StationMap, etc.)

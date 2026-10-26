@@ -455,3 +455,233 @@ Applied existing danger tokens to warningCount only. No behavior, reference, orp
 
 ## [2026-10-26] Refine Nearby stations and Station summary
 Grouped nearby selector, clarified distance hierarchy, tightened summary rows and moved repeated instructions into shared accessible help. No new state or data changes.
+
+
+## [2026-10-26] Align History with Zones theme
+Integrated filters with saved-run panel, labelled date range, neutralized icons/separators and added review progress. Existing search/pagination/navigation logic retained.
+
+
+## [2026-10-26] Enable History sort and automatic filtering
+Added server-side latest/oldest ordering and connected shared Select. Removed Apply filters; debounced search and immediate date changes update SWR filters, preserving sort and resetting page. Added UI interaction and API query/validation regressions.
+
+
+## [2026-10-26] Show retained Zones results in sidebar
+Added subtle success badge/dot with an accessible description, using existing ZonesContext through dashboard layout. History sort/filter tests, sidebar checks, API History tests and TypeScript passed.
+
+
+## [2026-10-26] Align History toolbar controls
+Grouped sort with search and dates, removed duplicate visual cues and split date controls into matching fields. Reused existing components; no new shared candidate or orphan module.
+
+
+## [2026-10-26] Standardize search and date field appearance
+Shared Zones-inspired field chrome across seven search surfaces; removed per-page focus mutations and duplicate date-input outlines. Preserved local widths, search handlers, native date validation and filtering.
+
+
+## [2026-10-26] Fix search behavior by context
+Repaired Audit general search/count/export, fetched every ticket summary page for local search, searched all Data columns, normalized station/team/library text matching, and explicitly labeled the Raw preview scope. Added interaction/pagination/query regression checks; no migration or algorithm change.
+
+
+## [2026-10-26] Surface station prefix matches in Data search
+Rank station prefixes before pagination so N shows Napindan first while retaining substring matches. Clearing restores source order. TypeScript and 17 focused checks passed; live browser not checked.
+
+
+## [2026-10-26] Replace substring matching with prefix filtering
+Reproduced N incorrectly including Mandaluyong in a failing regression, then changed shared client matching to field/word prefixes and deleted ranking. Reference: https://mui.com/material-ui/react-autocomplete/#customization . No API/schema changes.
+
+
+## [2026-10-26] Match History search to visible run names
+Replaced broad hidden search_text contains query with displayed-title prefix and a null-title filename fallback. Regression covers h and pre-pagination query behavior. Tickets confirmed to use shared prefix matching.
+
+
+## [2026-10-26] Apply Zones prefix rules to ticket numbers
+Removed exact ticket-number matching. Plain numbers and TKT/# forms use shared prefix filtering, including combined number/station queries. History numeric run-name prefixes remain supported.
+
+
+## [2026-10-26] Optimize prefix-search hot path
+Added blank-query and lazy-field short circuits, removed eager prefix arrays, and normalized each query word once. Reproduced unnecessary field processing with a failing regression, then passed it. Synthetic 100k-comparison benchmark improved N from 473 to 140ms and date prefixes from 444 to 97ms with identical counts.
+
+
+## [2026-10-26] Simplify reading-table headers
+Removed shaded band; used readable label sizing, consistent height/insets and a single boundary line in shared DataTable CSS. No table data or interaction changes.
+
+
+## [2026-10-26] Apply table-header styling across the dashboard
+Unified Data, History list/details, Technicians loaded/skeleton, Audit and Nearby stations column headers through .table-heading. Removed filled bands and uppercase typography while preserving alignment and behavior.
+
+
+## [2026-10-26] Match History column labels to Data
+Pinned matching font size, weight and label color in scoped header selectors instead of relying on differing div/th defaults. Retained History column alignment and divider.
+
+
+## [2026-10-26] Compact the saved-run detail page
+Limited summary width, grouped metrics beside review progress, reduced section spacing and made empty linked-ticket content compact. Retained all metadata, files, counts, downloads and ticket links.
+
+
+## [2026-10-26] Simplify expanded run metadata
+Grouped source files/stations beside cleaning details, removed bold filename emphasis, aligned file sizes and de-emphasized version metadata. Retained complete filenames via title, cleaning facts, stations and native disclosure.
+
+
+## [2026-10-26] Separate History canvas from content width
+Extended the existing workspace background to fill the page and kept centered summary cards compact inside it, removing the floating background slab.
+
+
+## [2026-10-26] Integrate summary back navigation into Header
+Replaced standalone All runs link with an accessible icon-only back button before the breadcrumb, reusing the saved-results pattern.
+
+
+## [2026-10-26] Refine header back-button appearance
+Removed square borders, increased arrow legibility/hit area and tightened breadcrumb spacing on History summary/results navigation.
+
+
+## [2026-10-26] Restore All runs above the summary
+Moved the summary back link from Header.leading to its original position in the content column at user request.
+
+
+## [2026-10-26] Research website typography and create font comparison
+Audited current font sizes, font families, density overrides, chart labels, UI Library draft behavior and text contrast. Recorded multi-source findings in docs/typography-research.md; larger 16px/14px font comparison is a planning preview, with typeface selection pending. No website implementation changes.
+
+## [2026-10-26] Approved Roboto website typography
+Applied Roboto, 16px body/14px supporting text, density-independent roles and stronger neutral text across the website. Updated shared controls, login, navigation, charts/map and local UI Library. Fixed reviewed login contrast, short-screen modal scrolling and rem defaults in preview sliders. TypeScript and all 119 component/contrast regressions passed. Initial production build completed; final compile/typecheck passed but page-data collection reported missing generated route modules. Live browser/zoom review was blocked by UI automation's URL-confidence stop. See docs/typography-research.md.
+
+## [2026-10-26] Remove reading-list status badges
+Removed visible badges consistently across all review queue filters, per user clarification. Retained accessible status text and detail-panel status. Updated the existing regression; no new component or repeated behavior.
+
+## [2026-10-26] Restore badges in Reviewed and All only
+Applied the user's refined badge rule: compact Needs review rows; visible status badges in Reviewed and All. Focused regression passed. Existing shared component reused; no new imports, orphan references or duplicated behavior.
+
+## [2026-10-26] Darken sidebar text
+Changed sidebar labels and subtitle to primary theme text instead of gray supporting roles; kept active and status colors. Reused existing tokens and component, with no new duplicated behavior.
+
+## [2026-10-26] Fix lingering map highlights and movement
+Scoped blue station emphasis to summary/nearby views, distinguished neighbors with neutral outlines, and prevented viewport resets when only reading metadata/order changes. Added selection/clear, tab, coordinate and effect-remount regressions. TypeScript and focused tests passed; live animation playback unverified.
+
+## [2026-10-26] Add visible flagged-station glow
+Added a subtle 2.4-second red halo pulse to the shared map after the user clarified that actual glow was missing. Foreground marker sizes stay fixed; reduced-motion uses a steady halo. Ten map checks, CSS parsing and TypeScript passed. Live playback unverified. Existing component/CSS reused; no new module or orphan reference.
+
+
+## [2026-10-26] Station warning count visibility
+Made the shared Overview station-warning count a bold solid-red circular badge. CSS parsed and six overview checks passed; live visuals unverified. Reviewed shared-candidates/orphans: no new duplication or reference changes.
+
+## [2026-10-26] Soften station warning counter
+Replaced the rejected solid red circle with a smaller soft-red rounded badge, semibold red digits and a subtle outline. CSS parsed; live visuals unverified. Existing shared-candidates/orphans reviewed: no new abstraction or reference changes.
+
+## [2026-10-26] Remove sidebar section label
+Removed Workspace from expanded navigation. Branding recommendation only: keep logo/name, omit subtitle. Reviewed shared-candidates and orphans: no new duplication or reference changes. Cosmetic deletion only; no runtime tests run.
+
+
+
+## [2026-10-26] Optimize History opening and simplify sidebar branding
+Measured warm database reads, reused listed metadata for immediate summaries, skipped known-empty ticket requests, and prefetched immutable results on link intent. Replaced repeated aggregate existence checks with id-only reads and narrowed response columns. Removed sidebar subtitle per user request. TypeScript, 26 backend and 52 frontend checks passed; live database read verification performed, browser end-to-end timing not measured. Shared-candidates/orphans reviewed: existing hooks/components reused, no new module or rule-of-3 candidate. No migration or database write.
+
+## [2026-10-26] Enlarge sidebar logo and match navigation icon colors
+Increased the mark from 36px to 44px in both modes and matched nav icons to text, including selected and hover states. Existing component/tokens reused; shared-candidates and orphans checked, with no reference or rule-of-3 changes. Cosmetic change; live browser appearance not checked.
+
+
+## [2026-10-26] Reduce sidebar navigation size
+Reduced labels to the existing 14px font-xs role and icons to 18px in both modes. Retained branding sizes, row hit areas and matching colors. Shared-candidates/orphans checked: no new repetition or reference changes. Cosmetic-only; live browser appearance not checked.
+
+
+## [2026-10-26] Plan familiar Tickets workspace revamp
+Reviewed the supplied screenshot, ticket list/detail/dock/review code, lifecycle, SWR hooks, status mappings and Zones styling. Saved docs/TICKETS_WORKSPACE_PLAN.md with layout, information hierarchy, state/action rules, typography, colors, responsive behavior and verification criteria. Planning only; no application code or live data changed.
+
+
+## [2026-10-26] Revert Tickets workspace redesign
+Restored the prior Tickets UI and actions at the user's request; retained existing search, typography, theme and pagination work. Removed the temporary Tickets stylesheet and redesign-only state/hooks. Checked shared candidates and orphan references.
+
+
+## [2026-10-26] Refine Tickets without adding navigation
+Implemented the user's selected existing-layout cleanup: clearer queue rows, shared filters/counts, quiet ticket-only selection without blue streak, calmer metadata/section hierarchy and a single dock control. Retained original search/selection/lifecycle/confirmations/assignment/review behavior. Removed unused dock animation CSS; aligned skeletons. 37 component/search checks, TypeScript and CSS/token checks passed. Browser visuals and live mutations not exercised.
+
+Final Tickets review: fixed a short-screen clipping risk by making the dock shrink within 55% of its detail pane instead of using a viewport-height limit. Four targeted ticket checks, CSS parsing and TypeScript passed after the correction.
+
+
+## [2026-10-26] Make ticket management control easier to recognize
+Added a subtle inset background and stronger icon/chevron to the existing dock toggle. Presentation-only; expansion/actions unchanged. CSS parsed and focused dock regression passed. Shared-candidates/orphans checked: no new behavior or references.
+
+
+## [2026-10-26] Correct ticket dock background blending
+Replaced the rejected gray fill with surface white and a visible neutral outline; strengthened the icon and dark chevron. Pure CSS, no new references or shared candidates. CSS parsing passed; browser appearance unverified.
+
+
+## [2026-10-26] Integrate ticket dock with the detail panel
+Removed the rejected framed full-width toggle and icon tile. Reused secondary Button for Manage/Review beside a flush Assignment/Inspection review footer. Focused dock regression, CSS and TypeScript checked; browser visuals unverified. No new references/orphan modules or shared extraction candidates.
+
+
+## [2026-10-26] Clarify ticket report hierarchy
+Grouped identity/date facts into one quiet band; strengthened main section headings and added subtle inter-section separators. Placed current inspection before assignment history and retained all report/evidence/action content. The new named-section/order test failed first, then all 32 component checks, CSS parsing and TypeScript passed. Existing modules reused; no orphan/reference changes. Live browser appearance unverified.
+
+
+## [2026-10-26] Slim ticket queue; plan report density
+Removed technician identity from left queue rows and combined station/time into one final line; tightened row spacing and loader. Existing assignment/detail/log identities retained. New queue regression was observed failing before implementation. Wrote a proposed report-density/reading-order plan; no right-pane changes applied in this step.
+
+
+## [2026-10-26] Balance ticket rows and add faint separators
+Restored moderate row spacing, moved update time beside ID/status to free station space, and added the requested faint line between tickets. Names remain absent; title/status/priority/time and interactions retained. Queue placement test observed failing before the change. No new runtime references or shared-candidate/orphan changes.
+
+
+## [2026-10-26] Clean ticket separator corners
+Replaced touching full-width row borders with inset decorative separators and a minimal gap from rounded selection fills. Shared-candidates/orphans unchanged: CSS-only existing module. CSS parsing checked; live browser appearance unverified.
+
+
+## [2026-10-26] Revert separator spacing; clip only the excess
+Restored faint border separators without added gaps/inset pseudo-elements. Rounded wrapper clipping trims the corner excess. CSS-only existing module; no orphan/shared-candidate changes. CSS parsed; live appearance unverified.
+
+
+## [2026-10-26] Remove curved separator shape
+Deleted wrapper rounding/clipping; retained only the plain 1px divider between tickets. CSS-only correction, no new references/candidates. CSS parsed; live appearance unverified.
+
+
+## [2026-10-27] Shorten only ticket divider ends
+Cut visible line endpoints back by --r-lg while preserving the original border height and all row spacing. No curved borders or wrapper shapes. CSS-only existing module; no reference/shared-candidate/orphan changes. CSS parsing checked; live appearance unverified.
+
+
+## [2026-10-27] Apply ticket report density plan
+Replaced oversized information bands with compact context/notices and grouped historical sections below current evidence. Exact dates retained; timestamp ages moved to tooltips. Tightened field/timeline gaps and skeleton. Grouping/notice tests failed before implementation and passed afterward; source review found no material issue. CSS/token and TypeScript checks passed; live browser unavailable.
+
+## [2026-10-27] Ticket technician icon
+Added the existing Users icon to the assignment Manage button; retained the control size and inherited text color. Checked shared candidates and orphan references; no new modules.
+
+## [2026-10-27] Assigned avatars beside Manage
+Replaced the newly added button glyph with existing technician initial avatars next to the button, per the user reference. Shared candidates/orphans checked; existing helper reused.
+
+## [2026-10-27] Improve ticket detail readability
+Restored clearer fact alignment, compact badges, date/time hierarchy, follow-up notice and section spacing using current theme tokens and the supplied old-layout reference. Retained History/evidence/actions. TypeScript and 35 render checks passed; no live visual check. Shared/orphan references reviewed.
+
+## [2026-10-27] Indent ticket detail content
+Added the approved small content indent beneath description/inspection/activity headings; retained fact-panel and heading alignment. Existing local helpers/CSS reused; no new modules.
+
+## [2026-10-27] Fix missing ticket indentation
+Found undefined --space-3; used the existing 8px + 4px primitives for indentation and section-heading padding. Spacing regression failed before the fix and all five theme checks passed afterward. No new modules/shared candidates/orphans.
+
+## [2026-10-27] Increase ticket content indentation
+Set the existing prose/activity inset to 24px per the user clarification; headings unchanged. No new modules or dependencies.
+
+## [2026-10-27] Color priority badges
+Updated the shared priority presentation to green Low, amber Medium and red High. Existing theme-aware badges reused; shared candidates/orphans checked, no new modules.
+
+## [2026-10-27] Remove queue priority text
+Removed High priority from ticket rows and its unused class at the user request; retained the filter and detail badge. Shared/orphan references checked.
+
+## [2026-10-27] Stabilize ticket updates and controls
+Fixed spinner-driven button width changes, animated ticket form entrances, delayed assignment-prompt cleanup, cross-ticket stale data, and review expansion carrying into management. Kept cached background content and guarded first detail render until report/files load. Added seven transition/cache/draft regressions; shared UI, theme and History render checks passed. Browser motion inspection unavailable (Work browser setting disabled). No API/mobile changes.
+
+## [2026-10-27] Retire the unused local UI Library
+Removed the development-only editor/preview routes, design catalogue/styles/specimens, fake API, gallery-only tests, unused Card family and library-only docs/scratch notes. Removed preview auth/framing exceptions, inert primitive attributes, alternate Sidebar storage option, raw context exports and chart override hooks while retaining operational behavior/colors. Moved shared regression data into web/tests/fixtures.ts and retained 13 feature render checks as components-render.test.cjs; History/Overview/ticket tests no longer depend on application preview code. Updated current map/setup guidance and rechecked shared candidates/orphans: all 36 remaining component modules have runtime callers; no new shared abstraction is needed. TypeScript, 117 web checks, diff whitespace checks and clean Turbopack production builds passed. Isolated production HTTP checks confirmed login 200, six protected entry routes redirecting to login, removed library routes 404 and DENY framing. The first shared build collided with a concurrent development server's output; restored that verified server with a fresh generated cache and confirmed development login 200/protected redirect. Removed temporary verification copy/build. No API/mobile/dependency/database changes made by this cleanup; unrelated existing edits and performance snapshots retained. Authenticated live API workflows were not retested; nothing deployed.
+
+## [2026-10-27] History and shared realtime performance
+Fixed demonstrated SSE idle subscription cancellation in the shared broker and deduplicated SSE/REST cookie refresh. Reduced initial History result work with existing Next/SWR facilities, immutable-cache-aware prefetch and deferred exports/tabs. Added behavioral regression tests; 118 frontend and 54 backend checks plus TypeScript pass. Isolated History bundle comparison 299→148 kB first load. Intermittent development stall cause remains unconfirmed; browser automation unavailable. Reviewed shared candidates/orphans; no dependency, migration or algorithm changes.
+
+## [2026-10-27] Keep sidebar logo anchored on toggle
+Matched brand slot dimensions and offsets in Sidebar, removing expanded-only padding. Existing 13 component render checks and TypeScript passed; production dashboard rebuilt for local use.
+
+## [2026-10-27] Familiar sidebar toggle icons
+Replaced chevrons with standard panel open/close icons from installed Lucide, preserving sizes, state and accessible labels; added native hints. Existing 13 component checks and TypeScript passed.
+
+## [2026-10-27] Local production startup guidance
+Documented API-first startup, dev versus production web commands, and avoiding simultaneous builds/dev writes to .next. Concurrent production builds caused missing generated manifest/page files during icon delivery; stopped the conflicting project build and cleared only generated output before rebuilding.
+
+## [2026-10-27] Isolate development manifests from production builds
+Traced repeated _buildManifest.js.tmp ENOENT to the live dev server sharing .next with production output; installed Next build clears that directory. Added development-only .next-dev output and Git exclusion; production build/start retain .next. Excluded dev cache globbing after review demonstrated stale validators could break later builds; direct route declarations remain available through next-env.d.ts. The directory-isolation regression failed before and all three config/security checks passed after; TypeScript and a production build passed while the existing development server served Zones, History and its manifest successfully. Updated infrastructure map/known-bug guidance. Shared candidates/orphans reviewed: existing config/test entry points, no new modules or duplication. No dependency/API/mobile/database changes; authenticated API workflows and browser interaction untested.
+
+## [2026-10-27] Remove result-tab selection animation
+Removed shared tab underline/color transitions and panel entry fade. Preserved selected state, accessible tab associations, content mounting and all handlers.

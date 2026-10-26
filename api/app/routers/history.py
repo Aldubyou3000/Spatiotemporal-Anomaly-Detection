@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from ..core.dependencies import get_supabase, require_analyst
@@ -13,8 +14,9 @@ router = APIRouter(prefix="/api/history", tags=["history"], dependencies=[Depend
 
 @router.get("", response_model=HistoryList)
 def list_history(search: str = Query("", max_length=200), start: date | None = None, end: date | None = None,
-                 limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0, le=100_000)):
-    return service.list_runs(get_supabase(), search, start, end, limit, offset)
+                 limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0, le=100_000),
+                 sort: Literal["latest", "oldest"] = "latest"):
+    return service.list_runs(get_supabase(), search, start, end, limit, offset, sort)
 
 
 @router.get("/{run_id}", response_model=HistoryRun)
@@ -38,5 +40,6 @@ def save_review(run_id: UUID, body: ReviewChange, user: UserProfile = Depends(re
 
 
 @router.get("/{run_id}/tickets")
-def get_tickets(run_id: UUID, limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0, le=100_000)):
+def get_tickets(run_id: UUID, limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0, le=100_000),
+                 sort: Literal["latest", "oldest"] = "latest"):
     return service.linked_tickets(get_supabase(), str(run_id), limit, offset)

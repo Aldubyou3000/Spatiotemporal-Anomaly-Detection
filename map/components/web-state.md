@@ -55,7 +55,7 @@ TypeScript interfaces mirroring backend Pydantic schemas (`auth`, `tickets`, `re
 - `lib/ticketStatus.ts` is imported by the Tickets page, Reports page, and `TicketDetailBody`/`TicketActionDock`.
 
 ## Key invariants
-- Local UI Library settings are separate from live application state: `aws-sentinel-ui-library-v1` holds a validated versioned draft, while `aws-sentinel-ui-library-sidebar` isolates preview navigation state. Theme/appearance overrides live only in the frame document. Context objects are exported for sample provider composition; live provider auth/data behavior is unchanged. Preview SWR uses a separate cache and fixture middleware, and its fetch boundary prevents real API operations.
+- UI Library editor/preview state was removed on 2026-10-27. AuthContext and ThemeContext objects are private again; operational providers and hooks retain their behavior. Test-only sample data lives in `web/tests/fixtures.ts`, outside application source and bundles.
 - **Pages use hooks, not `lib/api/`.** Bypassing hooks breaks real-time (the SSE matcher won't know the cache key) and optimistic update patterns.
 - **Cache keys are the real-time contract.** Adding a new SWR key requires a matching matcher in `useRealtimeSync.ts` or live updates silently miss it.
 - `useTicketTechnicians` deliberately shares one SWR key across the Tickets and Zones pages — don't fork the key or the workload badges on Zones and the assignment dropdown on Tickets will disagree.
@@ -103,3 +103,31 @@ Navigation reminder scope correction (2026-10-25): the global click handler chec
 
 
 Review feedback geometry (2026-10-26): routine ReviewSaveStatus announcements are sr-only across loading/saving/saved; errors remain visible. Persistence/revision handling is unchanged.
+
+
+History sorting/filter flow (2026-10-26): HistoryFilters now includes latest/oldest sort; historyApi passes it in the list query and existing SWR key includes the complete filter object. Page debounce updates query state only (fetching remains in useHistoryList). Dates/sort apply immediately; query changes reset offset.
+
+
+Search completeness (2026-10-26): ticketsApi.listAll follows existing 100-row pages inside the SWR fetcher, so the board search/filter counts include tickets beyond the first 50. Empty pages stop pagination and errors propagate. Existing cache keys/invalidation remain. AuditFilters.search is shared by list/export. matchesSearch is a presentation-only helper imported by table/review/board/team/library.
+
+
+Search normalization (2026-10-26): lib/search.ts exports normalizeSearch for shared matching and table ranking. Same case/space/underscore/hyphen handling applies to relevance ordering.
+
+
+Search correction (2026-10-26): normalizeSearch is private again; matchesSearch compares prefixes of whole field values and word tokens. No substring fallback or ranking. Server History/Audit retain their existing endpoint semantics.
+
+
+Ticket search (2026-10-26): lib/search.ts adds matchesTicketSearch with typed ticket fields and optional TKT/# prefix stripping; Ticket page uses it directly. Number prefixes are strings through matchesSearch, no exact Number conversion. Both helpers are covered by search.test.cjs.
+
+
+Search hot path (2026-10-26): removed eager flatMap/map construction for every row. Query normalization is outside field comparisons; lazy field/word matching avoids unused values. Public signatures, numeric prefixes and token semantics are retained.
+
+
+History navigation cache (2026-10-26): useHistoryList exposes selectRun to seed the clicked run's summary in the provider-scoped SWR cache without overwriting an existing entry. useHistoryRun revalidates on mount while the page retains cached content. useHistoryTickets supports disabled reads and forbids previous-run data; summary disables it only for known zero ticket counts. useHistoryResults supports opt-in prefetch using its existing immutable key, shared with the results page. Reviews remain independently loaded/versioned rather than prefetched.
+
+Priority badge colors (2026-10-27): canonical PRIORITY_TONE now maps low=success (green), medium=warning (amber), high=danger (red). Existing TicketDetailBody consumes the shared mapping and theme-aware Badge. Status tones/order are unchanged.
+
+Ticket cache stability (2026-10-27): ticket list/detail/report/attachment hooks set keepPreviousData=false per key, preventing another ticket or filter's data from briefly appearing. Same-key cached data remains during revalidation; board skeletons apply only without usable data, and detail waits for initial report/files. Cache key shapes and SSE invalidation are unchanged.
+
+## History performance (2026-10-27)
+`usePrefetchHistoryResults` starts SWR preload directly on navigation intent, first checking the provider cache for the immutable snapshot. Repeated intent shares the pending preload; revisits reuse cached results. Summaries/reviews still revalidate. `client.ts` exports its existing `refreshSession` for SSE and REST to share one in-flight rotation.

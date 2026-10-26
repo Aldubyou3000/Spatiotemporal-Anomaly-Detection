@@ -1,4 +1,5 @@
 "use client";
+import { matchesSearch } from "@/lib/search";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ArrowRight, BarChart3, Check, Info, Plus, RotateCcw, Save, TrendingUp, Users } from "lucide-react";
@@ -55,7 +56,7 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
   const remaining = events.find((row) => !reviews[readingKey(row)]);
   const scoped = events.filter((row) => (mode === "high" ? row.is_anomaly : !row.is_anomaly)
     && (!station || row.station_id === station)
-    && (!query.trim() || `${row.station_id} ${row.date}`.toLowerCase().includes(query.trim().toLowerCase())));
+    && matchesSearch([row.station_id, row.date], query));
   const pendingCount = scoped.filter((row) => !reviews[readingKey(row)]).length;
   const visible = scoped.filter((row) => reviewFilter === "all" || (reviewFilter === "pending" ? !reviews[readingKey(row)] : !!reviews[readingKey(row)]));
   const selected = selectedKey === "" ? undefined : scoped.find((row) => readingKey(row) === selectedKey)

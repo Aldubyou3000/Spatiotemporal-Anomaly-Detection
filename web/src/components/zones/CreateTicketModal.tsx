@@ -341,7 +341,7 @@ export function CreateTicketModal({
           message={
             <>
               A ticket for <strong style={{ color: "var(--text)" }}>{title.trim()}</strong> at station{" "}
-              <span style={{ fontFamily: "var(--font-mono)" }}>{stationInput.trim()}</span> will be sent to{" "}
+              <span style={{ fontFamily: "var(--font-ui)" }}>{stationInput.trim()}</span> will be sent to{" "}
               <strong style={{ color: "var(--text)" }}>
                 {selectedTechs.length} technician{selectedTechs.length !== 1 ? "s" : ""}
               </strong>{" "}

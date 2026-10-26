@@ -125,7 +125,7 @@ def list_tickets(
         q = q.eq("station_id", station_id)
     if run_id:
         q = q.eq("run_id", run_id)
-    res = q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+    res = q.order("created_at", desc=True).order("id").range(offset, offset + limit - 1).execute()
     items = [_join_technicians(r) for r in (res.data or [])]
     return {"items": items, "total": res.count or 0}
 

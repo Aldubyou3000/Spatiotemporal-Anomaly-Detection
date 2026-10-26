@@ -16,6 +16,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 ) {
   const base: React.CSSProperties = {
     display: "inline-flex",
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
@@ -24,7 +25,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     border: "1px solid transparent",
     cursor: disabled || loading ? "not-allowed" : "pointer",
     opacity: disabled && !loading ? 0.5 : 1,
-    transition: "all 0.12s ease",
+    transition: "color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease",
     whiteSpace: "nowrap",
     pointerEvents: disabled || loading ? "none" : undefined,
     fontFamily: "inherit",
@@ -32,11 +33,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   };
 
   const sizeStyles: Record<Size, React.CSSProperties> = {
-    sm:      { height: 28, padding: "0 10px", fontSize: "var(--font-sm)" },
-    md:      { height: 34, padding: "0 12px" },
-    lg:      { height: 40, padding: "0 16px", fontSize: "var(--font-base)" },
-    "icon":    { height: 34, width: 34, padding: 0 },
-    "icon-sm": { height: 28, width: 28, padding: 0 },
+    sm:      { height: "var(--control-h-sm)", padding: "0 10px", fontSize: "var(--font-sm)" },
+    md:      { height: "var(--control-h)", padding: "0 12px" },
+    lg:      { height: "var(--control-h-lg)", padding: "0 16px", fontSize: "var(--font-base)" },
+    "icon":    { height: "var(--control-h)", width: "var(--control-h)", padding: 0 },
+    "icon-sm": { height: "var(--control-h-sm)", width: "var(--control-h-sm)", padding: 0 },
   };
 
   const variantStyles: Record<Variant, React.CSSProperties> = {
@@ -68,9 +69,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
   return (
     <button
-      data-ui="button"
       ref={ref}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(className)}
       style={{ ...base, ...sizeStyles[size], ...variantStyles[variant], ...style }}
       onMouseEnter={(e) => {
@@ -91,21 +92,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       }}
       {...rest}
     >
-      {loading && (
-        <span
-          style={{
-            display: "inline-block",
-            width: 13,
-            height: 13,
-            borderRadius: "50%",
-            border: "2px solid currentColor",
-            borderRightColor: "transparent",
-            animation: "spin 700ms linear infinite",
-            flexShrink: 0,
-          }}
-        />
-      )}
-      {children}
+      {loading && <span aria-hidden={true} style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", pointerEvents: "none" }}>
+        <span style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid currentColor", borderRightColor: "transparent", animation: "spin 700ms linear infinite" }} />
+      </span>}
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "inherit", gap: "inherit", minWidth: 0, opacity: loading ? 0 : 1 }}>{children}</span>
     </button>
   );
 });
