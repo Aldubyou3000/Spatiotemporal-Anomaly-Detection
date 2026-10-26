@@ -47,6 +47,89 @@ const Detail = load("app/(dashboard)/history/[id]/page").default;
 const { ToastProvider } = load("components/ui/Toast");
 const render = (Component) => renderToStaticMarkup(React.createElement(ToastProvider, null, React.createElement(Component)));
 
+test("Data defaults to Cleaned and preserves search and cleaned filters across version changes", () => {
+  cache.clear();
+  const states = { results: [], table: [] }; let scope = "results", cursor = 0;
+  reactOverride = { ...React, useMemo: fn => fn(), useState: initial => {
+    const values = states[scope], index = cursor++;
+    if (!(index in values)) values[index] = typeof initial === "function" ? initial() : initial;
+    return [values[index], next => { values[index] = typeof next === "function" ? next(values[index]) : next; }];
+  } };
+  function find(node, match) {
+    if (!node || typeof node !== "object") return null;
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
+    return null;
+  }
+  try {
+    const { ZoneResults } = load("components/zones/ZoneResults");
+    const { result } = load("components/design/fixtures");
+    const renderResults = () => { scope = "results"; cursor = 0; return ZoneResults({ result, defaultTab: "data" }); };
+    const tableElement = tree => find(tree, n => n.type?.name === "DataTable");
+    const renderTable = tree => { scope = "table"; cursor = 0; const el = tableElement(tree); return el.type(el.props); };
+    let tree = renderResults();
+    assert.ok(find(tree, n => n.type?.name === "Tab" && n.props.value === "data"));
+    assert.equal(find(tree, n => n.type?.name === "Tab" && n.props.value === "neighbors"), null);
+    assert.equal(find(tree, n => n.type?.name === "Tab" && ["raw", "cleaned"].includes(n.props.value)), null);
+    assert.equal(tableElement(tree).props.data, result.cleaned_data);
+    assert.equal(find(tree, n => n.type?.name === "TabPanel" && n.props.value === "data").props.keepMounted, true);
+    let table = renderTable(tree);
+    find(table, n => n.type === "input" && n.props["aria-label"] === "Search table").props.onChange({ target: { value: "station" } });
+    find(table, n => n.type?.name === "Select").props.onChange("true");
+    find(tree, n => n.type === "button" && n.props.children === "Raw").props.onClick();
+    tree = renderResults(); table = renderTable(tree);
+    assert.equal(tableElement(tree).props.data, result.raw_preview);
+    assert.equal(tableElement(tree).props.filterFields, undefined);
+    assert.equal(find(table, n => n.type === "input" && n.props["aria-label"] === "Search table").props.value, "station");
+    find(table, n => n.type === "input" && n.props["aria-label"] === "Search table").props.onChange({ target: { value: "" } });
+    table = renderTable(tree);
+    assert.equal(find(table, n => n.type?.name === "Button" && n.props.children === "Clear filters"), null, "inactive cleaned filter must not show a filtered raw state");
+    find(tree, n => n.type === "button" && n.props.children === "Cleaned").props.onClick();
+    tree = renderResults(); table = renderTable(tree);
+    assert.equal(find(table, n => n.type?.name === "Select").props.value, "true");
+  } finally { reactOverride = undefined; cache.clear(); }
+});
+
+test("review opens the flagged Data view and keeps exports out of review", () => {
+  cache.clear();
+  let cursor = 0; const values = [];
+  reactOverride = { ...React, useMemo: fn => fn(), useState: initial => {
+    const i = cursor++;
+    if (!(i in values)) values[i] = initial;
+    return [values[i], next => { values[i] = next; }];
+  } };
+  function find(node, match) {
+    if (!node || typeof node !== "object") return null;
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
+    return null;
+  }
+  try {
+    const { ZoneResults } = load("components/zones/ZoneResults");
+    const { result: fixture } = load("components/design/fixtures");
+    const high = { station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true };
+    const low = { station_id: "B", date: "2023-01-01", rainfall: 0, is_anomaly: false, is_low_anomaly: true };
+    const normal = { station_id: "C", date: "2023-01-01", rainfall: 3, is_anomaly: false };
+    const result = { ...fixture, flagged_data: [high, low, normal] };
+    const reviews = { '["A","2023-01-01"]': { status: "anomaly" } };
+    for (const fitViewport of [true, false]) {
+      values.length = 0;
+      const render = () => { cursor = 0; return ZoneResults({ result, reviews, fitViewport, defaultTab: "anomalies" }); };
+      let tree = render();
+      assert.equal(find(tree, n => n.type?.name === "ExportMenu"), null);
+      assert.equal(find(tree, n => n.type?.name === "FullAnomalyTable"), null);
+      find(tree, n => n.type?.name === "AnomalyReportTab").props.onOpenData();
+      tree = render();
+      assert.equal(find(tree, n => n.type?.name === "Tabs").props.value, "data");
+      assert.ok(find(tree, n => n.type?.name === "ExportMenu"));
+      const table = find(tree, n => n.type?.name === "DataTable");
+      assert.deepEqual(table.props.data.map(row => row.station_id), ["A", "B"]);
+      assert.equal(table.props.data[0].review_status, "anomaly");
+      assert.equal(table.props.data[1].review_status, "needs_review");
+      assert.equal(table.props.filterFields[0].key, "review_status");
+    }
+  } finally { reactOverride = undefined; cache.clear(); }
+});
 test("history keeps a multi-file processing run in a single row with review and ticket counts", () => {
   const html = render(List);
   assert.equal((html.match(/class="runRow"/g) ?? []).length, 1);
@@ -106,7 +189,7 @@ test("an open review confirmation keeps the save handler and note from before an
   const newerSave = async (_key, review) => { calls.push([2, review.note]); };
   const props = { ...actions.props, reviewer: { id: "u1", full_name: "Analyst", username: "analyst" }, onReview: originalSave };
   const first = actions.type(props);
-  const mark = find(first, (node) => node.props?.children?.[1] === " Mark as not anomaly");
+  const mark = find(first, (node) => node.props?.children?.[1] === " Not anomaly");
   assert.ok(mark);
   mark.props.onClick();
   cursor = 0;
@@ -187,4 +270,123 @@ test("live reviews retain the initial reading and its mounted note editor", () =
     assert.equal(updated.key, initial.key, "a live update must not unmount the editor and discard its draft");
     assert.equal(updated.props.review.status, "anomaly");
   } finally { reactOverride = undefined; cache.delete(reportPath); }
+});
+
+test("review actions explain an unsaved run and keep both judgments neutral and unavailable until saved", () => {
+  const reportPath = path.resolve(__dirname, "../src/components/zones/AnomalyReportTab.tsx");
+  cache.delete(reportPath);
+  const cells = []; let cursor = 0;
+  reactOverride = { ...React, useEffect() {}, useMemo: fn => fn(), useRef: value => ({ current: value }),
+    useState: initial => { const i = cursor++; if (!(i in cells)) cells[i] = typeof initial === "function" ? initial() : initial;
+      return [cells[i], value => { cells[i] = typeof value === "function" ? value(cells[i]) : value; }]; } };
+  const find = (node, match) => {
+    if (!node || typeof node !== "object") return null;
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
+    return null;
+  };
+  try {
+    const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+    const result = { run_id: "new-run", history_saved: false, flagged_data: [{ station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true }] };
+    const reviewer = { id: "one", full_name: "Analyst", username: "analyst" };
+    let saveRequests = 0;
+    const report = AnomalyReportTab({ result, reviewer, onSaveRun: () => { saveRequests++; } });
+    const actions = find(report, node => node.type?.name === "ReviewActions");
+    cells.length = 0; cursor = 0;
+    let body = actions.type(actions.props);
+    assert.ok(find(body, node => node.type === "p" && node.props.children === "Save this run to enable reviews."));
+    find(body, node => node.props?.children?.[1] === " Save to History").props.onClick();
+    assert.equal(saveRequests, 1);
+    for (const label of [" Anomaly", " Not anomaly"]) {
+      const button = find(body, node => node.props?.children?.[1] === label);
+      assert.equal(button.props.variant, "secondary");
+      assert.equal(button.props.disabled, true);
+    }
+    cursor = 0;
+    body = actions.type({ ...actions.props, requiresSave: false, onReview: async () => {} });
+    assert.equal(find(body, node => node.props?.children?.[1] === " Anomaly").props.disabled, false);
+    assert.equal(find(body, node => node.props?.children?.[1] === " Save to History"), null);
+    assert.equal(find(body, node => node.type === "p" && node.props.children === "Save this run to enable reviews."), null);
+    assert.ok(find(body, node => node.type === "p" && node.props.children === "Choose a decision, then confirm."), "guidance uses the same header slot after saving");
+    cursor = 0;
+    body = actions.type({ ...actions.props, requiresSave: false, onReview: async () => {}, busy: true });
+    assert.ok(find(body, node => node.type === "p" && node.props.children === "Saving review…"));
+  } finally { reactOverride = undefined; cache.delete(reportPath); }
+});
+
+test("the pending queue removes repeated visible badges but All restores individual review statuses", () => {
+  const reportPath = path.resolve(__dirname, "../src/components/zones/AnomalyReportTab.tsx");
+  cache.delete(reportPath);
+  const cells = []; let cursor = 0;
+  reactOverride = { ...React, useEffect() {}, useMemo: fn => fn(), useRef: value => ({ current: value }),
+    useState: initial => { const i = cursor++; if (!(i in cells)) cells[i] = typeof initial === "function" ? initial() : initial;
+      return [cells[i], value => { cells[i] = typeof value === "function" ? value(cells[i]) : value; }]; } };
+  function all(node, match) {
+    if (!node || typeof node !== "object") return [];
+    return [...(match(node) ? [node] : []), ...React.Children.toArray(node.props?.children).flatMap(child => all(child, match))];
+  }
+  try {
+    const { AnomalyReportTab } = load("components/zones/AnomalyReportTab");
+    const result = { flagged_data: ["A", "B"].map(station_id => ({ station_id, date: "2023-01-01", rainfall: 30, is_anomaly: true })) };
+    const render = () => { cursor = 0; return AnomalyReportTab({ result }); };
+    let tree = render();
+    const queue = () => all(tree, node => node.props?.className === "queueList")[0];
+    assert.equal(all(queue(), node => node.type?.name === "ReviewBadge").length, 0);
+    assert.equal(all(queue(), node => node.props?.className === "sr-only" && node.props.children === "Needs review").length, 2);
+    all(tree, node => node.type === "button" && node.props.children?.[0] === "All")[0].props.onClick();
+    tree = render();
+    assert.equal(all(queue(), node => node.type?.name === "ReviewBadge").length, 2);
+  } finally { reactOverride = undefined; cache.delete(reportPath); }
+});
+
+test("Data exports remain neutral and results are unavailable while reviews load or save", () => {
+  const source = path.resolve(__dirname, "../src/components/zones/ZoneResults.tsx");
+  cache.delete(source);
+  reactOverride = { ...React, useMemo: fn => fn(), useState: initial => [initial, () => {}] };
+  function find(node) {
+    if (!node || typeof node !== "object") return null;
+    if (node.type === "button" && node.props.children === "Results with reviews CSV") return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child); if (found) return found; }
+    return null;
+  }
+  try {
+    const { ZoneResults } = load("components/zones/ZoneResults");
+    const { result: fixture } = load("components/design/fixtures");
+    const high = { station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true };
+    const low = { station_id: "B", date: "2023-01-01", rainfall: 0, is_anomaly: false, is_low_anomaly: true };
+    const result = { ...fixture, run_id: "saved-run", history_saved: true, flagged_data: [high, low] };
+    const highReview = { '["A","2023-01-01"]': { status: "anomaly" } };
+    const complete = { ...highReview, '["B","2023-01-01"]': { status: "not_anomaly" } };
+    for (const [props, primary, disabled] of [
+      [{ reviews: {} }, false, false],
+      [{ reviews: highReview }, false, false],
+      [{ reviews: complete }, true, false],
+      [{ reviews: complete, reviewBusy: true }, false, true],
+      [{ reviews: complete, reviewsReady: false }, false, true],
+      [{ result: { ...result, history_saved: false }, reviews: complete }, false, false],
+      [{ result: { ...result, run_id: undefined, history_saved: false }, reviews: complete }, true, false],
+      [{ result: { ...result, flagged_data: [] }, reviews: complete }, false, false],
+    ]) {
+      const button = find(ZoneResults({ result, ...props, defaultTab: "data" }));
+      assert.equal(button.props.className, "menu-item");
+      assert.equal(button.props.disabled, disabled);
+    }
+  } finally { reactOverride = undefined; cache.delete(source); }
+});
+
+
+test("routine review save feedback stays out of layout while errors stay visible", () => {
+  cache.clear();
+  const { ReviewSaveStatus } = load("components/history/ReviewSaveStatus");
+  const base = { ready: true, saving: false, error: null, saveError: null, retry() {} };
+  for (const state of [base, { ...base, saving: true }, { ...base, ready: false }]) {
+    const tree = ReviewSaveStatus({ state });
+    assert.equal(tree.props.className, "sr-only", "save transitions must not insert a row above results");
+    assert.equal(tree.props.role, "status");
+  }
+  const failed = ReviewSaveStatus({ state: { ...base, saveError: "Review was not saved." } });
+  assert.equal(failed.props.className, "saveWarning");
+  assert.match(renderToStaticMarkup(failed), /Review was not saved/);
+  const loadError = ReviewSaveStatus({ state: { ...base, error: new Error("offline") } });
+  assert.match(renderToStaticMarkup(loadError), /Retry/);
 });

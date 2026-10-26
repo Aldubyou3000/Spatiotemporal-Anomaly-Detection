@@ -37,6 +37,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       )}
       <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <input
+          data-ui="input"
           ref={ref}
           id={inputId}
           type={resolvedType}
@@ -60,7 +61,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           }}
           onFocus={(e) => {
             e.currentTarget.style.borderColor = error ? "var(--danger)" : "var(--brand)";
-            e.currentTarget.style.boxShadow = error ? "0 0 0 4px rgba(220,38,38,0.12)" : "var(--shadow-focus)";
+            e.currentTarget.style.boxShadow = "none";
             rest.onFocus?.(e);
           }}
           onBlur={(e) => {

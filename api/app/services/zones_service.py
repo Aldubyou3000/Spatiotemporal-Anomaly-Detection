@@ -9,7 +9,7 @@ import io
 import math
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 import numpy as np
@@ -20,6 +20,8 @@ from ..zones import (
     zone_c_lof_anomaly_detection,
 )
 from ..schemas.zones import (
+    PipelineProgress,
+    PipelineStage,
     AnomalyEvent,
     DailyReading,
     DryStuckEvent,
@@ -145,6 +147,7 @@ def run_pipeline(file_bytes: bytes) -> ProcessResult:
 
 def run_pipeline_multi(
     files: list[tuple[str, bytes]],
+    on_progress: Callable[[PipelineProgress], None] | None = None,
 ) -> ProcessResult:
     """End-to-end zone pipeline for a batch of uploaded files.
 
@@ -154,10 +157,13 @@ def run_pipeline_multi(
     # Imported here to avoid a circular import (hmdas_converter imports from this module).
     from .hmdas_converter import convert_uploads
 
+    if on_progress:
+        on_progress(PipelineProgress())
     raw_df, conversion_stats = convert_uploads(files)
     return _run_from_dataframe(
         raw_df,
         hourly_duplicates=conversion_stats.get("hourly_duplicates_dropped", 0),
+        on_progress=on_progress,
     )
 
 
@@ -227,10 +233,16 @@ def _clean_daily_readings(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str,
 
 
 def _run_from_dataframe(
-    raw_df: pd.DataFrame, hourly_duplicates: int = 0
+    raw_df: pd.DataFrame, hourly_duplicates: int = 0,
+    on_progress: Callable[[PipelineProgress], None] | None = None,
 ) -> ProcessResult:
     """Run Zone A→B→C on an already-parsed raw frame and project to a ProcessResult."""
     start = time.perf_counter()
+    def report(stage: PipelineStage, frame: pd.DataFrame) -> None:
+        if on_progress:
+            on_progress(PipelineProgress(stage=stage, station_ids=sorted(frame["station_id"].dropna().astype(str).unique().tolist())))
+
+    report("zone_a", raw_df)
     _log_mem(f"start raw_df={len(raw_df)} rows cols={list(raw_df.columns)}")
     logger.info("[zones] _run_from_dataframe start rows=%d hourly_dups=%d", len(raw_df), hourly_duplicates)
 
@@ -241,13 +253,16 @@ def _run_from_dataframe(
     cleaned, quality_report_dict = _clean_daily_readings(raw_df)
     _log_mem(f"after Zone A cleaned={len(cleaned)}")
 
+    report("zone_b", cleaned)
     neighbors_dict = zone_b_haversine_grouping(cleaned)  # type: ignore[arg-type]
+    report("zone_c", cleaned)
     flagged, anomaly_dict = zone_c_lof_anomaly_detection(
         cleaned,  # type: ignore[arg-type]
         neighbors=neighbors_dict,
         n_neighbors=3,
     )
     # Ensure is_low_anomaly exists (back-compat for old zone_c)
+    report("finalizing", flagged)
     if "is_low_anomaly" not in flagged.columns:
         flagged["is_low_anomaly"] = False  # type: ignore[attr-defined]
 

@@ -1,0 +1,35 @@
+.panel {
+  margin-top: var(--space-2);
+  padding: var(--gap-card);
+  border-radius: var(--r-2xl);
+  background: var(--surface-alt);
+}
+
+.viewport, .tabs, .viewport .content, .viewport .anomalies {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.navigation { display: flex; align-items: center; flex-shrink: 0; min-width: 0; overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid var(--divider); }
+.tabList > [role="tab"] { min-height: 40px; padding: var(--space-2) var(--space-4); }
+.tabList > [role="tab"][aria-selected="true"] { color: var(--on-brand-soft); }
+.tabList > [role="tab"]:hover { background: var(--surface-sunken); }
+.tabList > [role="tab"]:focus-visible { outline-offset: -3px; }
+.tabList > [role="tab"] > span:last-child { bottom: 0; }
+.anomalies > :first-child { margin-top: var(--space-2); }
+@media (pointer: coarse) { .tabList > [role="tab"] { min-height: 44px; } }
+.viewport .panel { flex: 1; min-height: 0; overflow: auto; }
+.viewport .overview { overflow: hidden; }
+@media (max-width: 900px) { .viewport .overview { overflow: auto; } }
+.dataToolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--gap-card); }
+.dataToolbar p { margin: 0; color: var(--text-secondary); font-size: var(--font-sm); }
+.dataSwitch { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-1); background: var(--surface); border-radius: var(--r-lg); }
+.dataSwitch button { padding: var(--space-2) var(--space-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--font-sm); font-weight: 500; cursor: pointer; }
+.dataSwitch button:hover { background: var(--surface-sunken); }
+.dataSwitch button[aria-pressed="true"] { background: var(--surface-alt); color: var(--text); }
+.exportControl { margin-left: auto; }
+.exportMenu { position: fixed; z-index: 9999; display: flex; flex-direction: column; padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); max-width: calc(100vw - var(--space-4)); }
+.exportMenu button:disabled { opacity: .5; cursor: not-allowed; }

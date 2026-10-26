@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowRight, BarChart3, Check, Info, Plus, RotateCcw, TrendingUp, Users } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { AlertTriangle, ArrowRight, BarChart3, Check, Info, Plus, RotateCcw, Save, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -25,7 +25,10 @@ interface AnomalyReportTabProps {
   reviewer?: Reviewer | null;
   onReview?: (key: string, review: AnomalyReview | null) => void | Promise<AnomalyReview | null | void>;
   onCreateTicket?: (stationId: string, date?: string) => void;
+  onOpenData?: () => void;
+  onSaveRun?: () => void;
   reviewBusy?: boolean;
+  fillHeight?: boolean;
   renderTip?: (text: string, label?: string) => ReactNode;
 }
 
@@ -35,7 +38,7 @@ function ReviewBadge({ review }: { review?: AnomalyReview }) {
   </Badge>;
 }
 
-export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onCreateTicket, renderTip, reviewBusy = false }: AnomalyReportTabProps) {
+export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onCreateTicket, onOpenData, onSaveRun, renderTip, reviewBusy = false, fillHeight = false }: AnomalyReportTabProps) {
   const toast = useToast();
   const events = useMemo(() => flaggedReadings(result.flagged_data), [result.flagged_data]);
   const [mode, setMode] = useState<"high" | "low">(() => events.some((row) => row.is_anomaly) ? "high" : "low");
@@ -116,24 +119,22 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
     <span>Days without enough nearby readings could not be assessed.</span>
   </div>;
 
-  return <div className={styles.report}>
-    <div className={styles.intro}>
-      <h2>Review flagged readings</h2>
-      <div className={styles.progress}>
-        <span><strong>{reviewedCount}</strong> of {events.length} readings reviewed</span>
-        <progress value={reviewedCount} max={events.length} aria-label={`${reviewedCount} of ${events.length} readings reviewed`} />
-      </div>
-    </div>
+  return <div className={`${styles.report}${fillHeight ? ` ${styles.fit}` : ''}`} style={{ '--review-count-width': `${String(events.length).length}ch` } as CSSProperties}>
     <div className={styles.toolbar}>
-      <input aria-label="Search station or date" placeholder="Search station or date…" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedKey(null); }} className={styles.search} />
+      <input data-search-field aria-label="Search station or date" placeholder="Search station or date…" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedKey(null); }} className={styles.search} />
       <div className={styles.reportFilters}>
-        <div className={styles.filters} aria-label="Review status">
+        <div className={styles.filters} role="group" aria-label="Review status">
           {([['pending', 'Needs review', pendingCount], ['reviewed', 'Reviewed', scoped.length - pendingCount], ['all', 'All', scoped.length]] as const).map(([value, label, count]) =>
             <button key={value} type="button" className={styles.filter} aria-pressed={reviewFilter === value} onClick={() => { setReviewFilter(value); setSelectedKey(null); }}>
               {label} <span>{count}</span>
             </button>)}
         </div>
-        <div className={styles.filters} aria-label="System flag type">
+        {onOpenData && <button type="button" className={styles.openData} onClick={onOpenData}>Open in Data <ArrowRight size={12} /></button>}
+        <div className={styles.progress}>
+          <span><strong>{reviewedCount}</strong> of {events.length} readings reviewed</span>
+          <progress value={reviewedCount} max={events.length} aria-label={`${reviewedCount} of ${events.length} readings reviewed`} />
+        </div>
+        <div className={`${styles.filters} ${styles.flagFilters}`} role="group" aria-label="System flag type">
           {([['high', 'High', highCount], ['low', 'Low', lowCount]] as const).map(([value, label, count]) =>
             <button key={value} type="button" className={styles.filter} aria-pressed={mode === value} onClick={() => { setMode(value); setSelectedKey(null); }}>
               {label} <span>{count}</span>
@@ -154,7 +155,7 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
             return <button key={key} type="button" className={styles.reading} aria-pressed={key === currentKey} onClick={() => setSelectedKey(key)}>
               <span className={styles.station}>{row.station_id}</span>
               <span className={styles.readingMeta}><span>{row.date}</span><span>{row.rainfall.toFixed(1)} mm</span></span>
-              <ReviewBadge review={reviews[key]} />
+              {reviewFilter === "pending" ? <span className="sr-only">Needs review</span> : <ReviewBadge review={reviews[key]} />}
             </button>;
           })}
           {!visible.length && <div className={styles.empty}>
@@ -172,7 +173,7 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
               <span className={styles.systemFlag}>System flag: <strong>{mode === "high" ? "High reading" : "Low reading"}</strong></span>
             </div>
           </div>
-          {onCreateTicket && <Button size="sm" onClick={() => onCreateTicket(selected.station_id, selected.date)}><Plus size={13} /> Create ticket</Button>}
+          {onCreateTicket && <Button size="sm" variant="ghost" onClick={() => onCreateTicket(selected.station_id, selected.date)}><Plus size={13} /> Create ticket</Button>}
         </div>
         <div className={styles.comparison}>
           <div className={styles.chartToolbar}>
@@ -188,7 +189,7 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
           <div className={styles.measurements}><strong>{selected.rainfall.toFixed(1)} <span>mm recorded</span></strong>
             <div className={styles.neighborControls}>
               <span>{median === null ? "Nearby comparison unavailable" : `Nearby typical rainfall: ${Number(median.toFixed(1))} mm`}</span>
-              {evidenceView === "history" && <Button size="sm" variant={compareNeighbors ? "primary" : "secondary"} aria-pressed={compareNeighbors} disabled={!neighbors.length} onClick={() => setCompareNeighbors((value) => !value)}>
+              {evidenceView === "history" && <Button size="sm" variant="secondary" aria-pressed={compareNeighbors} disabled={!neighbors.length} onClick={() => setCompareNeighbors((value) => !value)}>
                 {compareNeighbors ? <Check size={13} /> : <Users size={13} />} Compare neighbors
               </Button>}
             </div>
@@ -229,7 +230,8 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
           </div>
         </div>
         <ReviewActions key={currentKey} row={selected} review={reviews[currentKey]} reviewer={reviewer}
-          busy={reviewBusy}
+          busy={reviewBusy} onSaveRun={onSaveRun}
+          requiresSave={!!result.run_id && result.history_saved === false}
           undoControl={undoControl}
           onSkip={nextKey ? () => { setReviewFilter("pending"); setSelectedKey(nextKey); } : undefined}
           onReview={onReview ? async (key, review) => {
@@ -244,7 +246,7 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
         <div className={styles.completionActions}>
         {remaining && (!pendingCount || selectedKey === "")
           ? <Button size="sm" onClick={() => { setMode(remaining.is_anomaly ? "high" : "low"); setReviewFilter("pending"); setStation(""); setQuery(""); setSelectedKey(readingKey(remaining)); }}>Review remaining readings <ArrowRight size={13} /></Button>
-          : <span>{reviewedCount === events.length ? "Open Reviewed to check your decisions, or download Results CSV." : "Choose another review tab, station, or search to continue."}</span>}
+          : <span>{reviewedCount === events.length ? "Open Reviewed to check your decisions, or export results from Data." : "Choose another review tab, station, or search to continue."}</span>}
           {undoControl}
         </div>
       </div></section>}
@@ -252,13 +254,15 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
   </div>;
 }
 
-function ReviewActions({ row, review, reviewer, onReview, onSkip, undoControl, busy = false }: {
+function ReviewActions({ row, review, reviewer, onReview, onSkip, onSaveRun, undoControl, busy = false, requiresSave = false }: {
   row: DailyReading;
   review?: AnomalyReview;
   reviewer?: Reviewer | null;
   onReview?: (key: string, review: AnomalyReview | null) => void | Promise<void>;
   busy?: boolean;
+  requiresSave?: boolean;
   onSkip?: () => void;
+  onSaveRun?: () => void;
   undoControl?: ReactNode;
 }) {
   const toast = useToast();
@@ -276,11 +280,18 @@ function ReviewActions({ row, review, reviewer, onReview, onSkip, undoControl, b
     // Retain the handler's revision snapshot when opening confirmation; SSE must not change its base.
     if (onReview) setDecision({ status, note: note.trim(), save: onReview });
   }
-  const enabled = !!(onReview && reviewer?.id) && !busy && !saving;
+  const enabled = !!(onReview && reviewer?.id) && !requiresSave && !busy && !saving;
+  const status = requiresSave ? "Save this run to enable reviews."
+    : saving || busy ? "Saving review…"
+    : review ? `Reviewed by ${review.reviewed_by} · ${new Date(review.reviewed_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" })}`
+    : onReview ? "Choose a decision, then confirm." : "Review decisions are unavailable.";
   return <div className={styles.review}>
     <div className={styles.reviewHeading}>
       <h4>Review decision</h4><ReviewBadge review={review} />
-      {review && <p className={styles.hint}>Reviewed by {review.reviewed_by} · {new Date(review.reviewed_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" })}</p>}
+      <div className={styles.reviewContext}>
+        <p className={styles.hint} role="status" title={status}>{status}</p>
+        {requiresSave && onSaveRun && <Button size="sm" variant="primary" onClick={onSaveRun} disabled={busy || saving}><Save size={14} /> Save to History</Button>}
+      </div>
     </div>
     <div className={styles.reviewFooter}>
       <div className={styles.note}>
@@ -289,8 +300,8 @@ function ReviewActions({ row, review, reviewer, onReview, onSkip, undoControl, b
         </label>
       </div>
       <div className={styles.actions}>
-        <Button variant="primary" size="md" disabled={!enabled || (review?.status === "anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("anomaly")}><AlertTriangle size={14} /> Mark as anomaly</Button>
-        <Button variant="primary" size="md" disabled={!enabled || (review?.status === "not_anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("not_anomaly")}><Check size={14} /> Mark as not anomaly</Button>
+        <Button className={styles.decisionButton} variant="secondary" size="md" disabled={!enabled || (review?.status === "anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("anomaly")}><AlertTriangle size={16} /> Anomaly</Button>
+        <Button className={styles.decisionButton} variant="secondary" size="md" disabled={!enabled || (review?.status === "not_anomaly" && note.trim() === review.note)} onClick={() => confirmDecision("not_anomaly")}><Check size={16} /> Not anomaly</Button>
         <span className={styles.undoSlot}>{undoControl}</span>
         <Button size="sm" variant="ghost" disabled={!onSkip || saving || busy} onClick={onSkip}>{review ? "Next to review" : "Skip for now"} <ArrowRight size={13} /></Button>
       </div>

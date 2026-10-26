@@ -35,7 +35,7 @@ The flagship feature: CSV upload → clean → group → anomaly-detect. The API
 - `rows_filled` counts permitted hourly estimates before incomplete days are excluded; `exclusion_details.incomplete_days` counts excluded daily rows. Report input rows remain post-aggregation, not raw hourly rows. Web mirrors the new field with `?? 0` for older API responses.
 - Negative/infinite rainfall is rejected before summation. If no station has two usable days, return a clear `ZoneProcessingError` instead of calling Zone B/C with empty data.
 - Verification: `api/.venv/Scripts/python.exe -m unittest discover -s api/tests -v`; actual dataset has 3,029 retained daily rows, 319 partial daily rows removed, and 127 hours interpolated. Algorithms in `zones/` remain unchanged.
-- The web uploads with both `async=true` and `async_mode=true` plus `Prefer: respond-async`, then polls. Direct Bearer requests are preferred on Vercel; cookie/proxy and legacy synchronous fallbacks remain. No per-zone progress is sent.
+- The web uploads with both `async=true` and `async_mode=true` plus `Prefer: respond-async`, then polls. Direct Bearer requests are preferred on Vercel; cookie/proxy and legacy synchronous fallbacks remain. Async jobs now include real stage/station progress (see below).
 - Pipeline execution currently has no `audit.log()` call in the router/service; it does not publish an SSE resource signal. Results stay in the requesting browser's ZonesContext.
 
 ## Same-day detection rules (source checked 2026-10-24)
@@ -73,3 +73,6 @@ Successful sync/async executions now call history_service.try_save_run, returnin
 
 ## Manual History save (2026-10-25)
 _run_job no longer calls history persistence: it returns a temporary run_id/history_saved=false with no save error. Source metadata is computed from uploads, without retaining raw bytes in jobs. Explicit save requires a validated title and calls try_save_run; existing results remain downloadable if saving fails. Job TTL is now 3600 seconds and cleanup/max count remain opportunistic. No frozen algorithm changes.
+
+## Real pipeline progress (2026-10-25)
+`PipelineProgress` carries preparing/zone_a/zone_b/zone_c/finalizing and station_ids. `run_pipeline_multi` optionally reports before conversion, each real stage and result assembly; Zone A receives input station IDs, later stages receive retained IDs. `_run_job` writes snapshots under the existing job lock; owner-authenticated GET polling returns them while processing. Synchronous callers remain compatible. No timers, per-station completion claims, algorithm edits, database fields or extra endpoints. Fast stages can pass between polling snapshots; stations are processed as a comparison set. Focused tests exercise stage order at actual algorithm boundaries and owner-only polling.

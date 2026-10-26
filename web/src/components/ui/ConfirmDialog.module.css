@@ -1,0 +1,9 @@
+.dialog { width: min(480px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-2xl); }
+.header { padding: var(--pad-x) var(--pad-x) var(--r-lg); }
+.body { padding: 0 var(--pad-x) var(--pad-x); font-size: var(--font-sm); line-height: 1.6; color: var(--text-secondary); }
+.footer { display: flex; align-items: center; justify-content: flex-end; gap: var(--r-md); padding: 0 var(--pad-x) var(--pad-x); }
+.footer > button { flex-shrink: 0; }
+@media (max-width: 400px) {
+  .footer { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .footer > button { width: 100%; }
+}

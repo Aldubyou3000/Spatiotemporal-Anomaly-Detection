@@ -7,11 +7,12 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(f
 ) {
   return (
     <div
+      data-ui="card"
       ref={ref}
       className={cn(className)}
       style={{
         background: "var(--surface)",
-        border: "1px solid var(--border)",
+        border: "1px solid transparent",
         borderRadius: "var(--r-xl)",
         boxShadow: "var(--shadow-xs)",
         overflow: "hidden",
@@ -28,7 +29,6 @@ export function CardHeader({ className, style, ...rest }: HTMLAttributes<HTMLDiv
       className={cn(className)}
       style={{
         padding: "14px 20px",
-        borderBottom: "1px solid var(--divider)",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",

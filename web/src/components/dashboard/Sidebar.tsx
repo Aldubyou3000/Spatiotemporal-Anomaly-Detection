@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Activity, History,
-  PanelLeftClose, PanelLeftOpen, ShieldCheck, Ticket, Users,
+  ChevronLeft, ChevronRight, Clock3, FileCheck2, Inbox, Layers2, UserRound,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
 import { SentinelMark } from "@/components/ui/SentinelMark";
@@ -61,38 +60,38 @@ function NavTooltip({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ storageKey = "sidebar-collapsed" }: { storageKey?: string } = {}) {
   const pathname = usePathname();
   const { pending } = useReports();
   const [collapsed, setCollapsed] = useState(false);
 
   // Sync from localStorage after mount only — avoids SSR/client hydration mismatch
   useEffect(() => {
-    const stored = localStorage.getItem("sidebar-collapsed");
+    const stored = localStorage.getItem(storageKey);
     if (stored === "true") setCollapsed(true);
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
-    localStorage.setItem("sidebar-collapsed", String(collapsed));
-  }, [collapsed]);
+    localStorage.setItem(storageKey, String(collapsed));
+  }, [collapsed, storageKey]);
 
   const pendingCount = pending.length || undefined;
 
   const nav: NavItem[] = [
-    { href: "/zones",       label: "Zones",       icon: Activity },
-    { href: "/history",     label: "History",     icon: History },
-    { href: "/tickets",     label: "Tickets",     icon: Ticket, count: pendingCount },
-    { href: "/technicians", label: "Technicians", icon: Users },
-    { href: "/audit",       label: "Audit Log",   icon: ShieldCheck },
+    { href: "/zones",       label: "Zones",       icon: Layers2 },
+    { href: "/history",     label: "History",     icon: Clock3 },
+    { href: "/tickets",     label: "Tickets",     icon: Inbox, count: pendingCount },
+    { href: "/technicians", label: "Technicians", icon: UserRound },
+    { href: "/audit",       label: "Audit Log",   icon: FileCheck2 },
   ];
 
-  const W = collapsed ? 52 : 248;
+  const W = collapsed ? 64 : 248;
 
   // Shared icon button style for collapsed state
   function iconBtn(active = false): React.CSSProperties {
     return {
       display: "flex", alignItems: "center", justifyContent: "center",
-      width: 36, height: 36, margin: "0 auto",
+      width: 40, height: 40, margin: "0 auto",
       borderRadius: "var(--r-md)",
       background: active ? "var(--brand-soft)" : "transparent",
       border: 0, cursor: "pointer",
@@ -107,8 +106,8 @@ export function Sidebar() {
       className="hidden md:flex flex-col shrink-0 sticky top-0 h-screen"
       style={{
         width: W, minWidth: W,
-        background: "var(--surface)",
-        borderRight: "1px solid var(--border)",
+        background: "var(--bg)",
+        borderRight: "none",
         transition: "width 0.2s ease, min-width 0.2s ease",
         overflow: "hidden",
         zIndex: 20,
@@ -116,17 +115,17 @@ export function Sidebar() {
     >
       {collapsed ? (
         /* ── Collapsed layout ── */
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", padding: "12px 0", gap: 2 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: W, flexShrink: 0, height: "100%", padding: "12px 0", gap: 2 }}>
 
           {/* Brand icon — CSS geometric mark (white bg blue shapes) */}
           <NavTooltip label="AWS Sentinel — Anomaly Detector">
             <div style={{
-              width: 36, height: 28, flexShrink: 0,
+              width: 40, height: 40, flexShrink: 0,
               display: "grid", placeItems: "center",
               color: "var(--brand)",
               marginBottom: 10,
             }}>
-              <SentinelMark size={32} />
+              <SentinelMark size={36} />
             </div>
           </NavTooltip>
 
@@ -134,11 +133,12 @@ export function Sidebar() {
           <NavTooltip label="Expand sidebar">
             <button
               onClick={() => setCollapsed(false)}
+              aria-label="Expand sidebar"
               style={iconBtn()}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
             >
-              <PanelLeftOpen size={16} strokeWidth={1.8} />
+              <ChevronRight size={18} strokeWidth={2.5} />
             </button>
           </NavTooltip>
 
@@ -154,6 +154,8 @@ export function Sidebar() {
                 <div style={{ position: "relative" }}>
                   <Link
                     href={item.href}
+                    aria-label={item.label}
+                    aria-current={active ? "page" : undefined}
                     style={{
                       ...iconBtn(active),
                       textDecoration: "none",
@@ -162,7 +164,7 @@ export function Sidebar() {
                     onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
                     onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; } }}
                   >
-                    <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+                    <Icon size={20} strokeWidth={2.5} />
                   </Link>
                   {item.count != null && (
                     <span style={{
@@ -181,13 +183,12 @@ export function Sidebar() {
         </div>
       ) : (
         /* ── Expanded layout ── */
-        <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "16px 12px", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", width: W, flexShrink: 0, height: "100%", padding: "12px 12px", gap: 4 }}>
 
           {/* Brand row — geometric mark + wordmark (logo.html geometry, Geist type) */}
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
-            padding: "10px 6px 16px 6px",
-            borderBottom: "1px solid var(--divider)",
+            height: 40, flexShrink: 0, padding: "0 2px",
             marginBottom: 8,
             minWidth: 0,
           }}>
@@ -196,7 +197,7 @@ export function Sidebar() {
               display: "grid", placeItems: "center",
               color: "var(--brand)",
             }}>
-              <SentinelMark size={40} />
+              <SentinelMark size={36} />
             </div>
             <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", gap: 3, lineHeight: 1 }}>
               <div style={{
@@ -227,7 +228,7 @@ export function Sidebar() {
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
             >
-              <PanelLeftClose size={14} strokeWidth={1.8} />
+              <ChevronLeft size={18} strokeWidth={2.5} />
             </button>
           </div>
 
@@ -249,6 +250,7 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={active ? "page" : undefined}
                   style={{
                     display: "flex", alignItems: "center", gap: 10,
                     padding: "8px 10px", height: 38,
@@ -263,7 +265,7 @@ export function Sidebar() {
                   onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; } }}
                 >
                   <span style={{ color: active ? "var(--brand)" : "var(--text-muted)", flexShrink: 0, display: "flex" }}>
-                    <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+                    <Icon size={20} strokeWidth={2.5} />
                   </span>
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.count != null && (

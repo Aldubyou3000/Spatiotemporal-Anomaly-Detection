@@ -40,7 +40,13 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      ...(process.env.NODE_ENV === "development" ? [{ source: "/ui-library/preview", headers: [
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Content-Security-Policy", value: csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
+      ] }] : []),
+    ];
   },
   async rewrites() {
     // Proxy /api/* to Render so cookies are first-party (vercel.app).

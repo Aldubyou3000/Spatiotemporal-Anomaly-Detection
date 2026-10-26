@@ -44,7 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       background: "var(--brand)",
       color: "var(--brand-fg)",
       borderColor: "var(--brand)",
-      boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18)",
+      boxShadow: "none",
     },
     secondary: {
       background: "var(--surface)",
@@ -68,6 +68,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
   return (
     <button
+      data-ui="button"
       ref={ref}
       disabled={disabled || loading}
       className={cn(className)}

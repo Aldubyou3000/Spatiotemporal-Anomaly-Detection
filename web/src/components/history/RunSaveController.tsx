@@ -41,13 +41,18 @@ export function RunSaveController() {
   useEffect(() => {
     if (!result || result.history_saved) return;
     function onLink(event: MouseEvent) {
+      if (window.location.pathname !== "/zones") return;
       if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
       if (!link || link.hasAttribute("download") || link.target && link.target !== "_self") return;
       const url = new URL(link.href, window.location.href);
       if (url.origin !== window.location.origin || url.pathname === window.location.pathname && url.search === window.location.search) return;
       event.preventDefault();
-      guardUnsaved(() => { resetSession(); router.push(`${url.pathname}${url.search}${url.hash}`); });
+      const withinWorkspace = /^\/(zones|history|tickets|reports|technicians|audit)(\/|$)/.test(url.pathname);
+      guardUnsaved(() => {
+        if (!withinWorkspace) resetSession();
+        router.push(`${url.pathname}${url.search}${url.hash}`);
+      }, { allowContinue: withinWorkspace });
     }
     document.addEventListener("click", onLink, true);
     return () => document.removeEventListener("click", onLink, true);
@@ -68,12 +73,14 @@ export function RunSaveController() {
 
   return <>
     {leaveRequest && <ConfirmDialog title="Save this run?"
-      message="This run isn't saved. Save it to History or discard it before continuing."
-      cancelLabel="Keep working" confirmLabel="Discard" isDangerous onCancel={cancelLeave}
+      message={leaveRequest.allowContinue
+        ? "Your run stays in Zones for this session. Save it to History to keep it."
+        : "Continuing will discard this unsaved run."}
+      cancelLabel="Cancel" confirmLabel={leaveRequest.allowContinue ? "Don’t save" : "Discard"} isDangerous={!leaveRequest.allowContinue} onCancel={cancelLeave}
       onConfirm={() => { const proceed = leaveRequest.proceed; cancelLeave(); proceed(); }}
       extraAction={<Button variant="primary" onClick={() => {
         const proceed = leaveRequest.proceed; cancelLeave(); requestSave(proceed);
-      }}>Save…</Button>} />}
+      }}>Save</Button>} />}
     {saveRequest && result && <SaveRunModal key={result.run_id ?? result.processed_at}
       initialTitle={files[0]?.name.replace(/\.csv$/i, "") || `Rainfall review ${result.summary.date_range_start ?? result.processed_at.slice(0, 10)}`}
       saving={saving} error={error} onSave={(title) => void saveCurrent(title)} onClose={cancelSave} />}

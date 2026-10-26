@@ -1,5 +1,7 @@
 # Orphans
 
+Local UI Library reference check (2026-10-25): design routes are Next entry points. DesignLibrary imports the catalogue/settings model; ComponentPreview imports Specimens and fixtures; specimens import every existing visual module listed in the catalogue. The previously unused Card primitive now has an active gallery caller. No component was removed or orphaned; nonvisual controllers retain their operational callers.
+
 Files/components with no inbound references from anything else in the map, or that the map flags as suspect. Each entry: what it is, why it has no inbound refs (dead code, map gap, or external entry point), and a suggested action.
 
 ---
@@ -102,3 +104,76 @@ The Zones page imports/renders `NeighborGroupsTab`; `AnomalyReportTab` imports/r
 New history API/schema/service are wired through main.py and zones/tickets integration. History pages are Next.js route entry points. History components, API/types/hook and extracted ZoneResults/CreateTicketModal/InfoTip have active imports; none are new orphan candidates. Existing report/ticket and mobile reference paths are retained.
 
 Manual-save references (2026-10-25): RunSaveController is mounted by the dashboard layout; SaveRunModal is private to it; useSaveHistoryRun is consumed by that controller. RunSaveStatus remains mounted by Zones with props-only actions. No new orphan or removed important caller.
+
+Flat theme reference check (2026-10-25): removed the unused grid background utility/tokens after removing the dashboard's decorative grid element. `web/tests/surface-theme.test.cjs` is a manual Node test entry point. Existing component imports remain live; no new orphan modules.
+
+Result-tab surfaces (2026-10-25): ZoneResults.module.css is imported by the shared ZoneResults component and applied to four tab panels; not an orphan. Overview/NeighborGroups remain used by results and UI Library specimens.
+
+Saved-results viewport (2026-10-25): ZoneResults additionally imports the existing Modal for its full-table dialog. Removed intro-heading CSS has no remaining JSX reference; all report, table, navigation and export components remain live. No orphan module created.
+
+Overview summary (2026-10-25): OverviewTab.module.css is imported by OverviewTab; removed unused decorative stat icon imports/metadata. No visual component was orphaned; existing overview/map/summary callers remain live.
+
+Zones workspace (2026-10-25): Zones.module.css is imported by the Zones page; private RunConfiguration/ConfigurationDialog/CurrentResults are actively composed there. Removed EmptyState/RunningSkeleton/pipelineRef have no remaining callers. PipelineDiagram/FileUpload remain used by setup/details/processing and UI Library; RunSaveStatus retains ordinary and compact specimens. zones-workspace.test.cjs is a manual Node test entry point, not a runtime orphan.
+
+Unsaved navigation (2026-10-25): run-save-navigation.test.cjs is a manual Node entry point covering reminder actions, in-memory preservation, saved/failed continuation and unaffected links. Existing guard/controller/component imports remain live.
+
+Confirmation layout (2026-10-25): ConfirmDialog.module.css is imported by ConfirmDialog; confirm-dialog.test.cjs is a manual Node test entry point. Existing dialog callers and gallery inventory remain live; no new orphan component.
+
+Map marker stability (2026-10-25): station-map.test.cjs is a manual Node entry point exercising StationMap with a Leaflet/resize harness. StationMap remains imported by Overview and library specimens; no runtime reference removed.
+
+Focused run setup (2026-10-25): removed obsolete configurationGrid/upload/runControls styles; FileUpload and PipelineDiagram keep their existing setup/dialog/gallery callers. No module, import or runtime entry point removed.
+
+Setup hierarchy refinement (2026-10-25): FileUpload.module.css and PipelineDiagram.module.css are imported by their matching components. Removed Plus icon and duplicate add-files control; shared Button/PipelineDiagram and gallery callers remain live. No orphan module introduced.
+
+Processing refinement (2026-10-25): removed PipelineDiagram timers/state, inline animation rules and unused status icons; removed the page's Loader2 import/processingHeading rule. PipelineDiagram.module.css owns the single bar animation and shared step layout. Updated gallery selector; no dangling pipeline-stages/pipeline-spinner references or orphan module remains.
+
+Surface simplification (2026-10-25): FileUpload's selected-list styles moved into its existing imported CSS module; all new class references are used. Removed local panel fills/frames, with no component or module removed. Existing setup/dialog/gallery callers remain live.
+
+Reference-guided grouping (2026-10-25): moved the existing fileActions group beside the selection summary and removed the obsolete direct-child button selector. No component/import/module removed; shared FileUpload and PipelineDiagram callers remain live.
+
+Real stage progress (2026-10-25): zones-progress.test.cjs is an explicit manual Node test entry point. PipelineProgress is referenced across API service/router and web API/context/page/diagram/gallery; no orphan module. White-palette research preview (2026-10-26) lives outside the repo in the thread visualization directory and is not a website route or production dependency.
+
+Visible setup redesign (2026-10-25): configurationGrid is a local wrapper/class in the existing Zones page/module; no new component or module. Shared PipelineDiagram zone badges and FileUpload action styling remain available through operational callers and gallery examples. No orphan/reference removal.
+
+Upload/footer gap (2026-10-25): configurationTask replaces the first-child minimum-width selector with an explicit live task wrapper. No imports or modules removed; shared setup/dialog composition remains in use.
+
+Processing feedback (2026-10-25): processingHeader is used by the processing panel's title/Stop row. PipelineDiagram's loading-pulse keyframe is referenced in the reduced-motion rule; sweep remains used normally. No module/import removed or orphan introduced.
+
+Data export consolidation (2026-10-26): removed the local FullAnomalyTable function and its obsolete CSS; Modal remains shared elsewhere. ExportMenu is local and used by ZoneResults; onOpenData is wired from ZoneResults to AnomalyReportTab. No orphan module introduced.
+
+Nearby station relocation (2026-10-26): NeighborGroupsTab is now imported by OverviewTab instead of ZoneResults; the standalone UI Library specimen still uses it. Its new CSS module is imported by that component. No orphan introduced; StationMap's optional highlightedStationIds is supplied by OverviewTab.
+
+Data table styling (2026-10-26): DataTable.module.css is imported by DataTable; cn import removed from this component only. Existing ZoneResults and gallery callers remain. No orphan introduced.
+
+
+Search/Export refinement (2026-10-26): removed duplicate local search focus rules in DataTable/History; all search fields reference the shared global attribute. ExportMenu imports the existing Button. No orphan introduced.
+
+
+Review save action (2026-10-26): optional onSaveRun connects CurrentResults through ZoneResults and AnomalyReportTab to ReviewActions. Existing RunSaveController reused; no orphan or new module.
+
+
+Flag filter cleanup (2026-10-26): removed unused local filterLabel class; no module/import changes.
+
+
+Upload configuration refinement (2026-10-26): local fileLabel helper and CSS are consumed by FileUpload; no new modules or removed imports.
+
+
+Review layout stability (2026-10-26): ReviewSaveStatus no longer uses saveStatus locally; that CSS remains used by RunSaveStatus. No orphan/import changes.
+
+
+Upload helper removal (2026-10-26): requirements/formatHelp CSS deleted with their markup. No orphan module or import.
+
+
+Nearby tooltip (2026-10-26): NeighborGroupsTab imports existing InfoTip; removed its unused note class. No orphan module.
+
+
+Map label simplification (2026-10-26): removed unused station-label--flagged CSS after all labels adopted the shared neutral class. Existing map callers remain.
+
+
+Basemap replacement (2026-10-26): removed unused station-map/data-map-theme hooks with their tile filter. Existing Leaflet layer remains the only basemap integration.
+
+
+Data quality density (2026-10-26): HelpTip aliases the shared InfoTip in OverviewTab. rowDescription remains used by station-summary guidance; no orphan module.
+
+
+Station panel refinement (2026-10-26): stationPicker/reviewList CSS is consumed by its owning panels; reused existing HelpTip import. No orphan module.

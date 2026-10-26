@@ -190,3 +190,268 @@ Moved search above the queue and review-status controls to the start of the repo
 
 ## [2026-10-25] Match History review progress to brand blue
 Explicitly styled the native Analyst review progress fill/track in History.module.css with theme tokens and WebKit/Firefox selectors, matching AnomalyReportTab. Component map updated; shared candidates/orphans checked with no changes. CSS diff check passed; browser/tests not rerun for this cosmetic change.
+
+## [2026-10-25] Chart the UI Library planning map
+User confirmed both a gallery of actual website components and a visual customization editor. Created a local Wayfinder map and four decision tickets with dependencies for saving/publishing, control coverage, access/location and gallery/editor prototype. Saving/control questions await user answers; no ticket resolved during charting. Read missing grilling/domain-modeling dependencies from the author's upstream source without installing them. Linked the effort from the architecture index; shared candidates/orphans checked with no production changes. No website code, tests, schema or deployment changes.
+
+## [2026-10-25] Clarify UI Library as local design playground
+User clarified the gallery/editor is solely for local designing, with no deployment. Claimed and resolved the save/publication decision with that scope, removed deployment/publication assumptions from the destination and dependent questions, and retained local draft preferences as the simple storage approach. One decision resolved; no application code, operational data or tests changed.
+
+## [2026-10-25] Implement local UI Library and visual editor
+Built development-only /ui-library with searchable 20-section real-component gallery, isolated responsive preview, light/dark and density previews, shared/per-component appearance controls and validated browser drafts/reset. Source inventory covers every visual component module. Shared primitives gained inert data-ui hooks; chart variables retain original defaults; preview sidebar uses isolated storage and fixture contexts/SWR cache. Explicit sample ticket mutations complete locally; all other API requests are blocked inside preview. Added exact dev-only same-origin preview frame headers while retaining production frame protection and dashboard authentication. TypeScript and 48 settings/access/render/regression checks passed; both routes and response headers verified over HTTP. Independent review findings fixed and rechecked. Browser automation attempted but disabled in Work settings, so hydrated visuals/persistence remain unverified. Updated guide, implementation record and architecture maps/candidates/orphans. No dependencies, backend/schema changes, commit, push or deployment.
+
+## [2026-10-25] Flatten theme and strengthen background separation
+Used Gmail and supplied inbox/board references for a plain tinted canvas, contrasting work surfaces, restrained dividers and rounded navigation while retaining Sentinel blue. Removed decorative grid/elevation shadows/header blur, flattened shared Zones/History results framing, consolidated Overview cards, distinguished queue/detail surfaces and removed redundant UI Library specimen/browser frames. Added keyboard outlines and light/dark contrast checks. Independent review caught the Canvas control losing its visible backdrop; restored the canvas around the gallery and under single specimens. TypeScript and 50 theme/settings/render/regression checks passed. Local UI Library responds over HTTP. Hydrated browser inspection remains unavailable because browser use is disabled in Work settings. Updated map pages/candidates/orphans and library guide; no backend, schema, dependency or algorithm changes.
+
+## [2026-10-25] Reduce decorative lines throughout the website
+Removed structural panel outlines and redundant header/section dividers across Zones, shared History review, Overview, ticket/report detail, History details, Audit/Technicians, Card, dialogs and UI Library chrome. Preserved fields/buttons, floating surface edges, table/list row separators, active-tab underlines and meaningful state cues; kept an invisible Card border for customization. Grouping now relies on existing surface contrast, headings and spacing. TypeScript, 50 existing theme/settings/render/regression checks and diff whitespace check passed; SSR chart dimension warnings are expected. Hydrated browser layout remains unverified because browser automation is disabled. Component maps/shared candidates checked; no imports removed, new orphans, dependencies, backend or algorithm changes.
+
+## [2026-10-25] Restore visibility and separate navigation from content
+User screenshots exposed near-identical selection/panel fills and low-opacity chart axis labels. Strengthened the shared light selection tint, added solid active review filters and a selected-reading edge, and moved both charts to readable theme text colors. Placeholders use full-opacity muted text. Followed the supplied Gmail reference with pale navigation beside one inset rounded workspace and matching surface header; mobile removes the outer inset. UI Library shell preview shares that structure. Added two selection contrast checks; confirmed the light-mode check failed before the fix. TypeScript and 45 relevant theme/component/history/review checks passed, plus diff whitespace validation. Browser layout remains unverified because browser automation is disabled. Maps/shared candidates/orphans reviewed with no module reference changes. No backend/data/algorithm changes.
+
+## [2026-10-25] Reserve blue-gray for the background
+Changed light content alt/sunken/muted surface tokens to neutral grays while retaining white work surfaces and the blue-gray shell canvas. All existing dashboard/library token consumers inherit the change; actions/selections retain semantic blue. Four light/dark contrast checks and diff whitespace check passed. Browser visual verification remains unavailable; no logic, dependency or module reference changes. Updated shell/component maps; shared candidates/orphans reviewed with no new entries.
+
+## [2026-10-25] Remove doubled History search focus highlight
+The global important focus rule outlined the borderless inner search input in addition to its rounded wrapper. Scoped the input exception to History search and gave its wrapper one rounded focus cue; date fields and other keyboard focus indicators remain intact. History render checks and diff whitespace validation passed. Browser visuals remain unverified. Component map updated; shared candidates/orphan references unchanged, with no new behavior duplication or imports.
+
+## [2026-10-25] Redesign shared scrollbars
+Added thicker rounded handles, inset transparent tracks, shorter visible thumb ends and hidden zero-size arrow buttons for supported WebKit/Chromium scrollbar parts. Reset standard scrollbar properties to auto inside the support query because non-auto values override part styling; checked MDN's scrollbar reference. Removed anomaly-review thin-width exceptions so all scrolling areas inherit the shared style. Retained native-width colored fallback elsewhere; native handle length still follows viewport/content ratio. Four theme checks passed, CSS parsed and UI Library returned HTTP 200; diff whitespace validation passed. Browser visual verification remains unavailable. Updated shell/component maps; shared candidates/orphans unchanged, no new dependencies or scrolling logic.
+
+## [2026-10-25] Give Tickets a distinct split view
+Separated Tickets list and detail into two labeled white rounded panes with a neutral backdrop/gutter, following the supplied split-pane reference. List width now caps at 420px; minmax(0,1fr)/minWidth:0 keep detail content within its column. Existing independent scrolling, filters, selection, loading/empty states and ticket actions are retained. TypeScript and diff whitespace checks passed; browser visuals remain unverified. Updated component map; shared candidates/orphans reviewed with unchanged imports and no new duplication, dependencies or backend/data changes.
+
+## [2026-10-25] Align Tickets panes and unify their parent color
+Removed the ticket-count footer that visually shortened the white list pane and its unused constant. Explicitly constrained both panes to one stretching grid row. Tickets now owns a consistent neutral background through the header and pane gutter; Header's optional background preserves existing callers' default. TypeScript, 22 component rendering/inventory checks and diff whitespace validation passed; expected SSR chart measurement warnings remain. Browser geometry remains unverified. Updated component/shell maps; no import/orphan changes or new shared rule-of-3 candidate, data or behavior changes.
+
+## [2026-10-25] Apply split-view surfaces to Anomaly Report
+Matched Tickets with one neutral report parent spanning heading/progress/toolbar/gutter and two white rounded queue/evidence panes. Kept the existing equal fixed-height desktop grid and mobile stacking; aligned toolbar/panes with shared gap tokens. Review actions remain white within the detail pane, while inactive filters use white against the neutral parent. Shared component updates Zones, History and library examples. Nineteen History/station-review checks, report CSS parsing and diff whitespace validation passed; browser geometry remains unverified. Component map updated; shared candidates/orphans checked with no imports, new behavior duplication or data changes.
+
+## [2026-10-25] Separate backgrounds across the other result tabs
+Added one shared neutral inset panel style for Overview & Map, Raw Data, Cleaned Data and Neighbor Groups, leaving white work surfaces inside and the tab bar outside. Kept Anomaly Report's equivalent parent without another wrapper. Removed obsolete Overview/NeighborGroups top padding so the shared parent owns spacing. Applies to Zones and saved History results. TypeScript, nineteen History/station-review checks and diff whitespace validation passed; browser visuals remain unverified. Component/shared-candidate/orphan maps updated for the live stylesheet import. No behavior, dependencies, data or algorithm changes.
+
+## [2026-10-25] Match the supplied Google background color
+Sampled the attached screenshot's dominant pale background (#F8FAFD) and replaced light --surface-alt with it. Tickets, result tabs, Anomaly Report and all shared token consumers inherit the reference color; white panels and the #E9EEF6 shell are retained. Four theme contrast checks and diff whitespace validation passed. Browser visuals remain unverified. Shell/component maps updated; shared candidates/orphan references unchanged. No behavior/data changes.
+
+## [2026-10-25] Remove excess space above saved-result tabs
+History results used large body gaps between the back link, padded save-status row and results navigation. Combined link/status in one compact wrapping toolbar and reduced only this route's body spacing to --gap-card. Status errors/retry/loading feedback are retained; other History/Zones layouts are unaffected. TypeScript, six History checks and diff whitespace validation passed; browser geometry remains unverified. Component map updated; shared candidates/orphan references unchanged, no new dependencies or data changes.
+
+## [2026-10-25] Shorten the saved-runs search field
+Changed History search from growing across the toolbar to a shrinkable 22rem basis, retaining narrow-screen wrapping. Six History checks and diff whitespace validation passed; browser visuals remain unverified. Component map updated; shared candidates/orphans unchanged, no behavior or reference changes.
+
+## [2026-10-25] Move Run summary into the header and hide idle save copy
+Placed Run summary before Workspace via Header's optional leading slot, removing the body toolbar and unused styles. Shared ReviewSaveStatus hides idle saved copy visually while retaining its screen-reader announcement; saving/loading/error/retry feedback remains visible. TypeScript, 28 History/component rendering checks and diff whitespace validation passed; browser visuals remain unverified. Shell/component maps updated; references/shared candidates checked with no new orphan or duplicated behavior, dependencies or data changes.
+
+## [2026-10-25] Show current History record in breadcrumbs
+Replaced Workspace → History on saved-run summary/results with linked History → current saved title, using filename/short-ID fallbacks without new data fetching. Results back navigation is now arrow-only, retaining its accessible label and original target. Header's parent prop defaults to Workspace for other callers; long current titles truncate with a full-title tooltip. TypeScript, 28 History/component render checks and diff whitespace validation passed; browser visuals remain unverified. Shell/component maps updated; shared candidates/orphans unchanged. No data or workflow changes.
+
+## [2026-10-25] Soften scrollbar color only
+User clarified to retain scrollbar size and change only color. Added shared neutral thumb/hover tokens for both themes, replacing text-derived colors in native fallback/custom parts. Dimensions, track insets and arrow removal remain unchanged. CSS parsing, four theme checks and diff whitespace validation passed; browser visuals remain unverified. Shell map updated; shared candidates/orphan references unchanged. No behavior or data changes.
+
+## [2026-10-25] Fit saved results to the window and consolidate report chrome
+Replaced saved History results' page scrolling/fixed report height with a constrained flex layout that fills actual available space. Queues/evidence/other tab content scroll internally; full table uses the existing Modal only in viewport mode, preserving regular Zones' inline disclosure. Hid the incidental vertical scrollbar caused by tab navigation's horizontal-overflow rule. Removed Review flagged readings, moved progress into the filter row and placed CSV actions in a bottom-right footer. Added a functional disclosure test covering modal open/close and normal inline behavior; fixed its mock-cache isolation. TypeScript, 42 History/station/component checks, CSS parsing and diff whitespace validation passed. Browser geometry remains unverified because browser automation is disabled. Updated component/shell/shared-candidate/orphan maps. No backend, algorithm, data or dependency changes.
+
+## [2026-10-25] Consolidate the saved-results footer
+Moved the viewport-mode full-table action into the same compact footer as the CSV controls, left/right aligned, removing the extra row of bottom whitespace. The existing tab system is now controlled by ZoneResults so the action appears only on Anomaly Report; reused one table element and preserved ordinary Zones' inline disclosure. Extended the disclosure test to assert shared-footer placement. TypeScript, 29 History/component checks and diff whitespace validation passed; browser visuals remain unverified. Component map updated; shared candidates/orphans checked with no new module references or duplication, dependencies or data changes.
+
+## [2026-10-25] Stabilize review filter buttons on selection
+Removed the selected-only font-weight increase that changed control width. Both review-status and High/Low controls now keep a consistent weight, no-wrap layout and reserved tabular count width derived from the run's total flagged-reading digits, avoiding movement when counts cross a digit boundary. Shared report updates Zones, History and gallery specimens. TypeScript, twenty History/station-review checks and diff whitespace validation passed; browser geometry remains unverified. Component map updated; shared candidates/orphan references unchanged, no dependencies or data/workflow changes.
+
+## [2026-10-25] Align and clarify shared dropdown icons
+Corrected Select's excessive right padding for its in-flow chevron, enlarged the icon to 14px with readable text color and kept it non-shrinking while long labels truncate. Field dimensions/open rotation are retained. TypeScript, 22 component render checks and diff whitespace validation passed; browser visuals remain unverified. Component map updated; shared candidates/orphans unchanged with no new imports, data or behavior changes.
+
+## [2026-10-25] Simplify the Overview summary hierarchy
+Replaced dense uppercase/icon/monospace metric styling with larger tabular values, sentence-case labels and quieter supporting text in a semantic metrics list. Condensed the stacked date range to a wrapping horizontal interval and simplified next steps to a plain ordered list with consolidated help. Removed unused decorative metadata/imports; added one local token-based stylesheet. Data calculations/map behavior are unchanged. TypeScript, 35 station/component checks and diff whitespace validation passed; browser visuals remain unverified. Component/orphan maps updated; shared candidates checked with no new repeated behavior.
+
+## [2026-10-25] Restore separated Overview cards and icons
+User clarified that metrics/sections should remain separated and retain their icons. Restored four white metric cards plus separate Date range/Next steps cards with shared gaps on the pale backdrop, and the original metric/section icons. Kept the clearer typography and compact date/steps layouts without adding borders or shadows. TypeScript, 35 station/component checks and diff whitespace validation passed; CSS parsed, browser visuals remain unverified. Component map updated; shared candidates/orphan references unchanged, data and map logic retained.
+
+## [2026-10-25] Restore large right-side metric icons
+Checked the original Overview implementation and restored its 64px faded right-side watermark treatment with the existing shared class. Separate cards retain clearer labels/values above the decorative icon; small section icons remain. TypeScript, 22 component rendering checks and diff whitespace validation passed; browser visuals remain unverified. Component map updated; reused existing behavior with no new shared candidate/orphan reference or data change.
+
+## [2026-10-25] Connect Station Review Summary sections
+Unified heading, legend, station rows and footer within one padded white card. Removed alternating background strips and full-width section rules; retained only separators between station records. Combined the shared-Button other-stations toggle and review reminder in one wrapping footer, retaining counts/status/evidence and expansion logic. TypeScript, 35 station/component checks and diff whitespace validation passed; CSS parsed and browser visuals remain unverified. Component map updated; shared candidates/orphans checked with only reuse of the existing Button, no new duplicate behavior or data changes.
+
+## [2026-10-25] Plan a compact Zones process/results workspace
+Investigated Zones page handlers, ZonesContext, PipelineDiagram, save coordination and the existing History viewport mode. Wrote docs/ZONES_WORKSPACE_PLAN.md proposing mutually exclusive setup/running/results content, persistent compact result actions and an on-demand configuration dialog. Documented state preservation, file-change/rerun/reset safeguards, Stop/late-response limits, save failure handling, responsive overflow and verification criteria. Updated the component map; shared candidates/orphans checked with no source references changed. Planning only: no application edits, tests, backend or data changes for this request.
+
+## [2026-10-25] Implement the compact Zones workspace
+Replaced stacked setup/pipeline/status/results with mutually exclusive setup, processing and fitViewport results. Reused one configuration component in setup/result dialog, with collapsed process details, bounded file list, focused keyboard navigation and trigger restoration; global save/leave dialogs retain priority. Retained result component identity during configuration, guarded file changes/reruns/reset, save-before-ticket, revision handling and Stop/late-response checks. Removed auto-scrolling and duplicate idle/running placeholders. Refined the result header with a file-count badge, primary save action, screen-reader-only unsaved copy and icon-only Reset; added compact save specimens to the library. TypeScript, 74 workflow/history/review/library/theme checks, CSS parsing and diff whitespace validation passed. Browser geometry/authenticated processing remain unverified; browser automation is disabled. Updated the implementation plan and architecture/state/shell/candidate/orphan maps. No backend, algorithms, database, dependencies, commit or deployment changes.
+
+## [2026-10-25] Allow tab navigation while retaining an unsaved run
+Added a non-destructive Continue without saving choice to the existing reminder for shared-dashboard links. Internal continuation no longer resets ZonesContext; files/result/reviews stay available on return. Keep working cancels navigation; Save waits for success and failures leave the run/action intact. File replacement/rerun/reset and routes outside the shared dashboard retain the destructive save/discard warning; native unload protection remains. Added five controller interaction checks and extended provider-guard coverage. TypeScript, 57 navigation/history/workspace/library checks and diff whitespace validation passed. Browser navigation remains unverified. Updated state/component/candidate/orphan maps and workspace plan. No automatic saving, new storage, backend, data or dependency changes.
+
+## [2026-10-25] Standardize the save reminder dialog
+Reviewed Microsoft confirmation labels and Material dialog action layout guidance. Replaced verbose copy/labels and competing primary actions with Cancel / Don’t save / Save, one primary button, one white surface and a compact aligned footer; small screens deliberately stack actions. ConfirmDialog reuses Button and adds accessible description, safe initial focus, Tab containment and focus restoration, preserving destructive defaults and persistence/navigation callbacks. Added three dialog tests and a Save reminder gallery example; updated navigation wording tests. TypeScript, 58 dialog/navigation/workspace/history/station/library checks, CSS parsing and diff whitespace validation passed. Browser visuals remain unverified. Recorded rationale in docs/SAVE_REMINDER_DESIGN.md and updated maps; no data/backend/dependency changes.
+
+## [2026-10-25] Stop unsaved-run reminders on unrelated dashboard tabs
+Reproduced the global save controller intercepting links on History while an unsaved Zones run remained in context. Scoped the event handler to the current /zones pathname; navigating other dashboard pages now leaves the retained run untouched without another reminder. Added a regression covering History list/detail, Tickets, Reports, Technicians, Audit and return-to-Zones behavior; verified it failed before the one-line fix. TypeScript, 22 navigation/history/workspace checks and diff whitespace validation passed; browser navigation remains unverified. State/component maps updated, shared candidates/orphans checked with unchanged references. No persistence, destructive-guard or data changes.
+
+## [2026-10-25] Prevent transient oversized map markers on tab changes
+Inspected StationMap and installed Leaflet source: fitBounds used per-edge padding while a following getBoundsZoom used half that total, potentially raising minimum zoom and triggering implicit SVG zoom scaling. Disabled map/marker zoom tweening, measured before fitting and reused the actual fitted zoom for the minimum. Coalesced/cancelled resize frames and checked map identity during cleanup to prevent stale tab work. Normal dot/halo radii are unchanged. TypeScript, 38 map/station/component checks and diff whitespace validation passed; browser visuals remain unverified. Component/orphan maps updated; shared candidates reviewed with no new duplicated behavior, dependencies or data changes.
+
+## [2026-10-25] Simplify the Zones upload and run form
+Replaced the oversized two-column configuration with one centered white form on the pale workspace background. Shortened the drop target, made browse/format/size requirements readable, removed repeated Start detection copy and moved processing into one compact action row. Optional How detection works retains the existing pipeline explanation. Setup/results dialog reuse the composition; the UI Library inherits FileUpload. Preserved validation, removal/loss guards and all processing/save callbacks; added explicit disabled and validation-announcement semantics. TypeScript, 31 workspace/library checks, CSS parsing and diff whitespace validation passed. Hydrated browser appearance remains unverified because browser automation is disabled. Updated the component map/workspace plan and checked shared candidates/orphans; no dependencies, backend or data changes.
+
+## [2026-10-25] Keep detection steps visible without a toggle
+Replaced the How detection works disclosure with a labeled section and heading in the shared setup/results configuration. All three PipelineDiagram steps remain visible. Removed disclosure-specific styling and updated the workspace assertion/documentation. TypeScript and nine workspace checks passed. Shared candidates/orphans reviewed; references and processing behavior unchanged. Browser visuals not checked.
+
+## [2026-10-25] Refine setup hierarchy without adding complexity
+Strengthened the Rainfall detection heading and shortened its intro. Replaced the large centered drop target with a compact responsive upload row and native Browse/Add files button; retained drag/drop, validation and removal guards. Reduced guidance to two quiet lines and removed the duplicate add-files footer action. Idle PipelineDiagram now shows three plain ordered steps from the existing metadata, without nested cards or placeholder counts; running/completed feedback remains unchanged. Configuration uses the idle explanation and one larger Run detection action. Updated gallery selectors, workspace labels, component maps/plan and reference/candidate checks. TypeScript, 40 workspace/library checks, three CSS parses and targeted diff whitespace validation passed. Browser visuals remain unverified; no backend, data or dependency changes.
+
+## [2026-10-25] Simplify the processing view to match setup
+Aligned processing with the centered setup surface, heading hierarchy and pale canvas. Unified idle/running/completed pipeline markup into three plain ordered steps. Replaced colored stage cards, placeholder counts and timed stage simulation with one accessible indeterminate progress bar, respecting reduced motion; completed mode retains actual counts and completion feedback. Removed the redundant heading spinner and unused timers/icons/styles. Stop, request guards and result transitions are unchanged. Updated library selector, component/workspace docs and candidate/orphan checks. TypeScript, 41 workspace/library checks, two CSS parses and targeted whitespace validation passed. Browser visuals remain unverified; no backend, data or dependency changes.
+
+## [2026-10-25] Flatten the Zones setup panels
+Removed the nested pale body and rounded setup/processing card so the bounded form sits directly on the existing work surface. Removed the process explanation fill/frame. Selected uploads now use a plain summary row and unboxed file list, keeping only useful row separators; removed the tinted footer and persistent outlines around remove buttons. Empty upload/drop feedback, file validation, confirmations, internal scrolling and processing handlers remain unchanged. TypeScript, 34 workspace/library render checks and two CSS parses passed. Browser visuals remain unverified. Updated component/workspace/reference notes; shared candidates reviewed with no new rule-of-3 pattern, module, dependency or data changes.
+
+## [2026-10-25] Add the two structural panels shown in the user outline
+Restored one inset pale body panel below the header and one centered white setup/processing panel, using existing tokens and compact mobile insets. Kept selected uploads, file list and process steps unboxed. No new markup, shadows, imports or behavior changes; shared candidates/orphan references reviewed and unchanged. Component/workspace notes updated. CSS parsing and nine workspace checks passed; browser visuals remain unverified.
+
+## [2026-10-25] Research and refine upload panel grouping
+Consulted official Material color roles, Carbon uploader/forms and GOV.UK upload guidance. Retained the pale parent/white form while improving desktop/mobile insets, joining the selection summary directly to the file list, grouping Add files/Remove all above it and placing technical notes below it. Tightened density-aware file rows and clarified the process heading/sentence-case labels. Existing removal confirmation, validation, processing and save handlers remain. TypeScript, 34 workspace/component checks, two CSS parses and targeted whitespace validation passed. Updated maps/workspace reference notes; shared candidates reviewed with no new repeated behavior or abstraction. Browser visuals remain unverified; no new dependency, backend or data changes.
+
+## [2026-10-25] Make scene-specific layout changes and highlight the zones
+Confirmed from the supplied screenshots that previous refinements were present but too subtle. Researched official empty-state, panel-footer, loading/progress and single-page configuration guidance. Reworked setup into upload/files plus a slim process guide in one white panel, with a clear action footer and container-width stacking. Processing now uses a narrower status panel with vertical steps. Added consistent green/amber/red zone identity labels across states, retaining honest indeterminate progress. Browse receives primary emphasis before selection, and Run after selection. Existing removal/unsaved/Stop/save/result guards remain. TypeScript and 34 workspace/gallery checks passed; three CSS parses and targeted whitespace checks passed. Component/reference/candidate/orphan notes updated. Browser geometry remains unverified; no API, algorithm, data or dependency changes.
+
+## [2026-10-25] Standardize Zones spacing on a shared scale
+Checked Carbon's official spacing guidance and added explicit shared 4/8/16/24/32px spacing primitives. Replaced mixed radius/density gap values in Zones setup/processing/header/configuration and shared upload/pipeline styling. Aligned panel/section/footer insets, standardized mobile padding, balanced badge/text gaps and matched uploader action minimum height to file rows. No workflow, data, component/import or algorithm changes; orphan references remain unchanged. Four CSS files parsed, 13 surface/workspace checks and targeted whitespace checks passed. Updated component/shell/reference/shared-candidate notes. Browser geometry remains unverified.
+
+## [2026-10-25] Remove the upload-to-footer blank area
+Found that the taller process guide set the configuration grid row height and pushed the full-width Run footer below the upload column. Grouped FileUpload, pipeline errors and Run controls in one independent task column so the footer follows upload content at the existing 24px gap. Guide stacking, handlers, disabled states and loss/save guards remain. TypeScript, nine workspace checks, CSS parsing and targeted whitespace checks passed. Updated component/workspace/orphan notes; shared candidates reviewed with no new duplication or abstraction. Browser geometry remains unverified.
+
+## [2026-10-25] Restore visible loading feedback and place Stop in context
+Confirmed Windows MinAnimate=0 and found the reduced-motion media rule explicitly disabling the progress animation. Replaced that frozen state with a gentle fixed-position opacity pulse; normal mode still sweeps. Inspected generated CSS to confirm scoped animation names/keyframes. Moved Stop beside the processing title while preserving confirmation/abort behavior; extended existing workspace assertions for its local placement. TypeScript, 34 workspace/gallery checks, two CSS parses and targeted whitespace checks passed. Updated component/workspace/orphan notes; shared candidates reviewed with no new repeated behavior. Browser animation playback remains unverified; no backend/data/dependency changes.
+
+## [2026-10-25] Follow actual pipeline stages and show active stations
+Added optional service-level PipelineProgress reporting at real conversion/Zone A/B/C/finalization boundaries without changing frozen algorithms. Existing locked, owner-only async job polling returns stage/station snapshots; web polling forwards them to the current guarded request/context. Shared PipelineDiagram shows complete/active/waiting steps and active station chips, with no fabricated station completion or percentage. Fixed the remaining reduced-motion stall using a slower moving sweep; browser transforms confirmed movement. Gallery controls exercise stages; browser preview verified A then B and moved station labels. TypeScript, 37 focused web checks and two focused backend checks passed; full backend/data regression not reconfirmed. Existing cancellation and synchronous fallback remain. Shared candidates reviewed: no new behavior copied in three places. zones-progress.test.cjs is a manual test entry point, not a runtime orphan.
+
+## [2026-10-26] Research white surface palettes before changing the theme
+Reviewed actual shell/result/setup tokens and official Material, Carbon, Atlassian and WCAG guidance. Proposed Neutral pearl, Cool mist and Warm porcelain with role-based shell/workspace/panel/inset assignments and fewer painted nested wrappers. Created a thread-local interactive comparison for setup and anomaly report; no website theme values changed. Checked candidate text/button/control-edge contrast mathematically and self-checked palette switching, scene changes and saved-state restoration. Browser screenshot review of this comparison was unavailable because local browser use became disabled. Palette choice remains open; do not treat proposal values as approved defaults.
+
+## [2026-10-26] Apply Neutral pearl and stronger blue selection colors only
+User selected Neutral pearl and requested implementation of colors only after finding the initial selection fill too faint. Updated existing light-theme surface, neutral text/border and selected-fill/foreground tokens in globals.css. Kept primary brand/status colors, dark mode, layout, sizes, shadows and behavior; did not add the proposed selection marker. All four existing light/dark surface/contrast checks passed; PostCSS parsed shared CSS. Shared candidates/orphans reviewed: no new duplication, imports or reference changes. Live browser appearance remains unverified. No commit or deployment performed.
+
+## [2026-10-26] Match Tickets' nested surface sequence across the dashboard
+Changed shared dashboard-workspace and Header default background from --surface to --surface-alt, producing gray shell → lighter workspace → white content panes. Kept History's run list white with an explicit existing --surface assignment. Existing Zones/result/Tickets/cards already consume these roles, so no per-page layout changes were needed. No highlight, geometry, scrollbar or workflow changes. TypeScript, 37 surface/history/gallery checks and two CSS parses passed. Shared-candidates/orphans rechecked: shared shell/Header resolve the repeated page role, with no new abstraction, imports or orphan references. Live browser appearance remains unchecked.
+
+## [2026-10-26] Tighten and connect the result tabs
+Researched official Carbon/Atlassian tabs guidance and found stacked pt-3 plus tab padding and a 16px content margin in ZoneResults. Removed the extra top padding, scoped a compact 40px tab row (44px coarse pointers), added one purposeful baseline, retained the active underline and strengthened its selected label. All five tab panels now begin 8px below navigation. Kept Neutral pearl surfaces, existing tab state, horizontal overflow, data/actions and shared Tab callers intact. Applies to Zones and History. TypeScript, 33 History/gallery checks, CSS parsing and targeted whitespace checks passed. Shared-candidates/orphans reviewed: one existing component owns the presentation; no new duplication, module or import changes. Browser visual verification remains unavailable.
+
+## [2026-10-26] Simplify sidebar icons and stabilize the logo on toggle
+Replaced five navigation glyphs with simpler installed Lucide alternatives at 20px/2.5 stroke and replaced detailed panel toggles with 18px chevrons. Increased collapsed width 52→64px and icon buttons 36→40px. Root cause of logo movement: different mark sizes/row insets plus centering within the animated outer width. Both branches now use the original 36px mark, matched brand-row anchors and fixed-width inner content. Added accessible collapsed link/expand names and active-route semantics. Kept metric-card icons, logo geometry, theme and routes unchanged. TypeScript, 26 gallery checks, both-mode SSR assertions and targeted whitespace checks passed. Shared candidates/orphans reviewed: existing Sidebar owns both modes, with no new module/dependency or orphan reference. Live browser transition playback remains unchecked.
+
+## [2026-10-26] Simplify the selected reading highlight
+Softened the review queue's selected fill by blending existing brand-soft with its panel surface and applied the existing dark-blue selection text. Removed the blue selection border while preserving transparent border geometry and the keyboard-only focus outline. No sidebar/global highlight, status badge, layout or interaction changes. Eleven History/theme checks, CSS parsing and whitespace validation passed. Shared candidates/orphans rechecked: no new duplication, imports or reference changes. Live browser appearance remains unchecked.
+
+## [2026-10-26] Contain overview in a persistent map/details split
+Implemented the approved map-left / detail-tabs-right layout in shared OverviewTab for Zones, History and gallery. Local panels retain state through opt-in TabPanel.keepMounted; map stays outside those panels. Station selection emphasizes its marker without resizing or refitting. Equal desktop heights and internal detail scrolling replace stacked station/quality sections; small screens stack. Quality details are single-column. Preserved all four metric icons. Follow-up screenshot refinement merges three lower cards into one compact Run details surface, removes duplicate local-tab links and keeps one neutral review action. TypeScript, 20 overview/map/station checks and CSS parsing passed; three overview checks passed again after the consolidation. Browser access disabled, so visual check unavailable. Reviewed shared candidates: no new rule-of-3 duplication. No production orphan introduced; overview-split.test.cjs is a manual test entry point. Also documented the preceding neutral review hierarchy/footer work in the component map.
+
+## [2026-10-26] Connect overview navigation and summary surfaces
+Removed the detached white navigation cap by matching the right pane backdrop. Aligned tab text with card text, unboxed Run details and aligned its labels/values in a shared grid; retained one purposeful action divider. Metric cards/icons and behavior unchanged. CSS parsing passed. Shared candidates/orphans reviewed: no new duplication or reference changes. User screenshot still showed the prior three-card markup; current source already consolidates it. Live browser verification unavailable.
+
+## [2026-10-26] Restore overview panels at user request
+Reverted the preceding surface-only refinement: white tab header, white rounded Run details panel, wrapping metadata rows, and no extra action divider. Existing split layout, metrics/icons and behavior remain. No reference changes or new shared-candidate duplication. Live visuals not checked.
+
+## [2026-10-26] Make the overview details parent panel visible
+Added space-2 inset to the existing white details container and rounded its inner content, enclosing tabs/cards within one visible full-height parent panel. Existing cards, split sizing and interactions retained. Shared candidates/orphans checked: no new duplication or references. CSS parsing checked; browser visuals unavailable.
+
+## [2026-10-26] Unify overview sections and simplify quality findings
+Applied shared inset/panel treatment across Overview, Station summary and Data quality. Station rows retain status/evidence with fewer repeated colored cues and explicit flagged-day counts. Quality uses separate hourly/daily/station totals, a visible interpolation note and nonzero findings first; one disclosure reveals zero-count checks. Preserved metric icons, split layout, selections and algorithms. Followed Carbon disclosure guidance. TypeScript, 18 focused checks and CSS parsing passed. Browser visual verification remains unavailable. Shared candidates/orphans reviewed: no new module, reference removal or third duplicate behavior.
+
+## [2026-10-26] Remove overview section tab divider
+Removed only the full-width border under the right-pane tabs. Active-tab indicator retained. Shared candidates/orphans reviewed: no duplication or reference changes. CSS parsing passed; live visuals not checked.
+
+## [2026-10-26] Separate top navigation from content
+Grouped Header visually with Sidebar using --bg; moved the rounded --surface-alt treatment into shared dashboard-content on existing page bodies and the shell specimen. Removed Tickets' conflicting header override. No provider, action or scrolling changes. Shared candidates updated; no new modules or orphaned references.
+
+## [2026-10-26] Align shared topbar with sidebar brand
+Removed the obsolete top workspace margin that pushed the breadcrumb/actions below the logo after navigation surface separation. One shared CSS change covers dashboard and gallery. CSS parsing and a targeted margin check passed. Shared candidates/orphans reviewed; no new duplication or references. Live visuals not checked.
+
+## [2026-10-26] Give inner overview tabs a quieter selected state
+Replaced the local blue underline with neutral rounded fill and a subtle hover state. Main tabs keep their underline; fixed padding/weight and visible keyboard focus remain. CSS parsing passed. Shared candidates/orphans checked: no new duplication or references. Live appearance not checked.
+
+## [2026-10-26] Remove other-stations toggle
+Station summary now always renders all severity-sorted rows. Deleted obsolete disclosure state/filter/control and updated its regression check. All 13 station-review checks passed. Shared candidates/orphans reviewed: no new duplication or reference changes. Live visuals not checked.
+
+## [2026-10-26] Combine raw and cleaned tables under Data
+Added one Data main tab with a neutral Raw/Cleaned switch, default Cleaned, explanatory text and a persistent shared table. Preserved search/filter state and prevented inactive cleaned filters affecting raw-state indicators. Updated regression coverage; TypeScript and all 11 history/render checks passed. Shared candidates/orphans reviewed: existing components reused, no orphan or new rule-of-three behavior. Browser visuals not checked.
+
+## [2026-10-26] Simplify results navigation names
+Applied Overview / Data / Nearby Stations / Review Readings and updated in-app references. Text-only change; existing internal IDs preserved. Shared candidates/orphans checked: no duplication or reference changes. No runtime tests needed; live visuals not checked.
+
+## [2026-10-26] Move flagged table and downloads into Data
+Added Flagged readings data view and Open in Data navigation near review filters. Replaced full-table disclosure/dialog and footer downloads with Data's neutral portalled Export disclosure. Retained all-row reviewed export scope and loading/save guards. Updated completion guidance, regression checks and component/reference map. TypeScript, 11 checks and CSS parsing passed. Shared candidates reviewed: existing DataTable reused, no third duplicate rule. Live visuals/keyboard playback not checked.
+
+## [2026-10-26] Move nearby stations into Overview
+Reduced main tabs to three and added Nearby stations beside the persistent map. Reused station selector/list component with compact distances, shared station selection and outline-only neighbor emphasis. Kept original map fills/radii/zoom and algorithm outputs. Updated gallery and dependency map; shared candidates reviewed, no new rule-of-three duplication. TypeScript and 22 focused checks passed; live visual/interaction testing not performed.
+
+## [2026-10-26] Refresh data table for pearl theme
+Replaced heavy table framing with a white surface, compact toolbar, soft separators and readable typography. Kept existing filtering, pagination and exports. Reviewed shared-candidates: existing compact-search candidate remains; no new repeated behavior.
+
+## [2026-10-26] Fix table source encoding
+Repaired invalid Windows-1252 bytes in DataTable.tsx while preserving existing UTF-8 content. Strict encoding scan and 11 render checks passed. No reference changes or new shared candidates.
+
+
+## [2026-10-26] Fix double search focus and Export sizing
+Applied one shared search focus rule across the website and gallery, preserving handlers. Reused secondary medium Button for the Data export trigger.
+
+
+## [2026-10-26] Refine review decision area
+Added a quiet pearl footer surface, shorter heading and tighter action grouping. Shared Zones/History component; no new imports, orphans or rule-of-3 duplication.
+
+
+## [2026-10-26] Implement decision-first review footer
+Moved notes right, judgments left and exposed existing save dialog from unsaved review guidance. TypeScript and focused review checks passed, including local save callback/hiding after save.
+
+
+## [2026-10-26] Match review filter groups to Data
+Added white rounded containers and neutral inset selection to both review filter groups. Added status group semantics. No imports or orphan changes; shared-candidates reviewed, same local .filters rule handles both groups.
+
+
+## [2026-10-26] Remove visible flag type label
+Kept accessible group naming and High/Low filters. Removed unused CSS; no new shared candidate.
+
+
+## [2026-10-26] Swap note and review actions
+Moved the note before the buttons in shared ReviewActions. Existing flex sizing/handlers unchanged. No new references, orphans or shared candidate.
+
+
+## [2026-10-26] Reduce upload configuration clutter
+Simplified selected-file header, grouped file rows and added readable HMDAS labels while retaining full filenames. CSV column help moved into native disclosure.
+
+
+## [2026-10-26] Stop review save layout jumps
+Removed in-flow routine save banners and reserved changing footer action slots. Added regression coverage for stable routine status and visible errors. Shared Zones/History callers inherit the fix.
+
+
+## [2026-10-26] Remove upload helper block
+Removed HMDAS guidance and CSV format disclosure as requested. Updated obsolete rendering assertions; no new shared candidate.
+
+
+## [2026-10-26] Compact nearby-station guidance
+Replaced footer paragraphs with existing heading InfoTip. Shared-candidates checked: reused help primitive instead of another tooltip.
+
+
+## [2026-10-26] Quiet map background and station labels
+Softened light map tiles, made labels contextual/neutral, preserved selected label and existing data/zoom behavior. Six map checks passed; browser appearance not checked. Design reference: https://www.esri.com/arcgis-blog/products/arcgis-pro/mapping/primary-design-principles-for-cartography
+
+
+## [2026-10-26] Restore map names and closer framing
+Permanent neutral station labels, slightly tighter fit padding and zoom cap. Existing marker/selection/resize behavior preserved. Shared-candidates checked; no import or orphan changes.
+
+
+## [2026-10-26] Replace busy light basemap with colored Alidade Bright
+Switched actual tile style, removed the fade filter and retained station names/closer framing. Provider attribution updated. No new shared candidate or orphan module; local-host authorization limit documented.
+
+
+## [2026-10-26] Reduce data quality panel density
+Removed repeated visible check descriptions in favor of shared help tooltips; compacted rows and grouped totals. No processing/data changes.
+
+
+## [2026-10-26] Color station-summary warning count red
+Applied existing danger tokens to warningCount only. No behavior, reference, orphan or shared-candidate changes.
+
+
+## [2026-10-26] Refine Nearby stations and Station summary
+Grouped nearby selector, clarified distance hierarchy, tightened summary rows and moved repeated instructions into shared accessible help. No new state or data changes.

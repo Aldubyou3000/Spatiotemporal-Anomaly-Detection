@@ -349,13 +349,12 @@ export default function TechniciansPage() {
         }
       />
 
-      <div style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="dashboard-content" style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* Table card */}
         <div
           style={{
             background: "var(--surface)",
-            border: "1px solid var(--border)",
             borderRadius: "var(--r-xl)",
             boxShadow: "var(--shadow-xs)",
             overflow: "hidden",
@@ -365,7 +364,6 @@ export default function TechniciansPage() {
           <div
             style={{
               padding: "14px 20px",
-              borderBottom: "1px solid var(--border)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -398,7 +396,7 @@ export default function TechniciansPage() {
                 size={13}
                 style={{ position: "absolute", left: 10, color: "var(--text-muted)", pointerEvents: "none" }}
               />
-              <input
+              <input data-search-field aria-label="Search technicians"
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}

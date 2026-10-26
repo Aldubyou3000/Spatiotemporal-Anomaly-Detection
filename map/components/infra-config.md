@@ -59,6 +59,7 @@ Note: `api/.env.example` was deleted in the working tree (per `git status`) — 
 | App | `App/package.json` | **`expo` ~55.0.26 pinned** (do not upgrade to 56+), `react-native` 0.83.6, `@tanstack/react-query` ^5.101 (not SWR!), `react-native-sse`, `expo-router` ~55, `buffer` ^6.0.3 (Node polyfill for `crypto-browserify`). `expo-blur`/`expo-print`/`expo-symbols` removed (dead). `react-native-url-polyfill` now wired via `App/app/_layout.tsx:1`. |
 
 ## Type checking / tests
+- Local UI Library: `http://localhost:3000/ui-library` during `npm run dev`; no API/login required. Both design routes call notFound outside development. Exact preview framing is allowed only in development; other security headers remain unchanged. `node tests/ui-library.test.cjs` checks settings/CSS/network and access/header boundaries; `node tests/ui-library-render.test.cjs` checks 20 specimen renders and complete visual-module coverage. See docs/UI_LIBRARY.md. Browser QA was attempted but blocked by disabled local browser use in Work settings.
 - Web: `npx tsc --noEmit` or `npm run build` (also catches type errors).
 - API: no dedicated lint; Pydantic v2 validates schemas at runtime.
 - App: Expo bundler checks TS on `npm start`.
@@ -80,3 +81,6 @@ Migration 0009_history_titles.sql must follow 0008 before deploying updated API/
 
 ## Supabase MCP connection (2026-10-25)
 User installed/authorized the Supabase plugin in Codex. MCP project listing and a read-only History SQL query succeeded against `Spatiotemporal Anomaly Detection` (`dygsorinzcxaolapswal`), matching the API's configured Supabase host. This connection uses the plugin; no `.mcp.json` or Codex configuration file was changed. History tables/view are live; this check does not establish a full save/review/ticket workflow test.
+
+
+Stadia light basemap (2026-10-26): StationMap light tiles use Alidade Bright. Localhost/127.0.0.1 needs no authentication; non-loopback LAN hosts and deployment must be authorized through Stadia (domain authentication for hosted sites or provider API-key setup for LAN). Local unauthenticated requests have rate limits. Official references: https://docs.stadiamaps.com/authentication and https://docs.stadiamaps.com/map-styles/alidade-bright/ .

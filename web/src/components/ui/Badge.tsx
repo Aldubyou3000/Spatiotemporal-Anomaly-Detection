@@ -24,6 +24,7 @@ export function Badge({ tone = "neutral", dot, size = "sm", className, style, ch
   const t = TONES[tone];
   return (
     <span
+      data-ui="badge"
       className={cn(className)}
       style={{
         display: "inline-flex",

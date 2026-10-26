@@ -227,6 +227,33 @@ class HistoryTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 schemas.SaveRunRequest(title=title)
 
+    def test_job_progress_is_updated_by_pipeline_and_only_returned_to_its_owner(self):
+        from app.routers import zones
+        from app.core.dependencies import require_analyst_or_bearer
+        from app.schemas.zones import PipelineProgress
+        zones._jobs[RUN] = {"status": "processing", "user_id": USER.id}
+        progress = PipelineProgress(stage="zone_c", station_ids=["A", "B"])
+        def run(payload, on_progress):
+            on_progress(progress)
+            self.assertEqual(zones._jobs[RUN]["progress"], progress.model_dump())
+            return result()
+        app = FastAPI()
+        app.state.limiter = zones.limiter
+        app.include_router(zones.router)
+        app.dependency_overrides[require_analyst_or_bearer] = lambda: USER.model_dump()
+        try:
+            with patch.object(zones, "run_pipeline_multi", side_effect=run):
+                zones._run_job(RUN, [], USER)
+            zones._jobs[RUN]["status"] = "processing"
+            client = TestClient(app)
+            response = client.get(f"/api/zones/jobs/{RUN}")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["progress"], progress.model_dump())
+            app.dependency_overrides[require_analyst_or_bearer] = lambda: {**USER.model_dump(), "id": "other-user"}
+            self.assertEqual(client.get(f"/api/zones/jobs/{RUN}").status_code, 404)
+        finally:
+            zones._jobs.pop(RUN, None)
+
     def test_manual_save_records_title_without_changing_original_readings(self):
         sb = MagicMock()
         with patch.object(history.audit, "log"):

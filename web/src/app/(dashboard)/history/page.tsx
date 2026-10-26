@@ -17,9 +17,9 @@ export default function HistoryPage() {
   const { data, error, isLoading, isValidating, mutate } = useHistoryList(filters);
   return <div className={`${styles.page} ${styles.listPage}`}>
     <Header title="History" />
-    <div className={`${styles.body} ${styles.listBody}`}>
+    <div className={`dashboard-content ${styles.body} ${styles.listBody}`}>
       <form className={styles.toolbar} onSubmit={(event) => { event.preventDefault(); setFilters({ search: search.trim(), start, end, offset: 0 }); }}>
-        <div className={styles.searchField}>
+        <div className={styles.searchField} data-search-field>
           <Search size={18} aria-hidden="true" />
           <input aria-label="Search saved runs" value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} placeholder="Search saved runs…" />
         </div>

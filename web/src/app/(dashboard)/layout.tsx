@@ -41,9 +41,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <ToastProvider>
               <RunSaveController />
               <div className="h-screen flex bg-bg text-text relative overflow-hidden">
-                <div aria-hidden className="fixed inset-0 grid-bg opacity-40 pointer-events-none" />
                 <Sidebar />
-                <main className="flex-1 min-w-0 flex flex-col relative z-10 overflow-hidden">
+                <main className="dashboard-workspace flex-1 min-w-0 flex flex-col relative z-10 overflow-hidden">
                   <OfflineBanner />
                   <PageTransition>{children}</PageTransition>
                 </main>

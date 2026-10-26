@@ -165,12 +165,7 @@ export function TicketActionDock({
         style={{
           flexShrink: 0, position: "relative",
           background: open ? "var(--surface)" : "var(--surface-alt)",
-          borderTop: open ? "1px solid var(--divider)" : "1px solid var(--border-strong)",
-          boxShadow: needsReview
-            ? "inset 0 2px 0 color-mix(in oklab, var(--brand) 55%, transparent)"
-            : !open
-              ? "0 -2px 8px rgba(16,24,40,0.04)"
-              : "none",
+          boxShadow: "none",
         }}
       >
         {/* One-shot ping overlay — plays once on mount (ticket selection), then disappears */}

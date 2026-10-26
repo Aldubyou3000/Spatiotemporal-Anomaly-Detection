@@ -1,0 +1,27 @@
+.dropZone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); min-height: calc(var(--row-h) * 4); padding: var(--space-6); text-align: center; border: 1px dashed var(--border-strong); border-radius: var(--r-lg); background: var(--surface-alt); }
+.hasFiles { flex-direction: row; justify-content: flex-start; min-height: 0; padding: 0; text-align: left; border-color: transparent; border-style: solid; background: transparent; }
+.hasFiles .uploadIcon { display: none; }
+.dragOver { border-color: var(--brand); background: var(--brand-soft); }
+.disabled { opacity: .5; }
+.uploadIcon { display: grid; place-items: center; flex-shrink: 0; width: var(--row-h); height: var(--row-h); border-radius: var(--r-lg); color: var(--brand); background: var(--brand-soft); }
+.uploadText { min-width: 0; }
+.hasFiles .uploadText { flex: 1; }
+.uploadTitle { margin: 0; font-size: var(--font-base); font-weight: 600; color: var(--text); }
+.uploadHint { margin: var(--space-2) 0 0; font-size: var(--font-xs); color: var(--text-secondary); line-height: 1.5; }
+.fileList { margin-top: var(--space-4); padding: var(--space-2); background: var(--surface-sunken); border-radius: var(--r-lg); }
+.files { max-height: min(240px, 35dvh); overflow-y: auto; }
+.fileRow { display: flex; align-items: center; gap: var(--space-4); min-height: var(--row-h); padding: var(--space-2); border-bottom: 1px solid var(--border-soft); }
+.fileRow:last-child { border-bottom: 0; }
+.fileName { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-sm); color: var(--text); }
+.fileSize { flex-shrink: 0; font-size: var(--font-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.fileRow > button { border-color: transparent; background: transparent; }
+.fileActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); flex-shrink: 0; }
+.hasFiles .uploadTitle { font-size: var(--font-sm); }
+.hasFiles .uploadHint { margin-top: var(--space-1); }
+@media (max-width: 560px) {
+  .dropZone { flex-direction: column; text-align: center; padding: var(--space-4); }
+  .hasFiles { padding: 0; }
+}
+
+
+.originalName { margin: var(--space-1) 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-xs); color: var(--text-muted); }

@@ -150,7 +150,7 @@ function DecisionCard({
         border: active
           ? `1.5px solid ${accentVar}`
           : "1.5px solid var(--border)",
-        boxShadow: active ? `0 0 0 3px color-mix(in oklab, ${accentVar} 14%, transparent)` : "none",
+        boxShadow: "none",
         transition: "border-color var(--duration-fast), background var(--duration-fast), box-shadow var(--duration-fast)",
       }}
       onMouseEnter={(e) => { if (!active && !disabled) e.currentTarget.style.borderColor = "var(--border-strong)"; }}
@@ -251,7 +251,7 @@ export function ReviewPanel({
   }
 
   return (
-    <div style={{ padding: "14px 18px 16px", borderBottom: "1px solid var(--divider)", background: "color-mix(in oklab, var(--brand) 3%, var(--surface))", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ padding: "14px 18px 16px", background: "color-mix(in oklab, var(--brand) 3%, var(--surface))", display: "flex", flexDirection: "column", gap: 12 }}>
 
       {/* Step 1 — the decision */}
       <div>
@@ -428,7 +428,7 @@ export function ReviewPanel({
             ? "var(--brand)"
             : isApprove ? "var(--success)" : "var(--warning)",
           color: "var(--brand-fg)",
-          boxShadow: "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18)",
+          boxShadow: "none",
         }}
         onMouseEnter={(e) => { if (!approving) e.currentTarget.style.filter = "brightness(0.94)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.filter = ""; }}

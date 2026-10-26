@@ -3,6 +3,7 @@ import csv
 import io
 import sys
 import unittest
+from unittest.mock import patch
 from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_EVEN
@@ -188,6 +189,30 @@ class ActualDatasetTests(unittest.TestCase):
             self.assertEqual(row.interpolated_flag, (row.station_id, row.date) in estimated)
         self.assertNotIn(("Mandaluyong", datetime(2021, 3, 28).date()), actual)
         print(f"\nActual dataset verified: {len(actual)} complete daily totals; 319 partial days excluded; {filled} hours filled.")
+
+
+class PipelineProgressTests(unittest.TestCase):
+    def test_progress_reports_real_zone_boundaries_and_station_ids(self):
+        from app.services import zones_service as service
+        csv_text = "station_id,date,latitude,longitude,rainfall\n" + "".join(
+            f"{station},2023-01-{day:02d},14.6,121.0,{day + index}\n"
+            for index, station in enumerate(["A", "B", "C", "D"]) for day in [1, 2, 3]
+        )
+        events = []
+        clean, group, detect = service._clean_daily_readings, service.zone_b_haversine_grouping, service.zone_c_lof_anomaly_detection
+        def checked(stage, function):
+            def run(*args, **kwargs):
+                self.assertEqual(events[-1].stage, stage)
+                return function(*args, **kwargs)
+            return run
+        with patch.object(service, "_clean_daily_readings", side_effect=checked("zone_a", clean)), \
+             patch.object(service, "zone_b_haversine_grouping", side_effect=checked("zone_b", group)), \
+             patch.object(service, "zone_c_lof_anomaly_detection", side_effect=checked("zone_c", detect)):
+            output = run_pipeline_multi([("stations.csv", csv_text.encode())], on_progress=events.append)
+        self.assertEqual([event.stage for event in events], ["preparing", "zone_a", "zone_b", "zone_c", "finalizing"])
+        self.assertEqual(events[0].station_ids, [])
+        self.assertTrue(all(event.station_ids == ["A", "B", "C", "D"] for event in events[1:]))
+        self.assertEqual(output.summary.total_rows, 12)
 
 
 if __name__ == "__main__":

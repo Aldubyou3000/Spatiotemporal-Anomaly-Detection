@@ -317,7 +317,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
   return (
     <div
       key={ticket.id}
-      style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}
+      style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 0, background: "var(--surface)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}
     >
       {subResourceError && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", background: "color-mix(in oklab, var(--danger) 8%, var(--surface))", borderBottom: "1px solid color-mix(in oklab, var(--danger) 18%, transparent)", fontSize: "var(--font-xs)", color: "var(--danger)" }}>
@@ -332,7 +332,7 @@ function DetailPanel({ ticket, onUpdated, updateCache }: { ticket: TicketDetail;
           </button>
         </div>
       )}
-      {ticket.run_id && <div style={{ padding: "8px var(--pad-x)", borderBottom: "1px solid var(--divider)", fontSize: "var(--font-sm)" }}>
+      {ticket.run_id && <div style={{ padding: "8px var(--pad-x)", fontSize: "var(--font-sm)" }}>
         <Link href={`/history/${ticket.run_id}`} style={{ color: "var(--brand)" }}>View source run →</Link>
       </div>}
       <TicketDetailBody model={model} footer={footer} />
@@ -527,7 +527,6 @@ function TicketRow({ ticket, selected, onClick }: { ticket: TicketListItem; sele
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 50;
 
 export default function TicketsPage() {
   return <Suspense fallback={<div role="status">Loading tickets…</div>}><TicketsWorkspace /></Suspense>;
@@ -597,15 +596,15 @@ function TicketsWorkspace() {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
       <Header title="Tickets" />
-      <div style={{ display: "grid", gridTemplateColumns: "clamp(260px, 30%, 380px) 1fr", gap: 16, flex: 1, minHeight: 0, padding: "16px 20px 20px", overflow: "hidden" }}>
+      <div className="dashboard-content" style={{ display: "grid", gridTemplateColumns: "clamp(260px, 30%, 420px) minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr)", alignItems: "stretch", gap: "var(--gap-card)", flex: 1, minHeight: 0, padding: "var(--gap-card)", overflow: "hidden" }}>
 
         {/* Left list */}
-        <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}>
+        <div role="region" aria-label="Ticket list" style={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0, minWidth: 0, background: "var(--surface)", borderRadius: "var(--r-2xl)" }}>
           {/* Search */}
           <div style={{ padding: "12px 12px 10px", borderBottom: "1px solid var(--divider)" }}>
             <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
               <Search size={13} style={{ position: "absolute", left: 10, color: "var(--text-muted)", pointerEvents: "none" }} />
-              <input
+              <input data-search-field aria-label="Search tickets"
                 placeholder="Search by TKT-#, title, station…"
                 value={query} onChange={(e) => setQuery(e.target.value)}
                 style={{ width: "100%", height: 32, paddingLeft: 30, paddingRight: 12, borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "var(--surface-sunken)", color: "var(--text)", fontSize: "var(--font-sm)", outline: "none", fontFamily: "inherit" }}
@@ -616,7 +615,7 @@ function TicketsWorkspace() {
           </div>
 
           {/* Filters */}
-          <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid var(--divider)", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ padding: "10px 10px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
             <Select
               value={filterPriority}
               onChange={setFilterPriority}
@@ -680,7 +679,7 @@ function TicketsWorkspace() {
                       </div>
                     )}
                     {showSplit && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 16px 6px", fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", borderTop: "1px solid var(--border)", marginTop: 2 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 16px 6px", fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginTop: 2 }}>
                         All Tickets
                       </div>
                     )}
@@ -691,21 +690,18 @@ function TicketsWorkspace() {
             )}
           </div>
 
-          <div style={{ padding: "8px 14px", borderTop: "1px solid var(--divider)", background: "var(--surface-alt)", fontSize: "var(--font-xs)", color: "var(--text-muted)", textAlign: "center", flexShrink: 0 }}>
-            {allItems.length > PAGE_SIZE ? `Showing ${filteredItems.length} of ${allItems.length.toLocaleString()} tickets` : `${filteredItems.length} ticket${filteredItems.length !== 1 ? "s" : ""}`}
-          </div>
         </div>
 
         {/* Right detail */}
-        <div style={{ overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div role="region" aria-label="Ticket details" style={{ overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: "var(--surface)", borderRadius: "var(--r-2xl)" }}>
           {detailLoading ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xs)" }}>
               <DetailSkeleton />
             </div>
           ) : detailTicket ? (
             <DetailPanel ticket={detailTicket} onUpdated={updateCache} updateCache={updateCache} />
           ) : (
-            <div style={{ flex: 1, display: "grid", placeItems: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-xl)" }}>
+            <div style={{ flex: 1, display: "grid", placeItems: "center", background: "var(--surface)", borderRadius: "var(--r-xl)" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center", padding: "0 32px" }}>
                 <div style={{ width: 44, height: 44, borderRadius: "var(--r-xl)", background: "var(--surface-sunken)", display: "grid", placeItems: "center", color: "var(--text-muted)" }}>
                   <CheckCircle2 size={20} />

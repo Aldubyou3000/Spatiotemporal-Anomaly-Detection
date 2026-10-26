@@ -95,6 +95,7 @@ export function Select({ value, onChange, options, placeholder, width, ariaLabel
   return (
     <div ref={wrapperRef} style={{ position: "relative", width: width ?? "auto", flexShrink: 0 }}>
       <button
+        data-ui="select"
         ref={btnRef}
         type="button"
         aria-label={ariaLabel}
@@ -107,7 +108,7 @@ export function Select({ value, onChange, options, placeholder, width, ariaLabel
         style={{
           width: "100%",
           height: 30,
-          padding: "0 26px 0 10px",
+          padding: "0 10px",
           borderRadius: "var(--r-md)",
           border: `1px solid ${open ? "var(--border-focus)" : hasValue ? "var(--border)" : "var(--border)"}`,
           background: open ? "var(--surface)" : hasValue ? "var(--surface)" : "var(--surface-alt)",
@@ -134,8 +135,8 @@ export function Select({ value, onChange, options, placeholder, width, ariaLabel
           if (!open) e.currentTarget.style.borderColor = "var(--border)";
         }}
       >
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>{displayLabel}</span>
-        <ChevronDown size={12} style={{ color: "var(--text-muted)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />
+        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>{displayLabel}</span>
+        <ChevronDown size={14} strokeWidth={2} aria-hidden="true" style={{ color: "var(--text-secondary)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />
       </button>
 
       {open &&

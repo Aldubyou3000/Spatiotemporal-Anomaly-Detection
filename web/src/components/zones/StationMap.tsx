@@ -24,18 +24,23 @@ interface StationMapProps {
   className?: string;
   height?: number | string;
   style?: React.CSSProperties;
+  selectedStationId?: string;
+  highlightedStationIds?: string[];
 }
 
-const LIGHT_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+// shortcut: keyless tiles work on localhost; authorize the domain with Stadia before LAN or hosted use.
+const LIGHT_TILES = "https://tiles.stadiamaps.com/tiles/alidade_bright/{z}/{x}/{y}{r}.png";
 const DARK_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
-const ATTRIBUTION =
+const LIGHT_ATTRIBUTION = '&copy; <a href="https://stadiamaps.com/attribution/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const DARK_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.esri.com/">Esri</a>';
 
-export function StationMap({ stations, className, height = 480, style }: StationMapProps) {
+export function StationMap({ stations, className, height = 480, style, selectedStationId, highlightedStationIds }: StationMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const tilesRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<CircleMarker[]>([]);
+  const stationMarkersRef = useRef(new Map<string, CircleMarker>());
   const { theme } = useTheme();
 
   const center = useMemo<[number, number]>(() => {
@@ -54,10 +59,13 @@ export function StationMap({ stations, className, height = 480, style }: Station
       scrollWheelZoom: true,
       zoomControl: true,
       attributionControl: true,
+      // Leaflet's SVG zoom tween scales circle markers before their paths update.
+      zoomAnimation: false,
+      markerZoomAnimation: false,
     });
 
     tilesRef.current = L.tileLayer(theme === "dark" ? DARK_TILES : LIGHT_TILES, {
-      attribution: ATTRIBUTION,
+      attribution: theme === "dark" ? DARK_ATTRIBUTION : LIGHT_ATTRIBUTION,
       maxZoom: 19,
     }).addTo(map);
 
@@ -67,15 +75,21 @@ export function StationMap({ stations, className, height = 480, style }: Station
     // match the right-hand stats stack). Without this, Leaflet keeps the old 0×0
     // or 400px measurement and tiles appear clipped.
     let ro: ResizeObserver | null = null;
+    let resizeFrame: number | null = null;
     if (typeof ResizeObserver !== "undefined" && containerRef.current) {
       ro = new ResizeObserver(() => {
-        requestAnimationFrame(() => map.invalidateSize({ animate: false }));
+        if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = null;
+          if (mapRef.current === map) map.invalidateSize({ animate: false, pan: false });
+        });
       });
       ro.observe(containerRef.current);
     }
 
     return () => {
       if (ro) ro.disconnect();
+      if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
       map.remove();
       mapRef.current = null;
       tilesRef.current = null;
@@ -88,7 +102,7 @@ export function StationMap({ stations, className, height = 480, style }: Station
     if (!mapRef.current) return;
     if (tilesRef.current) tilesRef.current.remove();
     tilesRef.current = L.tileLayer(theme === "dark" ? DARK_TILES : LIGHT_TILES, {
-      attribution: ATTRIBUTION,
+      attribution: theme === "dark" ? DARK_ATTRIBUTION : LIGHT_ATTRIBUTION,
       maxZoom: 19,
     }).addTo(mapRef.current);
   }, [theme]);
@@ -98,13 +112,12 @@ export function StationMap({ stations, className, height = 480, style }: Station
     const map = mapRef.current;
     if (!map) return;
 
-    // Tab was hidden (display:none) while another tab was active — Leaflet measured
-    // 0×0 then. Invalidate so the map picks up the real container size before we
-    // place markers / fitBounds, otherwise markers balloon and tiles swim.
-    requestAnimationFrame(() => map.invalidateSize({ animate: false }));
+    // Measure before fitting, rather than correcting the viewport on a later frame.
+    map.invalidateSize({ animate: false, pan: false });
 
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
+    stationMarkersRef.current.clear();
 
     if (stations.length === 0) return;
 
@@ -186,29 +199,40 @@ export function StationMap({ stations, className, height = 480, style }: Station
         }
       );
 
-      const label = isAnomalous ? `${station.station_id} • ${station.anomaly_count}` : station.station_id;
+      const label = station.station_id;
       marker.bindTooltip(label, {
         permanent: true,
         direction: "top",
         offset: L.point(0, isAnomalous ? -14 : -9),
-        className: isAnomalous ? "station-label station-label--flagged" : "station-label",
+        className: "station-label",
       });
 
       markersRef.current.push(marker);
+      stationMarkersRef.current.set(station.station_id, marker);
       if (isAnomalous) marker.bringToFront();
       bounds.extend([station.latitude, station.longitude]);
     });
 
     if (bounds.isValid()) {
+      map.setMinZoom(0);
       // No fly/animate on tab switch — the TabPanel already fades; second motion stacks and feels exaggerated.
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 11, animate: false } as L.FitBoundsOptions);
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 12, animate: false } as L.FitBoundsOptions);
 
       // Lock zoom-out to the level that shows all stations, and pan to those bounds
-      const fitZoom = map.getBoundsZoom(bounds, false, [40, 40] as unknown as L.Point);
-      map.setMinZoom(fitZoom);
+      map.setMinZoom(map.getZoom());
       map.setMaxBounds(bounds.pad(0.3));
     }
   }, [stations]);
+
+  // Selection changes marker emphasis only; preserve the user's map position and zoom.
+  useEffect(() => {
+    stationMarkersRef.current.forEach((marker, id) => {
+      const selected = id === selectedStationId;
+      const nearby = highlightedStationIds?.includes(id);
+      marker.setStyle({ color: selected ? getCssVar("--brand") : nearby ? getCssVar("--on-brand-soft") : "#ffffff", weight: selected ? 4 : (marker.options.radius === 10 ? 3 : 2) });
+      if (selected) marker.bringToFront();
+    });
+  }, [selectedStationId, highlightedStationIds, stations]);
 
   const isFlexible = typeof height === "string" && height.includes("%");
   return (
@@ -216,7 +240,7 @@ export function StationMap({ stations, className, height = 480, style }: Station
       <div
         ref={containerRef}
         className={className}
-        style={{ height, ...(isFlexible ? { flex: 1, minHeight: 380 } : undefined), borderRadius: 12, overflow: "hidden" }}
+        style={{ height, ...(isFlexible ? { flex: 1, minHeight: 0 } : undefined), borderRadius: "var(--r-lg)", overflow: "hidden" }}
       />
     </div>
   );

@@ -1,75 +1,76 @@
 "use client";
-import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, ChevronDown, ChevronUp, Compass, Download, LayoutGrid, Table2 } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ChevronDown, Download, LayoutGrid, Table2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { createPortal } from "react-dom";
 import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { DataTable, type FilterField } from "@/components/zones/DataTable";
 import { OverviewTab } from "@/components/zones/OverviewTab";
-import { NeighborGroupsTab } from "@/components/zones/NeighborGroupsTab";
 import { AnomalyReportTab } from "@/components/zones/AnomalyReportTab";
 import { InfoTip } from "@/components/zones/InfoTip";
-import { DECISION_LABEL, exportReviewedReadings, flaggedReadings, type AnomalyReview, type AnomalyReviews, type ReviewedReading } from "@/lib/anomalyReview";
-import type { DailyReading, ProcessResult } from "@/types/zones";
-import { cn } from "@/lib/cn";
-function FullAnomalyTable({
-  data,
-  columns,
-  searchKeys,
-  filterFields,
-  downloadReady,
-}: {
-  data: ReviewedReading[];
-  columns: { key: keyof ReviewedReading & string; header: string; mono?: boolean; width?: string; align?: "left" | "right" | "center"; render?: (value: unknown) => React.ReactNode }[];
-  searchKeys: (keyof ReviewedReading & string)[];
-  filterFields: FilterField[];
-  downloadReady: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  if (data.length === 0) return null;
-  return (
-    <div style={{ marginTop: 12 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text-secondary)",
-          background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-full)",
-          padding: "5px 12px", cursor: "pointer",
-        }}
-      >
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        {open ? "Hide full table" : `View full table — ${data.length} rows`}
-      </button>
-      {open && (
-        <div style={{ marginTop: 10 }}>
-          <DataTable<ReviewedReading>
-            data={data} columns={columns} pageSize={10}
-            caption="System-flagged readings and analyst reviews" emptyMessage="No flagged readings to list."
-            onDownload={downloadReady ? () => import("@/lib/csv").then((m) => m.downloadCsv("reviewed_anomalies.csv", data)) : undefined}
-            downloadLabel="Download with reviews"
-            searchKeys={searchKeys}
-            filterFields={filterFields}
-          />
-        </div>
-      )}
-    </div>
-  );
+import { DECISION_LABEL, exportReviewedReadings, flaggedReadings, type AnomalyReview, type AnomalyReviews } from "@/lib/anomalyReview";
+import type { ProcessResult } from "@/types/zones";
+import styles from './ZoneResults.module.css';
+
+function ExportMenu({ children }: { children: React.ReactNode }) {
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!position) return;
+    popup.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    function outside(event: Event) {
+      if (!popup.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) setPosition(null);
+    }
+    function escape(event: KeyboardEvent) {
+      if (event.key === "Escape") { setPosition(null); trigger.current?.focus(); }
+    }
+    function close() { setPosition(null); }
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [position]);
+  return <div className={styles.exportControl}>
+    <Button ref={trigger} type="button" variant="secondary" size="md" aria-expanded={!!position} aria-controls={position ? id : undefined}
+      onClick={() => {
+        const rect = trigger.current!.getBoundingClientRect();
+        setPosition(position ? null : { top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
+      }}><Download size={16} aria-hidden="true" /><span>Export</span><ChevronDown size={14} aria-hidden="true" /></Button>
+    {position && createPortal(<div ref={popup} id={id} role="group" aria-label="CSV exports" className={styles.exportMenu} style={position}
+      onClick={event => {
+        if ((event.target as HTMLElement).closest('button:not(:disabled)')) { setPosition(null); trigger.current?.focus(); }
+      }}>{children}</div>, document.body)}
+  </div>;
 }
 
-export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, defaultTab = "overview", reviewBusy = false, reviewsReady = true }: {
+export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, onSaveRun, defaultTab = "overview", reviewBusy = false, reviewsReady = true, fitViewport = false }: {
   result: ProcessResult; reviews?: AnomalyReviews;
   onReview?: (key: string, review: AnomalyReview | null) => void | Promise<AnomalyReview | null | void>;
   onCreateTicket?: (stationId: string, date?: string) => void;
+  onSaveRun?: () => void;
   defaultTab?: string; reviewBusy?: boolean; reviewsReady?: boolean;
+  fitViewport?: boolean;
 }) {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState(defaultTab === "raw" || defaultTab === "cleaned" ? "data" : defaultTab === "neighbors" ? "overview" : defaultTab);
+  const [dataView, setDataView] = useState<"raw" | "cleaned" | "flagged">(defaultTab === "raw" ? "raw" : "cleaned");
   const reviewedRows = useMemo(() => exportReviewedReadings(result.flagged_data, reviews), [result.flagged_data, reviews]);
   const reportRows = useMemo(() => exportReviewedReadings(flaggedReadings(result.flagged_data), reviews), [result.flagged_data, reviews]);
   const cleanedColumns = useMemo(() => [
-    { key: "station_id" as const, header: "Station", mono: true, width: "20%" },
-    { key: "date" as const, header: "Date", mono: true, width: "16%" },
+    { key: "station_id" as const, header: "Station", width: "20%" },
+    { key: "date" as const, header: "Date", width: "16%" },
     { key: "latitude" as const, header: "Latitude", mono: true, align: "right" as const, width: "14%" },
     { key: "longitude" as const, header: "Longitude", mono: true, align: "right" as const, width: "14%" },
     { key: "rainfall" as const, header: "Rainfall (mm)", mono: true, align: "right" as const, width: "14%" },
@@ -82,8 +83,8 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, de
   ], []);
 
   const flaggedColumns = useMemo(() => [
-    { key: "station_id" as const, header: "Station", mono: true, width: "16%" },
-    { key: "date" as const, header: "Date", mono: true, width: "14%" },
+    { key: "station_id" as const, header: "Station", width: "16%" },
+    { key: "date" as const, header: "Date", width: "14%" },
     { key: "rainfall" as const, header: "Rainfall (mm)", mono: true, align: "right" as const, width: "14%" },
     {
       key: "lof_score" as const, header: "LOF score", mono: true, align: "right" as const,
@@ -112,8 +113,7 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, de
     return Object.keys(sample).map((k) => ({
       key: k as keyof typeof sample & string,
       header: HEADER_MAP[k] ?? k,
-      mono: true,
-      align: typeof sample[k] === "number" ? ("right" as const) : ("left" as const),
+      align: ["latitude", "longitude", "rainfall", "rainfall_mm"].includes(k) || typeof sample[k] === "number" ? ("right" as const) : ("left" as const),
     }));
   }, [result.raw_preview]);
 
@@ -157,55 +157,49 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, de
     },
   ], []);
 
+
   return (
-    <section style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-2xl)", padding: 4, boxShadow: "var(--shadow-md)", overflow: "hidden" }}>
-      <Tabs defaultValue={defaultTab}>
-        <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
-          <TabsList className="px-4 pt-3" style={{ borderBottom: "none" }}>
-            <Tab value="overview" icon={<LayoutGrid size={13} strokeWidth={2.4} />}>Overview &amp; Map</Tab>
-            <Tab value="raw" icon={<Table2 size={13} strokeWidth={2.4} />}>Raw Data</Tab>
-            <Tab value="cleaned" icon={<Activity size={13} strokeWidth={2.4} />}>Cleaned Data</Tab>
-            <Tab value="neighbors" icon={<Compass size={13} strokeWidth={2.4} />}>Neighbor Groups</Tab>
-            <Tab value="anomalies" icon={<AlertTriangle size={13} strokeWidth={2.4} />}>Anomaly Report</Tab>
+    <section className={`results-workspace${fitViewport ? ` ${styles.viewport}` : ''}`}>
+      <Tabs defaultValue={defaultTab} value={activeTab} onValueChange={setActiveTab} className={fitViewport ? styles.tabs : undefined}>
+        <div className={styles.navigation}>
+          <TabsList className={styles.tabList}>
+            <Tab value="overview" icon={<LayoutGrid size={13} strokeWidth={2.4} />}>Overview</Tab>
+            <Tab value="data" icon={<Table2 size={13} strokeWidth={2.4} />}>Data</Tab>
+            <Tab value="anomalies" icon={<AlertTriangle size={13} strokeWidth={2.4} />}>Review Readings</Tab>
           </TabsList>
-          {/* Export buttons — pushed right, never forcing tab overflow */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, paddingRight: 8, marginLeft: "auto", flexShrink: 0 }}>
-            <button
-              onClick={() => import("@/lib/csv").then((m) => m.downloadCsv("cleaned_data.csv", result.cleaned_data as unknown as Record<string, unknown>[]))}
-              className="export-btn"
-            >
-              <Download size={12} strokeWidth={2.2} />
-              Cleaned CSV
-            </button>
-            <button
-              onClick={() => import("@/lib/csv").then((m) => m.downloadCsv("reviewed_results.csv", reviewedRows))}
-              disabled={!reviewsReady || reviewBusy}
-              title="All daily readings, original system flags, and analyst review decisions"
-              className="export-btn export-btn--primary"
-            >
-              <Download size={12} strokeWidth={2.2} />
-              Results CSV
-            </button>
-          </div>
         </div>
-        <div className={cn("px-5 pb-5")}>
-          <TabPanel value="overview"><OverviewTab result={result} /></TabPanel>
-          <TabPanel value="raw" className="pt-6">
-            <DataTable data={result.raw_preview} columns={rawColumns} pageSize={10}
-              caption={<>All <span className="font-mono tabular">{result.raw_total_rows.toLocaleString()}</span> uploaded rows</>}
-              emptyMessage="No rows in the uploaded file."
-              searchKeys={rawSearchKeys} />
+        <div className={styles.content}>
+          <TabPanel value="overview" className={`${styles.panel} ${styles.overview}`}><OverviewTab key={result.run_id ?? result.processed_at} result={result} fillHeight={fitViewport} defaultSection={defaultTab === "neighbors" ? "neighbors" : "overview"} onReviewReadings={() => setActiveTab("anomalies")} /></TabPanel>
+          <TabPanel value="data" className={styles.panel} keepMounted>
+            <div className={styles.dataToolbar}>
+              <div className={styles.dataSwitch} role="group" aria-label="Data version">
+                {(["raw", "cleaned", "flagged"] as const).map(view => <button key={view} type="button" aria-pressed={dataView === view} onClick={() => setDataView(view)}>
+                  {view === "raw" ? "Raw" : view === "cleaned" ? "Cleaned" : "Flagged readings"}
+                </button>)}
+              </div>
+              <p>{dataView === "raw" ? "Uploaded readings before cleaning." : dataView === "cleaned" ? "Validated daily readings used for detection." : "System-flagged readings and analyst decisions."}</p>
+              {activeTab === "data" && <ExportMenu>
+                <button type="button" className="menu-item" onClick={() => import("@/lib/csv").then(m => m.downloadCsv("cleaned_data.csv", result.cleaned_data as unknown as Record<string, unknown>[]))}>Cleaned data CSV</button>
+                <button type="button" className="menu-item" disabled={!reviewsReady || reviewBusy}
+                  title="All daily readings, original system flags, and analyst review decisions"
+                  onClick={() => import("@/lib/csv").then(m => m.downloadCsv("reviewed_results.csv", reviewedRows))}>Results with reviews CSV</button>
+              </ExportMenu>}
+            </div>
+            <DataTable<Record<string, unknown>>
+              data={(dataView === "raw" ? result.raw_preview : dataView === "cleaned" ? result.cleaned_data : reportRows) as unknown as Record<string, unknown>[]}
+              columns={dataView === "raw" ? rawColumns : dataView === "cleaned" ? cleanedColumns : flaggedColumns} pageSize={10}
+              caption={dataView === "raw"
+                ? `${result.raw_preview.length.toLocaleString()} of ${result.raw_total_rows.toLocaleString()} uploaded rows`
+                : dataView === "cleaned" ? `After Zone A — ${result.cleaned_data.length.toLocaleString()} validated daily readings`
+                : `${reportRows.length.toLocaleString()} flagged readings · ${!reviewsReady ? "Loading reviews…" : reviewBusy ? "Saving reviews…" : "Includes high and low flags"}`}
+              emptyMessage={dataView === "raw" ? "No rows in the uploaded file." : dataView === "cleaned" ? "No validated daily readings." : "No flagged readings to list."}
+              searchKeys={dataView === "raw" ? rawSearchKeys : ["station_id", "date"]}
+              filterFields={dataView === "cleaned" ? cleanedFilterFields : dataView === "flagged" ? flaggedFilterFields : undefined} />
           </TabPanel>
-          <TabPanel value="cleaned" className="pt-6">
-            <DataTable<DailyReading> data={result.cleaned_data} columns={cleanedColumns} pageSize={10}
-              caption={`After Zone A — ${result.cleaned_data.length.toLocaleString()} validated daily readings`}
-              searchKeys={["station_id", "date"]}
-              filterFields={cleanedFilterFields} />
-          </TabPanel>
-          <TabPanel value="neighbors"><NeighborGroupsTab neighbors={result.neighbors} /></TabPanel>
-          <TabPanel value="anomalies">
-            <AnomalyReportTab key={result.run_id ?? result.processed_at} result={result} reviews={reviews} reviewer={user} onReview={onReview} reviewBusy={reviewBusy} onCreateTicket={onCreateTicket} renderTip={(text, label) => <InfoTip text={text} label={label} />} />
-            <FullAnomalyTable data={reportRows} columns={flaggedColumns} searchKeys={["station_id", "date"]} filterFields={flaggedFilterFields} downloadReady={reviewsReady && !reviewBusy} />
+          <TabPanel value="anomalies" className={styles.anomalies}>
+            <AnomalyReportTab key={result.run_id ?? result.processed_at} result={result} reviews={reviews} reviewer={user} onReview={onReview} onSaveRun={onSaveRun} reviewBusy={reviewBusy} onCreateTicket={onCreateTicket} fillHeight={fitViewport} renderTip={(text, label) => <InfoTip text={text} label={label} />}
+              onOpenData={() => { setDataView("flagged"); setActiveTab("data"); }} />
+
           </TabPanel>
         </div>
       </Tabs>

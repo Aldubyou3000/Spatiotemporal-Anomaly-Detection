@@ -47,7 +47,7 @@ export function TabsList({ children, className, style }: { children: ReactNode; 
     <div
       role="tablist"
       className={cn(
-        "flex items-center gap-1 border-b border-border min-w-0",
+        "flex items-center gap-1 min-w-0",
         className
       )}
       style={style}
@@ -71,6 +71,7 @@ export function Tab({ value, children, icon, className }: TabProps) {
   return (
     <button
       role="tab"
+      data-ui="tab"
       aria-selected={selected}
       aria-controls={`${baseId}-panel-${value}`}
       id={`${baseId}-tab-${value}`}
@@ -101,14 +102,16 @@ interface TabPanelProps {
   value: string;
   children: ReactNode;
   className?: string;
+  keepMounted?: boolean;
 }
 
-export function TabPanel({ value, children, className }: TabPanelProps) {
+export function TabPanel({ value, children, className, keepMounted = false }: TabPanelProps) {
   const { value: active, baseId } = useTabs();
-  if (active !== value) return null;
+  if (active !== value && !keepMounted) return null;
   return (
     <div
       role="tabpanel"
+      hidden={active !== value}
       id={`${baseId}-panel-${value}`}
       aria-labelledby={`${baseId}-tab-${value}`}
       className={cn("animate-fade-in", className)}

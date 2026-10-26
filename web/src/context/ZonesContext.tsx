@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import type { ProcessResult } from "@/types/zones";
+import type { ProcessResult, PipelineProgress } from "@/types/zones";
 import { isFlaggedReading, readingKey, type AnomalyReview, type AnomalyReviews } from "@/lib/anomalyReview";
 
 interface ZonesState {
@@ -9,6 +9,8 @@ interface ZonesState {
   setFiles: (f: File[]) => void;
   running: boolean;
   setRunning: (v: boolean) => void;
+  progress: PipelineProgress | null;
+  setProgress: (v: PipelineProgress | null) => void;
   abortRef: RefObject<AbortController | null>;
   result: ProcessResult | null;
   setResult: (r: ProcessResult | null, expectedRunId?: string) => void;
@@ -22,8 +24,8 @@ interface ZonesState {
   saveRequest: { afterSave?: (saved: ProcessResult) => void } | null;
   requestSave: (afterSave?: (saved: ProcessResult) => void) => void;
   cancelSave: () => void;
-  leaveRequest: { proceed: () => void } | null;
-  guardUnsaved: (proceed: () => void) => void;
+  leaveRequest: { proceed: () => void; allowContinue?: boolean } | null;
+  guardUnsaved: (proceed: () => void, options?: { allowContinue?: boolean }) => void;
   cancelLeave: () => void;
 }
 
@@ -52,9 +54,10 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
   const [configOpen, setConfigOpen] = useState(true);
   const [saveRequest, setSaveRequest] = useState<ZonesState["saveRequest"]>(null);
   const [leaveRequest, setLeaveRequest] = useState<ZonesState["leaveRequest"]>(null);
+  const [progress, setProgress] = useState<PipelineProgress | null>(null);
   function requestSave(afterSave?: (saved: ProcessResult) => void) { setSaveRequest({ afterSave }); }
-  function guardUnsaved(proceed: () => void) {
-    if (result && !result.history_saved) setLeaveRequest({ proceed });
+  function guardUnsaved(proceed: () => void, options?: { allowContinue?: boolean }) {
+    if (result && !result.history_saved) setLeaveRequest({ proceed, allowContinue: options?.allowContinue });
     else proceed();
   }
 
@@ -80,6 +83,7 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
     setResult(null);
     setError(null);
     setRunning(false);
+    setProgress(null);
     setConfigOpen(true);
     setSaveRequest(null);
     setLeaveRequest(null);
@@ -89,6 +93,7 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
     <ZonesContext.Provider value={{
       files, setFiles,
       running, setRunning,
+      progress, setProgress,
       abortRef,
       result, setResult,
       reviews, setReview,

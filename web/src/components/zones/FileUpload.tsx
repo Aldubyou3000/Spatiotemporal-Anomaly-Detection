@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { FileSpreadsheet, Plus, UploadCloud, X } from "lucide-react";
+import { FileSpreadsheet, UploadCloud, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import styles from "./FileUpload.module.css";
 
 interface FileUploadProps {
   files: File[];
@@ -71,15 +72,6 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
   return (
     <div className={className}>
       <div
-        role="button"
-        tabIndex={0}
-        onClick={() => !disabled && inputRef.current?.click()}
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !disabled) {
-            e.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
         onDragOver={(e) => {
           if (disabled) return;
           e.preventDefault();
@@ -93,19 +85,7 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
           const dropped = Array.from(e.dataTransfer.files ?? []);
           if (dropped.length) addFiles(dropped);
         }}
-        className={cn(
-          "relative cursor-pointer rounded-xl border-2 border-dashed",
-          "bg-surface-alt px-5 flex flex-col items-center justify-center text-center",
-          "transition-all duration-200",
-          // Fill the Upload card when empty — original stretched grey block is now the dashed zone itself
-          !hasFiles ? "flex-1 min-h-[260px] py-8" : "py-6",
-          dragOver
-            ? "border-brand bg-brand-soft"
-            : hasFiles
-              ? "border-success/30 bg-success-soft"
-              : "border-border-strong hover:border-brand/50 hover:bg-surface-muted",
-          disabled && "opacity-50 cursor-not-allowed",
-        )}
+        className={cn(styles.dropZone, hasFiles && styles.hasFiles, dragOver && styles.dragOver, disabled && styles.disabled)}
       >
         <input
           ref={inputRef}
@@ -121,52 +101,41 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
           }}
         />
 
-        {hasFiles ? (
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="h-10 w-10 rounded-lg bg-success/12 grid place-items-center">
-              <FileSpreadsheet size={18} className="text-success" strokeWidth={2} />
-            </div>
-            <p className="text-[13px] font-semibold text-text">
-              {files.length} file{files.length !== 1 ? "s" : ""} ready
-            </p>
-            <p className="text-[11px] text-text-tertiary">
-              {formatBytes(totalBytes)} total · click or drop to add more
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2.5">
-            <div className="h-10 w-10 rounded-lg bg-brand-soft grid place-items-center">
-              <UploadCloud size={18} className="text-brand" strokeWidth={2} />
-            </div>
-            <div>
-              <p className="text-[13px] font-semibold text-text">
-                Drop station CSVs here, or <span className="text-brand">browse</span>
-              </p>
-              <p className="text-[11px] text-text-secondary mt-1 leading-snug">
-                One raw file per station, or a single combined CSV
-                <span className="font-mono tabular"> (station_id, date, latitude, longitude, rainfall)</span>
-              </p>
-              <p className="text-[10.5px] text-text-tertiary mt-1">
-                Raw HMDAS files are auto-converted &amp; merged. Hourly data is aggregated to daily. Max {MAX_TOTAL_MB}&nbsp;MB total.
-              </p>
-            </div>
-          </div>
-        )}
+        <div className={styles.uploadIcon} aria-hidden="true">
+          {hasFiles ? <FileSpreadsheet size={22} /> : <UploadCloud size={22} />}
+        </div>
+        <div className={styles.uploadText}>
+          <p className={styles.uploadTitle}>
+            {hasFiles ? `${files.length} ${files.length === 1 ? "file" : "files"} selected` : "Drop station CSV files here"}
+          </p>
+          <p className={styles.uploadHint}>
+            {hasFiles ? `${formatBytes(totalBytes)} of ${MAX_TOTAL_MB} MB` : `CSV files · Up to ${MAX_TOTAL_MB} MB combined`}
+          </p>
+        </div>
+        <div className={styles.fileActions}>
+          {hasFiles && <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => setConfirmOpen(true)}>
+            Remove all
+          </Button>}
+          <Button type="button" size={hasFiles ? "md" : "lg"} variant={hasFiles ? "secondary" : "primary"} disabled={disabled} onClick={() => inputRef.current?.click()}>
+            {hasFiles ? "Add files" : "Browse files"}
+          </Button>
+        </div>
       </div>
 
       {/* Selected-files list */}
       {hasFiles && (
-        <div className="mt-3 rounded-lg border border-border overflow-hidden">
-          {files.map((file, i) => (
+        <div className={styles.fileList}>
+          <div className={styles.files}>{files.map((file, i) => (
             <div
               key={`${file.name}:${file.size}:${i}`}
-              className="flex items-center gap-3 px-3 py-2 border-b border-divider last:border-b-0 bg-surface"
+              className={styles.fileRow}
             >
               <FileSpreadsheet size={15} className="text-text-muted shrink-0" strokeWidth={2} />
               <div className="flex-1 min-w-0">
-                <p className="font-mono tabular text-[12px] text-text truncate">{file.name}</p>
+                <p className={styles.fileName} title={file.name}>{fileLabel(file.name)}</p>
+                {fileLabel(file.name) !== file.name && <p className={styles.originalName} title={file.name}>{file.name}</p>}
               </div>
-              <span className="text-[11px] text-text-tertiary tabular shrink-0">{formatBytes(file.size)}</span>
+              <span className={styles.fileSize}>{formatBytes(file.size)}</span>
               <button
                 type="button"
                 aria-label={`Remove ${file.name}`}
@@ -180,35 +149,13 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
                 <X size={13} strokeWidth={2.2} />
               </button>
             </div>
-          ))}
+          ))}</div>
 
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-alt">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => inputRef.current?.click()}
-            >
-              <Plus size={14} strokeWidth={2.2} />
-              Add more files
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => setConfirmOpen(true)}
-            >
-              <X size={14} strokeWidth={2.2} />
-              Remove all
-            </Button>
-          </div>
         </div>
       )}
 
       {validationError && (
-        <p className="text-[12px] text-danger mt-2">{validationError}</p>
+        <p role="alert" className="text-[length:var(--font-sm)] text-danger mt-2">{validationError}</p>
       )}
 
       {confirmOpen && (
@@ -226,6 +173,11 @@ export function FileUpload({ files, onFilesChange, onRemove, disabled, className
       )}
     </div>
   );
+}
+
+function fileLabel(name: string): string {
+  const station = /^HMDAS-[^-]+-(.+?)_(?:Hourly_)?Rainfall_/i.exec(name)?.[1];
+  return station ? station.replace(/_/g, " ") : name;
 }
 
 function formatBytes(bytes: number): string {

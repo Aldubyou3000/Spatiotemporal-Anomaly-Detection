@@ -41,12 +41,12 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  const axis = isDark ? "rgba(255,255,255,0.3)" : "rgba(15,23,42,0.4)";
+  const axis = "var(--text-secondary)";
   const gridColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
-  const brandColor = isDark ? "#3B82F6" : "#2563EB";
-  const dangerColor = isDark ? "#FF6B6B" : "#E53535";
-  const tealColor = isDark ? "#2DD4BF" : "#0D9488";
-  const neutralColor = isDark ? "#8993A4" : "#A1A9B4"; // --text-muted / --text-tertiary
+  const brandColor = `var(--chart-brand, ${isDark ? "#3B82F6" : "#2563EB"})`;
+  const dangerColor = `var(--chart-high, ${isDark ? "#FF6B6B" : "#E53535"})`;
+  const tealColor = `var(--chart-low, ${isDark ? "#2DD4BF" : "#0D9488"})`;
+  const neutralColor = "var(--text-tertiary)";
 
   const fontXs =
     typeof window !== "undefined"
@@ -124,7 +124,6 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
             position="top"
             content={(props) => {
               const { x, y, width, value } = props as { x: number; y: number; width: number; value: string };
-              const isNoData = value === "No reading";
               const cx = x + width / 2;
               // Clamp above the plot edge so the tallest bar's label is never clipped.
               const ly = Math.max(y - 5, 10);
@@ -135,7 +134,7 @@ export function DateComparisonChart({ bars, height = 200, mode = "high" }: DateC
                   textAnchor="middle"
                   fontSize={fontXs}
                   fontFamily="var(--font-jetbrains)"
-                  fill={isNoData ? neutralColor : "var(--text-secondary)"}
+                  fill="var(--text-secondary)"
                 >
                   {value}
                 </text>

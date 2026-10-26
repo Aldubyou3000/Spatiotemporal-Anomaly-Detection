@@ -547,7 +547,7 @@ function PriorRoundCard({ round: r, onOpenPhoto }: { round: PriorRound; onOpenPh
   const photos = r.photos ?? [];
 
   return (
-    <div style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", overflow: "hidden" }}>
+    <div style={{ background: "var(--surface-sunken)", borderRadius: "var(--r-md)", overflow: "hidden" }}>
       {/* Collapsed header — quiet, scannable summary */}
       <button
         type="button"
@@ -580,27 +580,27 @@ function PriorRoundCard({ round: r, onOpenPhoto }: { round: PriorRound; onOpenPh
 
       {/* Expanded — full findings for this round */}
       {open && (
-        <div style={{ borderTop: "1px solid var(--divider)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 0 }}>
+        <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 0 }}>
           {r.notes && (
-            <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
+            <div style={{ padding: "12px 0" }}>
               <SubHeading>Field Observations</SubHeading>
               <Prose>{r.notes}</Prose>
             </div>
           )}
           {r.rootCause && (
-            <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
+            <div style={{ padding: "12px 0" }}>
               <SubHeading>Root Cause</SubHeading>
               <Prose>{r.rootCause}</Prose>
             </div>
           )}
           {r.correctiveAction && (
-            <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
+            <div style={{ padding: "12px 0" }}>
               <SubHeading>Corrective Action &amp; Recommendations</SubHeading>
               <Prose>{r.correctiveAction}</Prose>
             </div>
           )}
           {photos.length > 0 && (
-            <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
+            <div style={{ padding: "12px 0" }}>
               <SubHeading>Photos</SubHeading>
               <PhotoGrid photos={photos} onOpen={onOpenPhoto} />
             </div>
@@ -666,7 +666,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
       <button type="button" onClick={onClose} style={{ position: "absolute", top: 16, right: 16, width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)", color: "white", display: "grid", placeItems: "center", cursor: "pointer" }}>
         <X size={16} />
       </button>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 90vw)", maxHeight: "80vh", borderRadius: "var(--r-xl)", overflow: "hidden", boxShadow: "0 32px 96px rgba(0,0,0,0.7)", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 90vw)", maxHeight: "80vh", borderRadius: "var(--r-xl)", overflow: "hidden", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }} />
       </div>
@@ -693,7 +693,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
     <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", flex: 1, minHeight: 0 }}>
 
       {/* ── HEADER BAR ── */}
-      <div style={{ borderBottom: "1px solid var(--divider)", flexShrink: 0, display: "flex", alignItems: "stretch" }}>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "stretch" }}>
         <div style={{ flex: 1, minWidth: 0, padding: "var(--pad-y) var(--pad-x)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
@@ -740,7 +740,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
         {/* Cancelled callout banner */}
         {model.status === "cancelled" && (
-          <div style={{ margin: "var(--pad-y) var(--pad-x) 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", border: "1px solid var(--border)", display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ margin: "var(--pad-y) var(--pad-x) 0", padding: "12px 16px", borderRadius: "var(--r-md)", background: "var(--surface-sunken)", display: "flex", alignItems: "flex-start", gap: 12 }}>
             <X size={15} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 1 }} />
             <div>
               <p style={{ margin: 0, fontSize: "var(--font-base)", fontWeight: 600, color: "var(--text)" }}>
@@ -773,7 +773,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
         )}
 
         {/* Property strip */}
-        <div style={{ padding: "var(--pad-y) var(--pad-x)", background: "var(--surface-sunken)", borderBottom: "1px solid var(--border)", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "var(--gap-card)", marginTop: isFollowUp ? 12 : 0 }}>
+        <div style={{ padding: "var(--pad-y) var(--pad-x)", background: "var(--surface-sunken)", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "var(--gap-card)", marginTop: isFollowUp ? 12 : 0 }}>
           <Prop label={`Assignee${(model.assignees?.length ?? 0) > 1 ? "s" : ""}`}>
             <AssigneeCell assignees={model.assignees} assigneeName={model.assigneeName} />
           </Prop>
@@ -830,7 +830,7 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {/* Status row — issue resolved + severity badges */}
                 {hasReport && (r?.issueResolved != null || r?.severity) && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingBottom: 12, borderBottom: "1px solid var(--divider)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingBottom: 12 }}>
                     {r?.issueResolved != null && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)", fontWeight: 600, color: r.issueResolved ? "var(--success)" : "var(--danger)" }}>
                         {r.issueResolved ? <CheckCircle2 size={13} strokeWidth={2.5} /> : <WifiOff size={13} />}
@@ -843,13 +843,13 @@ export function TicketDetailBody({ model, footer, children }: { model: DetailMod
 
                 {/* Finding rows — each is a self-contained block with label + content */}
                 {r?.notes && (
-                  <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
+                  <div style={{ padding: "12px 0" }}>
                     <SubHeading>Field Observations</SubHeading>
                     <Prose>{r.notes}</Prose>
                   </div>
                 )}
                 {r?.rootCause && (
-                  <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
+                  <div style={{ padding: "12px 0" }}>
                     <SubHeading>Root Cause</SubHeading>
                     <Prose>{r.rootCause}</Prose>
                   </div>

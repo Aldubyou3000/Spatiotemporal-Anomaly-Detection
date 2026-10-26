@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "@/components/ui/Button";
+import styles from "./ConfirmDialog.module.css";
 
 export interface ConfirmDialogProps {
   title: string;
@@ -26,6 +28,8 @@ export function ConfirmDialog({
   extraAction,
 }: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Escape key closes
   useEffect(() => {
@@ -36,9 +40,22 @@ export function ConfirmDialog({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onCancel]);
 
-  // Trap focus inside dialog
   useEffect(() => {
-    confirmRef.current?.focus();
+    const previous = document.activeElement;
+    (extraAction || isDangerous ? cancelRef : confirmRef).current?.focus();
+    function trapFocus(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const controls = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), [href], [tabindex="0"]') ?? [])]
+        .filter(control => control.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    document.addEventListener("keydown", trapFocus);
+    return () => {
+      document.removeEventListener("keydown", trapFocus);
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
   }, []);
 
   const content = (
@@ -46,6 +63,7 @@ export function ConfirmDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
+      aria-describedby="confirm-dialog-message"
       style={{
         position: "fixed",
         inset: 0,
@@ -54,27 +72,12 @@ export function ConfirmDialog({
         placeItems: "center",
         padding: 16,
         background: "rgba(10, 13, 18, 0.45)",
-        backdropFilter: "blur(2px)",
       }}
       onClick={onCancel}
     >
-      <div
-        className="animate-scale-in"
-        style={{
-          width: "min(420px, 90vw)",
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--r-2xl)",
-          boxShadow: "var(--shadow-xl)",
-          overflow: "hidden",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div ref={dialogRef} className={`animate-scale-in ${styles.dialog}`} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div style={{
-          padding: "20px 24px 14px",
-          borderBottom: "1px solid var(--divider)",
-        }}>
+        <div className={styles.header}>
           <h3
             id="confirm-dialog-title"
             style={{
@@ -91,74 +94,14 @@ export function ConfirmDialog({
         </div>
 
         {/* Body */}
-        <div style={{
-          padding: "16px 24px",
-          fontSize: "var(--font-base)",
-          lineHeight: 1.6,
-          color: "var(--text-secondary)",
-        }}>
+        <div id="confirm-dialog-message" className={styles.body}>
           {message}
         </div>
 
-        {/* Footer */}
-        <div style={{
-          padding: "14px 24px",
-          borderTop: "1px solid var(--divider)",
-          background: "var(--surface-alt)",
-          display: "flex",
-          justifyContent: "flex-end",
-          flexWrap: "wrap",
-          gap: 8,
-        }}>
-          <button
-            type="button"
-            onClick={onCancel}
-            style={{
-              height: 34,
-              padding: "0 16px",
-              borderRadius: "var(--r-md)",
-              border: "1px solid var(--border)",
-              background: "var(--surface)",
-              color: "var(--text)",
-              fontSize: "var(--font-sm)",
-              fontWeight: 500,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              transition: "background var(--duration-fast) var(--ease-std), border-color var(--duration-fast) var(--ease-std)",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "var(--surface-sunken)";
-              (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "var(--surface)";
-              (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
-            }}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            ref={confirmRef}
-            type="button"
-            onClick={onConfirm}
-            style={{
-              height: 34,
-              padding: "0 16px",
-              borderRadius: "var(--r-md)",
-              border: `1px solid ${isDangerous ? "var(--danger)" : "var(--brand)"}`,
-              background: isDangerous ? "var(--danger)" : "var(--brand)",
-              color: "white",
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              transition: "opacity var(--duration-fast) var(--ease-std)",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.88"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-          >
-            {confirmLabel}
-          </button>
+        <div className={styles.footer}>
+          <Button type="button" ref={cancelRef} variant="ghost" onClick={onCancel}>{cancelLabel}</Button>
+          <Button type="button" ref={confirmRef} variant={extraAction ? "secondary" : isDangerous ? "danger" : "primary"}
+            onClick={onConfirm}>{confirmLabel}</Button>
           {extraAction}
         </div>
       </div>

@@ -48,6 +48,8 @@ grep "^## \[" map/log.md | tail -5
 
 ## Navigation rules (for future sessions)
 
+Local design playground: [UI Library guide](../docs/UI_LIBRARY.md), [implementation record](../.scratch/ui-library/implementation.md). Open `/ui-library` during web development; the earlier [decision map](../.scratch/ui-library/map.md) records the local-only scope.
+
 - **Before editing a component**: read its page here first.
 - **After editing**: update that page (and any pages it now affects), re-check rule-of-3, update orphans if references changed, append a `log.md` entry.
 - **When asked "what touches X"**: answer from the dependency sections of the relevant pages before re-searching the repo.

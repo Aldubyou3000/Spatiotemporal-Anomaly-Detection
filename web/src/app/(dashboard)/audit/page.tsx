@@ -346,13 +346,12 @@ export default function AuditPage() {
         }
       />
 
-      <div style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="dashboard-content" style={{ padding: "24px 28px 48px", display: "flex", flexDirection: "column", gap: 20 }}>
 
         {/* Activity card */}
         <div
           style={{
             background: "var(--surface)",
-            border: "1px solid var(--border)",
             borderRadius: "var(--r-xl)",
             boxShadow: "var(--shadow-xs)",
             overflow: "hidden",
@@ -362,7 +361,6 @@ export default function AuditPage() {
           <div
             style={{
               padding: "12px 20px",
-              borderBottom: "1px solid var(--border)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -395,7 +393,7 @@ export default function AuditPage() {
               {/* Search */}
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                 <Search size={12} style={{ position: "absolute", left: 8, color: "var(--text-muted)", pointerEvents: "none" }} />
-                <input
+                <input data-search-field aria-label="Search audit log"
                   type="text"
                   placeholder="Search…"
                   value={query}

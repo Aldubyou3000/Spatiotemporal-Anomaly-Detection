@@ -113,6 +113,11 @@ export interface StationDryStuckSummary {
   events: DryStuckEvent[];
 }
 
+export interface PipelineProgress {
+  stage: "preparing" | "zone_a" | "zone_b" | "zone_c" | "finalizing";
+  station_ids: string[];
+}
+
 export interface ProcessResult {
   run_id?: string | null;
   history_saved?: boolean;

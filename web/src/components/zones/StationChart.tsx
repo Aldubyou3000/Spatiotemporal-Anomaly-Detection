@@ -40,11 +40,11 @@ export function StationChart({ data, neighbors = [], height = 200, anomalyColor,
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  const axis = isDark ? "rgba(255,255,255,0.3)" : "rgba(15,23,42,0.4)";
+  const axis = "var(--text-secondary)";
   const gridColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
-  const areaColor = isDark ? "#3B82F6" : "#2563EB";
+  const areaColor = `var(--chart-brand, ${isDark ? "#3B82F6" : "#2563EB"})`;
   // Allow parent to pass explicit color; otherwise pick red for high, teal for silent.
-  const modeColor = (anomalyColor as string | undefined) ?? (isDark ? "#FF6B6B" : "#E53535");
+  const modeColor = (anomalyColor as string | undefined) ?? `var(--chart-high, ${isDark ? "#FF6B6B" : "#E53535"})`;
   const dangerColor = modeColor;
   const neighborPalette = isDark ? NEIGHBOR_COLORS_DARK : NEIGHBOR_COLORS_LIGHT;
 

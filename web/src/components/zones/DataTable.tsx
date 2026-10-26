@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, Download, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { cn } from "@/lib/cn";
+import styles from "./DataTable.module.css";
 
 interface Column<T> {
   key: keyof T & string;
@@ -105,240 +105,82 @@ export function DataTable<T>({
     setPage(0);
   }
 
-  const isFiltered = search.trim() !== "" || Object.values(dropdowns).some(Boolean);
+  const isFiltered = search.trim() !== "" || (filterFields ?? []).some(field => Boolean(dropdowns[field.key]));
 
 
 
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-hidden" style={{ boxShadow: "var(--shadow-sm)" }}>
-      {/* Caption + download row */}
-      {(caption || onDownload) && (
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border">
-          <div style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)" }}>{caption}</div>
-          {onDownload && (
-            <Button variant="secondary" size="sm" onClick={onDownload}>
-              <Download size={14} strokeWidth={2.2} />
-              {downloadLabel}
-            </Button>
-          )}
+    <div className={styles.card}>
+      <div className={styles.toolbar}>
+        <div className={styles.search} data-search-field>
+          <Search size={16} aria-hidden="true" />
+          <input type="search" aria-label="Search table" value={search}
+            onChange={(e) => handleSearchChange(e.target.value)} placeholder="Search readings…" />
+          {search && <button type="button" onClick={() => handleSearchChange("")} aria-label="Clear search"><X size={14} /></button>}
         </div>
-      )}
-
-      {/* Filter bar */}
-      <div
-        style={{
-          display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-          padding: "8px 14px",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--surface-alt)",
-        }}
-      >
-        {/* Free-text search */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6,
-          flex: "1 1 180px", minWidth: 0,
-          height: 30,
-          border: "1px solid var(--border)",
-          borderRadius: "var(--r-md)",
-          background: "var(--surface)",
-          padding: "0 10px",
-        }}>
-          <Search size={12} strokeWidth={2} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search…"
-            style={{
-              flex: 1, border: "none", background: "transparent", outline: "none",
-              fontSize: "var(--font-xs)", color: "var(--text)", fontFamily: "inherit",
-              minWidth: 0,
-            }}
-          />
-          {search && (
-            <button
-              onClick={() => handleSearchChange("")}
-              style={{
-                display: "grid", placeItems: "center",
-                width: 16, height: 16, borderRadius: "50%",
-                background: "var(--surface-sunken)",
-                border: "none", cursor: "pointer",
-                color: "var(--text-muted)", flexShrink: 0,
-              }}
-              aria-label="Clear search"
-            >
-              <X size={9} strokeWidth={2.5} />
-            </button>
-          )}
-        </div>
-
-        {/* Per-column dropdown filters */}
         {(filterFields ?? []).map((field) => (
-          <Select
-            key={field.key}
-            value={dropdowns[field.key]}
+          <Select key={field.key} value={dropdowns[field.key] ?? ""}
             onChange={(v) => handleDropdownChange(field.key, v)}
-            width={150}
-            ariaLabel={field.label}
-            options={[{ value: "", label: field.label }, ...field.options]}
-          />
+            width={150} ariaLabel={field.label}
+            options={[{ value: "", label: field.label }, ...field.options]} />
         ))}
-
-        {/* Result count + clear all */}
-        {isFiltered && (
-          <>
-            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-              {filtered.length.toLocaleString()} / {data.length.toLocaleString()}
-            </span>
-            <button
-              onClick={() => { handleSearchChange(""); setDropdowns(Object.fromEntries((filterFields ?? []).map((f) => [f.key, ""]))); }}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                height: 24, padding: "0 8px",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--r-md)",
-                background: "transparent",
-                color: "var(--text-muted)",
-                fontSize: "var(--font-xs)",
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
-            >
-              <X size={9} strokeWidth={2.5} />
-              Clear
-            </button>
-          </>
-        )}
+        {isFiltered && <Button variant="ghost" size="sm"
+          onClick={() => { handleSearchChange(""); setDropdowns({}); }}>Clear filters</Button>}
+        {caption && <div className={styles.caption}>{caption}</div>}
+        {onDownload && <Button variant="secondary" size="sm" onClick={onDownload}>
+          <Download size={14} />{downloadLabel}
+        </Button>}
       </div>
 
-      <div className="overflow-x-auto">
-        <table style={{ width: "100%", fontSize: "var(--font-sm)" }}>
-          <thead>
-            <tr className="bg-surface-sunken border-b border-border">
-              {columns.map((c) => (
-                <th
-                  key={c.key}
-                  style={{
-                    width: c.width,
-                    fontSize: "var(--font-xs)",
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    color: "var(--text-secondary)",
-                    padding: "10px 16px",
-                    textAlign: c.align === "right" ? "right" : c.align === "center" ? "center" : "left",
-                  }}
-                >
-                  {c.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
+      <div className={styles.scroll}>
+        <table className={styles.table}>
+          <thead><tr>{columns.map((c) => (
+            <th key={c.key} scope="col" style={{ width: c.width, textAlign: c.align ?? "left" }}>{c.header}</th>
+          ))}</tr></thead>
           <tbody>
             {slice.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--font-sm)", color: "var(--text-tertiary)" }}
-                >
-                  {isFiltered ? "No rows match the current filters." : emptyMessage}
-                </td>
-              </tr>
-            ) : (
-              slice.map((row, i) => (
-                <tr
-                  key={i}
-                  className={cn(
-                    "border-b border-border last:border-b-0",
-                    "hover:bg-surface-muted transition-colors",
-                  )}
-                >
-                  {columns.map((c) => {
-                    const raw = (row as Record<string, unknown>)[c.key];
-                    const content = c.render ? c.render(raw as T[keyof T], row) : formatCell(raw);
-                    return (
-                      <td
-                        key={c.key}
-                        style={{
-                          padding: "10px 16px",
-                          textAlign: c.align === "right" ? "right" : c.align === "center" ? "center" : "left",
-                          fontFamily: c.mono ? "var(--font-mono)" : undefined,
-                          fontSize: "var(--font-sm)",
-                          color: "var(--text)",
-                          fontVariantNumeric: c.mono ? "tabular-nums" : undefined,
-                        }}
-                      >
-                        {content}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))
-            )}
+              <tr><td colSpan={columns.length} className={styles.empty}>
+                {isFiltered ? "No rows match the current filters." : emptyMessage}
+              </td></tr>
+            ) : slice.map((row, i) => (
+              <tr key={i}>{columns.map((c) => {
+                const raw = (row as Record<string, unknown>)[c.key];
+                return <td key={c.key} style={{
+                  textAlign: c.align ?? "left",
+                  fontFamily: c.mono ? "var(--font-mono)" : undefined,
+                }}>{c.render ? c.render(raw as T[keyof T], row) : formatCell(raw)}</td>;
+              })}</tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      {/* Pagination footer */}
-      <div
-        style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 12, padding: "8px 16px",
-          borderTop: "1px solid var(--border)",
-          background: "color-mix(in oklab, var(--surface-sunken) 50%, transparent)",
-          flexWrap: "wrap",
-        }}
-      >
-        <p style={{ fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", margin: 0 }}>
-          {filtered.length === 0
-            ? "0 rows"
-            : `${start + 1}–${end} of ${filtered.length.toLocaleString()}${isFiltered ? ` (filtered from ${data.length.toLocaleString()})` : ""}`}
-        </p>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div className={styles.footer}>
+        <p aria-live="polite">{filtered.length === 0 ? "0 rows"
+          : `${start + 1}–${end} of ${filtered.length.toLocaleString()} rows${isFiltered ? ` (filtered from ${data.length.toLocaleString()})` : ""}`}</p>
+        <nav className={styles.pagination} aria-label="Table pagination">
           <Button variant="ghost" size="sm" onClick={() => goTo(0)} disabled={safePage === 0} aria-label="First page">
-            <ChevronsLeft size={14} strokeWidth={2.4} />
+            <ChevronsLeft size={16} />
           </Button>
           <Button variant="ghost" size="sm" onClick={() => goTo(safePage - 1)} disabled={safePage === 0} aria-label="Previous page">
-            <ChevronLeft size={14} strokeWidth={2.4} />
+            <ChevronLeft size={16} />
           </Button>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 4px" }}>
-            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>Page</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
+          <label className={styles.pageJump}>
+            <span>Page</span>
+            <input type="text" aria-label="Page number" inputMode="numeric" pattern="[0-9]*"
               value={jumpInput !== "" ? jumpInput : safePage + 1}
               onChange={(e) => setJumpInput(e.target.value.replace(/\D/g, ""))}
               onBlur={handleJumpCommit}
-              onKeyDown={(e) => { if (e.key === "Enter") { handleJumpCommit(); (e.target as HTMLInputElement).blur(); } }}
-              style={{
-                width: 44, height: 26,
-                textAlign: "center",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--r-md)",
-                background: "var(--surface)",
-                color: "var(--text)",
-                fontSize: "var(--font-xs)",
-                fontFamily: "var(--font-mono)",
-                fontVariantNumeric: "tabular-nums",
-                outline: "none",
-                padding: "0 4px",
-              }}
-            />
-            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
-              of {totalPages}
-            </span>
-          </div>
-
+              onKeyDown={(e) => { if (e.key === "Enter") { handleJumpCommit(); (e.target as HTMLInputElement).blur(); } }} />
+            <span>of {totalPages}</span>
+          </label>
           <Button variant="ghost" size="sm" onClick={() => goTo(safePage + 1)} disabled={safePage >= totalPages - 1} aria-label="Next page">
-            <ChevronRight size={14} strokeWidth={2.4} />
+            <ChevronRight size={16} />
           </Button>
           <Button variant="ghost" size="sm" onClick={() => goTo(totalPages - 1)} disabled={safePage >= totalPages - 1} aria-label="Last page">
-            <ChevronsRight size={14} strokeWidth={2.4} />
+            <ChevronsRight size={16} />
           </Button>
-        </div>
+        </nav>
       </div>
     </div>
   );

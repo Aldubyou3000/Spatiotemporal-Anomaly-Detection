@@ -23,32 +23,34 @@
   --brand:          #1E6FD9;
   --brand-hover:    #1758B3;
   --brand-active:   #134A96;
-  --brand-soft:     #EBF2FC;
-  --brand-softer:   #F5F8FD;
+  --brand-soft:     #C7DAF7;
+  --brand-softer:   #F6F7F9;
   --brand-fg:       #FFFFFF;
-  --on-brand-soft:  #1758B3;
+  --on-brand-soft:  #123E75;
 
-  /* Surfaces — Stripe-style subtle warm grays */
-  --bg:             #F6F7F9;
-  --bg-app:         #FAFBFC;
+  /* Neutral pearl: gray shell, off-white workspace, white panels. */
+  --bg:             #E8EAED;
+  --bg-app:         #E8EAED;
   --surface:        #FFFFFF;
-  --surface-alt:    #F9FAFB;
-  --surface-muted:  rgba(16, 24, 40, 0.04);
-  --surface-sunken: #F3F4F6;
-  --surface-overlay: rgba(255, 255, 255, 0.85);
+  --surface-alt:    #F1F3F5;
+  --surface-muted:  rgba(0, 0, 0, 0.04);
+  --surface-sunken: #F6F7F9;
+  --surface-overlay: #FFFFFF;
 
   /* Borders */
-  --border:         #E4E7EB;
-  --border-soft:    #EEF0F3;
-  --border-strong:  #D0D5DD;
+  --border:         #CDD1D6;
+  --border-soft:    #E8EAED;
+  --border-strong:  #7A838E;
   --border-focus:   #1E6FD9;
-  --divider:        #F1F3F5;
+  --divider:        #DFE2E7;
+  --scrollbar-thumb: #B8BDC5;
+  --scrollbar-thumb-hover: #969DA7;
 
   /* Text */
-  --text:           #0B1220;
-  --text-secondary: #374151;
-  --text-muted:     #6B7280;
-  --text-tertiary:  #A1A9B4;
+  --text:           #202124;
+  --text-secondary: #51565E;
+  --text-muted:     #626A73;
+  --text-tertiary:  #6D747D;
   --text-inverse:   #FFFFFF;
 
   /* Status */
@@ -71,13 +73,13 @@
   --teal-soft:      #E5F5F3;
   --teal-on:        #0F766E;
 
-  /* Shadows — soft & layered, Stripe style */
-  --shadow-xs:      0 1px 1px rgba(16, 24, 40, 0.04);
-  --shadow-sm:      0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
-  --shadow-md:      0 2px 4px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.06);
-  --shadow-lg:      0 4px 8px rgba(16, 24, 40, 0.04), 0 12px 28px rgba(16, 24, 40, 0.08);
-  --shadow-xl:      0 8px 16px rgba(16, 24, 40, 0.06), 0 24px 48px rgba(16, 24, 40, 0.12);
-  --shadow-focus:   0 0 0 4px rgba(30, 111, 217, 0.16);
+  /* Separation comes from surfaces and dividers, never elevation. */
+  --shadow-xs:      none;
+  --shadow-sm:      none;
+  --shadow-md:      none;
+  --shadow-lg:      none;
+  --shadow-xl:      none;
+  --shadow-focus:   none;
 
   /* Radii */
   --r-xs: 4px;
@@ -88,9 +90,19 @@
   --r-2xl: 16px;
   --r-full: 9999px;
 
+  /* Spacing primitives: stable across density and theme. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
   /* Layout */
   --sidebar-w:  248px;
   --topbar-h:   62px;
+  --scrollbar-size: 12px;
+  --scrollbar-inset: 8px;
+  --scrollbar-edge: 2px;
 
   /* Density — balanced default */
   --row-h:       44px;
@@ -108,7 +120,6 @@
   --font-metric: 16px;
 
   /* Decorative */
-  --grid-line:  rgba(16, 24, 40, 0.04);
 }
 
 [data-density="compact"] {
@@ -149,26 +160,28 @@
   --on-brand-soft:  #B6D4FF;
 
   /* Surfaces */
-  --bg:             #0A0D12;
-  --bg-app:         #07090D;
-  --surface:        #11151B;
-  --surface-alt:    #161B22;
+  --bg:             #111923;
+  --bg-app:         #111923;
+  --surface:        #243144;
+  --surface-alt:    #1B2738;
   --surface-muted:  rgba(255, 255, 255, 0.04);
-  --surface-sunken: #0D1117;
-  --surface-overlay: rgba(17, 21, 27, 0.85);
+  --surface-sunken: #172232;
+  --surface-overlay: #243144;
 
   /* Borders */
-  --border:         #1F2530;
-  --border-soft:    #181D26;
-  --border-strong:  #2A3140;
+  --border:         #40516A;
+  --border-soft:    #34445B;
+  --border-strong:  #667B99;
   --border-focus:   #4D9CFF;
-  --divider:        #161B22;
+  --divider:        #3A4A60;
+  --scrollbar-thumb: #555E6B;
+  --scrollbar-thumb-hover: #747F8F;
 
   /* Text */
   --text:           #F3F5F8;
   --text-secondary: #C4CBD8;
-  --text-muted:     #8993A4;
-  --text-tertiary:  #4E5868;
+  --text-muted:     #BCC8D9;
+  --text-tertiary:  #91A1B8;
   --text-inverse:   #0B1220;
 
   /* Status — brightened for dark surfaces */
@@ -192,15 +205,14 @@
   --teal-on:        #5EEAD4;
 
   /* Shadows */
-  --shadow-xs:      0 1px 1px rgba(0, 0, 0, 0.30);
-  --shadow-sm:      0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
-  --shadow-md:      0 2px 4px rgba(0, 0, 0, 0.30), 0 4px 12px rgba(0, 0, 0, 0.40);
-  --shadow-lg:      0 4px 8px rgba(0, 0, 0, 0.40), 0 12px 28px rgba(0, 0, 0, 0.50);
-  --shadow-xl:      0 8px 16px rgba(0, 0, 0, 0.50), 0 24px 48px rgba(0, 0, 0, 0.60);
-  --shadow-focus:   0 0 0 4px rgba(77, 156, 255, 0.24);
+  --shadow-xs:      none;
+  --shadow-sm:      none;
+  --shadow-md:      none;
+  --shadow-lg:      none;
+  --shadow-xl:      none;
+  --shadow-focus:   none;
 
   /* Decorative */
-  --grid-line:  rgba(255, 255, 255, 0.03);
 }
 
 /* ─── Tailwind v4 theme bridge ─────────────────────────────────────────
@@ -268,6 +280,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand) !important;
+  outline-offset: 2px;
+}
+
 /* Numerals — tabular for data, lining for text. JetBrains Mono is already tabular. */
 .tabular { font-variant-numeric: tabular-nums; }
 
@@ -279,6 +296,24 @@ body {
 }
 
 /* ─── Selection ───────────────────────────────────────────────────────── */
+.dashboard-workspace {
+  margin: 0 var(--gap-card) var(--gap-card) 0;
+  background: var(--bg);
+}
+.dashboard-content {
+  flex: 1;
+  background: var(--surface-alt);
+  border-radius: var(--r-2xl);
+}
+@media (max-width: 767px) {
+  .dashboard-workspace { margin: 0; }
+  .dashboard-content { border-radius: 0; }
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
 ::selection {
   background: var(--brand-soft);
   color: var(--brand);
@@ -293,32 +328,44 @@ body {
 
 /* ─── Scrollbars ──────────────────────────────────────────────────────── */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-*::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 999px;
-  border: 2px solid var(--bg);
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
-
-/* ─── Grid texture — appears behind dashboard shell ──────────────────── */
-.grid-bg {
-  background-image:
-    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-  background-size: 56px 56px;
-  background-position: -1px -1px;
+@supports selector(::-webkit-scrollbar) {
+  /* Non-auto standard properties override Chromium's part styling. */
+  * { scrollbar-color: auto; scrollbar-width: auto; }
+  *::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+    margin: var(--scrollbar-inset);
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    border: var(--scrollbar-edge) solid transparent;
+    border-radius: var(--r-full);
+    min-height: var(--row-h);
+    min-width: var(--row-h);
+  }
+  *::-webkit-scrollbar-thumb:vertical {
+    border-top-width: var(--scrollbar-inset);
+    border-bottom-width: var(--scrollbar-inset);
+  }
+  *::-webkit-scrollbar-thumb:horizontal {
+    border-left-width: var(--scrollbar-inset);
+    border-right-width: var(--scrollbar-inset);
+  }
+  *::-webkit-scrollbar-thumb:hover,
+  *::-webkit-scrollbar-thumb:active { background-color: var(--scrollbar-thumb-hover); }
+  *::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+  *::-webkit-scrollbar-corner { background: transparent; }
 }
 
 /* ─── Motion ──────────────────────────────────────────────────────────── */
@@ -344,9 +391,8 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
 }
 
 @keyframes live-pulse {
-  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 50%, transparent); }
-  70%  { box-shadow: 0 0 0 5px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
 }
 @keyframes skel {
   0%   { background-position: 200% 0; }
@@ -373,8 +419,8 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   100% { transform: translateX(100%); }
 }
 @keyframes pulse-anomaly {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(229, 53, 53, 0.55); }
-  50%      { opacity: 0.85; box-shadow: 0 0 0 8px rgba(229, 53, 53, 0); }
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .65; }
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
@@ -384,10 +430,10 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   0%, 88%, 100% { transform: translateY(0); }
   94%           { transform: translateY(-3px); }
 }
-/* Soft attention-pulse on the review icon — breathing brand glow */
+/* Flat attention pulse; no glow or elevation. */
 @keyframes review-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 40%, transparent); }
-  50%      { box-shadow: 0 0 0 6px color-mix(in oklab, var(--brand) 0%, transparent); }
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .6; }
 }
 /* One-shot attention flash when a ticket is first selected.
  * Applied to a zero-size overlay child so it doesn't conflict with
@@ -525,17 +571,8 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   color: var(--on-brand-soft);
 }
 
-/* Active left-accent stripe */
-.nav-item[data-active="true"]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 0 var(--r-full) var(--r-full) 0;
-  background: var(--brand);
-}
+/* Rounded active navigation surface */
+.nav-item[data-active="true"] { border-radius: var(--r-full); }
 
 .nav-item__icon {
   color: var(--text-muted);
@@ -744,7 +781,7 @@ a, button, input, select, textarea, [role="button"], [role="switch"] {
   background: var(--brand-soft);
 }
 
-/* Active left accent stripe — consistent with nav-item active */
+/* Selected row marker */
 .list-row[data-selected="true"]::before {
   content: "";
   position: absolute;
@@ -899,30 +936,24 @@ select:-webkit-autofill {
   box-shadow: none !important;
 }
 
-/* ─── Station permanent labels ───────────────────────────────────────── */
+/* ─── Station labels ─────────────────────────────────────────────────── */
 .station-label {
   background: var(--surface) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--r-sm) !important;
   box-shadow: var(--shadow-sm) !important;
   color: var(--text) !important;
-  font-family: var(--font-mono, ui-monospace) !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.04em !important;
-  padding: 2px 6px !important;
+  font-family: var(--font-geist), system-ui, sans-serif !important;
+  font-size: var(--font-xs) !important;
+  font-weight: 500 !important;
+  padding: var(--space-1) var(--space-2) !important;
   white-space: nowrap !important;
   pointer-events: none !important;
 }
 /* Hide the default tooltip arrow */
 .station-label::before { display: none !important; }
 
-.station-label--flagged {
-  background: var(--danger-soft) !important;
-  border-color: var(--danger) !important;
-  color: var(--danger-on) !important;
-  box-shadow: var(--shadow-sm), 0 0 0 2px rgba(220,38,38,0.14) !important;
-}
+
 
 /* Popup pane must overflow the map's rounded container so content is never clipped */
 .leaflet-pane.leaflet-popup-pane {
@@ -954,4 +985,14 @@ select:-webkit-autofill {
   color: var(--text) !important;
   background: var(--surface-sunken) !important;
   border-radius: var(--r-sm) !important;
+}
+
+
+/* Search containers own focus so their input never draws a second rectangle. */
+[data-search-field]:focus-within {
+  outline: 2px solid var(--border-focus) !important;
+  outline-offset: -1px;
+}
+[data-search-field] input:focus-visible {
+  outline: none !important;
 }

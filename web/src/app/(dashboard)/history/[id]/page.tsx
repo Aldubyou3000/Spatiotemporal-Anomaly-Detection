@@ -37,8 +37,10 @@ export default function HistoryDetailPage() {
     } catch (cause) { toast.error("Couldn't download results", { description: cause instanceof Error ? cause.message : "Please try again." }); }
     finally { setDownloading(false); }
   }
-  return <div className={styles.page}><Header title="History" />
-    <div className={styles.body}>
+  return <div className={styles.page}><Header
+    title={run?.title || run?.files[0]?.name || `Saved run ${id.slice(0, 8)}`}
+    parent={<Link href="/history" className="hover:text-text">History</Link>} />
+    <div className={`dashboard-content ${styles.body}`}>
       <Link className={styles.back} href="/history"><ArrowLeft size={14} /> All runs</Link>
       {error ? <div className={styles.empty} role="alert"><p>Couldn't load this saved run.</p><Button size="sm" onClick={() => void mutate()}>Retry</Button></div>
       : isLoading || !run ? <div className={styles.empty} role="status">Loading saved run…</div> : <>

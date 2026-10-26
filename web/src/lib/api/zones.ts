@@ -1,5 +1,8 @@
 import { apiClient, getDirectToken, setDirectToken } from "./client";
-import type { ProcessResult } from "@/types/zones";
+import type { ProcessResult, PipelineProgress } from "@/types/zones";
+
+type ProcessOptions = { signal?: AbortSignal | null; onProgress?: (progress: PipelineProgress) => void };
+type JobStatus = { status: string; result?: ProcessResult; detail?: string; progress?: PipelineProgress };
 
 async function ensureDirectToken(): Promise<void> {
   if (typeof window === "undefined" || !window.location.hostname.endsWith("vercel.app") || getDirectToken()) return;
@@ -26,7 +29,7 @@ async function ensureDirectToken(): Promise<void> {
   }
 }
 
-async function pollJob(jobId: string, useDirect: boolean, opts?: { signal?: AbortSignal | null }): Promise<ProcessResult> {
+async function pollJob(jobId: string, useDirect: boolean, opts?: ProcessOptions): Promise<ProcessResult> {
   // Poll every 1.5s up to 180s (120 tries) — covers cold start 50s + 2.05 MB 4-file LOF 45s + margin.
   // Handles both direct (Bearer) and proxied (cookie) naturally; if direct token expired mid-poll,
   // fall back to proxied polling so the job isn't lost.
@@ -34,18 +37,18 @@ async function pollJob(jobId: string, useDirect: boolean, opts?: { signal?: Abor
     if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     await new Promise((r) => setTimeout(r, 1500));
     if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    let data: { status: string; result?: ProcessResult; detail?: string };
+    let data: JobStatus;
     try {
       data = useDirect
-        ? await apiClient.getDirect<{ status: string; result?: ProcessResult; detail?: string }>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal })
-        : await apiClient.get<{ status: string; result?: ProcessResult; detail?: string }>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal });
+        ? await apiClient.getDirect<JobStatus>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal })
+        : await apiClient.get<JobStatus>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal });
     } catch (err) {
       if (opts?.signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       // If direct Bearer was rejected (401) or CORS-blocked, try proxied once as fallback
       if (useDirect && (msg.includes("401") || msg.includes("CORS") || msg.includes("Failed to fetch") || msg.includes("Not authenticated"))) {
         try {
-          data = await apiClient.get<{ status: string; result?: ProcessResult; detail?: string }>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal });
+          data = await apiClient.get<JobStatus>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal });
         } catch {
           // transient — keep polling
           continue;
@@ -59,6 +62,8 @@ async function pollJob(jobId: string, useDirect: boolean, opts?: { signal?: Abor
         throw err;
       }
     }
+    if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    if (data.progress) opts?.onProgress?.(data.progress);
     if (data.status === "done" && data.result) return data.result;
     if (data.status === "error") throw new Error(data.detail || "Processing failed — the server rejected the file. Please check the format.");
     if (data.status === "processing") continue;
@@ -68,7 +73,7 @@ async function pollJob(jobId: string, useDirect: boolean, opts?: { signal?: Abor
 }
 
 export const zonesApi = {
-  process: async (files: File[], opts?: { signal?: AbortSignal | null }): Promise<ProcessResult> => {
+  process: async (files: File[], opts?: ProcessOptions): Promise<ProcessResult> => {
     if (files.length === 0) throw new Error("No files selected.");
     // Log for debugging "only one file processed" reports
     if (typeof window !== "undefined") {

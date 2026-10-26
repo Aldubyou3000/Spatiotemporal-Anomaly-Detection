@@ -1,0 +1,51 @@
+.page, .body, .results { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.page > header { z-index: 1; height: auto !important; min-height: var(--topbar-h); flex-wrap: wrap; padding: var(--space-2) var(--space-6) !important; gap: var(--space-2) !important; }
+.page > header > div:last-child { flex-wrap: wrap; max-width: 100%; }
+.body { padding: var(--gap-card) var(--pad-x); }
+.body:has(.setup), .body:has(.processing) { margin: 0 var(--space-4) var(--space-4); padding: var(--space-8); background: var(--surface-alt); border-radius: var(--r-2xl); }
+.results > [role="status"] { flex-shrink: 0; }
+.setup, .processing { align-self: center; width: 100%; max-width: 1100px; overflow: auto; min-height: 0; background: var(--surface); border-radius: var(--r-xl); }
+.setupHeading { padding: var(--space-6) var(--space-6) 0; }
+.setupHeading h2, .processing h2 { margin: 0; color: var(--text); font-size: var(--font-lg); font-weight: 600; }
+.setupHeading h2, .processing h2 { font-size: var(--font-xl); }
+.setupHeading p, .runActions p, .hint { color: var(--text-secondary); font-size: var(--font-sm); line-height: 1.6; }
+.setupHeading p { margin: var(--space-2) 0 0; }
+.configuration { padding: var(--space-6); container-type: inline-size; }
+.configurationGrid { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: var(--space-6); align-items: start; }
+.configurationTask { min-width: 0; }
+.runActions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--divider); }
+.runActions p { flex: 1; margin: 0; min-width: min(100%, 16rem); font-size: var(--font-xs); color: var(--text-muted); }
+.runActions > button { flex-shrink: 0; }
+.processDetails { padding-left: var(--space-6); border-left: 1px solid var(--divider); }
+.processDetails h3 { margin: 0 0 var(--space-4); color: var(--text); font-size: var(--font-sm); font-weight: 600; }
+.processDetails [aria-label="Detection steps"], .processing [aria-label="Detection steps"] { grid-template-columns: 1fr; gap: var(--space-6); }
+.processing { max-width: 640px; padding: var(--space-6); }
+.processingHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.processingHeader > button { flex-shrink: 0; }
+.processing [aria-label="Detection steps"] > li { display: grid; grid-template-columns: 4rem minmax(0, 1fr); column-gap: var(--space-4); }
+.processing [aria-label="Detection steps"] > li > span { grid-row: span 2; margin: 0; }
+.processing > :last-child { margin-top: var(--space-6); }
+.hint { margin: var(--space-2) 0 0; }
+.headerActions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.fileCount { display: inline-grid; place-items: center; min-width: 1.5em; padding: 0 var(--space-1); border-radius: var(--r-sm); background: var(--surface-sunken); color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.5; font-variant-numeric: tabular-nums; }
+.dialogBody { max-height: calc(100dvh - 140px); overflow-y: auto; }
+.dialogBody .configuration { background: var(--surface); }
+.error { display: flex; align-items: flex-start; gap: var(--space-2); margin-top: var(--space-4); padding: var(--space-4); background: var(--danger-soft); color: var(--danger-on); border-radius: var(--r-md); }
+.error p { margin: 0; font-size: var(--font-sm); line-height: 1.5; }
+.error svg { flex-shrink: 0; margin-top: var(--space-1); }
+.loading { display: grid; flex: 1; place-items: center; color: var(--text-muted); }
+@container (max-width: 760px) {
+  .configurationGrid { grid-template-columns: minmax(0, 1fr); }
+  .processDetails { padding-left: 0; border-left: 0; }
+  .processDetails [aria-label="Detection steps"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .page > header { padding-inline: var(--space-4) !important; }
+  .body:has(.setup), .body:has(.processing) { margin-inline: var(--space-2); padding: var(--space-4); }
+  .configuration, .processing { padding: var(--space-4); }
+  .setupHeading { padding: var(--space-4) var(--space-4) 0; }
+  .fileCount { display: none; }
+}
+@media (max-width: 560px) {
+  .processDetails [aria-label="Detection steps"] { grid-template-columns: 1fr; }
+}

@@ -47,7 +47,6 @@ export function Modal({
         placeItems: "center",
         padding: 16,
         background: "rgba(10, 13, 18, 0.45)",
-        backdropFilter: "blur(2px)",
       }}
       onClick={onClose}
     >
@@ -66,7 +65,6 @@ export function Modal({
         {/* Header */}
         <div style={{
           padding: "18px 24px 14px",
-          borderBottom: "1px solid var(--divider)",
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "space-between",
@@ -147,7 +145,6 @@ export function ModalFooter({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       padding: "14px 24px",
-      borderTop: "1px solid var(--divider)",
       background: "var(--surface-alt)",
       display: "flex",
       justifyContent: "flex-end",

@@ -5,6 +5,9 @@ const PUBLIC_PATHS = ["/login"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (process.env.NODE_ENV === "development" && (pathname === "/ui-library" || pathname.startsWith("/ui-library/"))) {
+    return NextResponse.next();
+  }
 
   // API calls are proxied to FastAPI via next.config.ts rewrites — the backend
   // does its own auth (get_current_user) and CSRF (_require_csrf). Guarding

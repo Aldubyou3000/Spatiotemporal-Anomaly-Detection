@@ -60,6 +60,8 @@ Format per entry: **Pattern** → where it appears (3+ places) → what extracti
 
 ## Resolved
 
+*2026-10-25 local UI Library* — reused production components rather than introducing gallery copies. Validation/CSS generation is centralized in components/design/library.ts; fixture data and API responses in fixtures.ts. Inert data-ui attributes on six shared primitives provide common preview styling without another production component abstraction. No additional production rule-of-3 refactor is required.
+
 *2026-08-31 dead-code pass* — not an extraction but a pruning: removed truly dead imports/exports that were inflating the candidate surface — `reports.py` dead `_signed_url`, `zones.py` dead `require_analyst`, `audit_service` dead `datetime`/`timezone`/`settings`, `events_service` dead `Any`, `zone_a` dead `numpy`, `web` dead `papaparse`/`next-themes`/`react-leaflet` deps, `App` dead `expo-blur`/`expo-print`/`expo-symbols` deps (+ wired `buffer` polyfill + `react-native-url-polyfill`). These are logged here so future lint doesn't re-flag them as candidates.
 
 *2026-10-22 station review* — resolved the review status labels/tones repeated across OverviewTab, AnomalyReportTab, and StationMap with `web/src/lib/stationReview.ts`. Overview/report also share evidence wording. No additional rule-of-3 hits introduced.
@@ -86,3 +88,57 @@ No new production rule-of-3 candidate: ZoneResults/CreateTicketModal/InfoTip are
 Manual-save review (2026-10-25): reused existing dialog/input/button and one shared controller for navigation, reset, rerun, file replacement and save-before-ticket. No new production rule-of-3 candidate.
 
 Compact search field candidate (2026-10-25): icon + small outlined input appears near-identically in Audit, DataTable and Tickets. History's inbox redesign now uses a wider rounded search field and is no longer part of this compact pattern. Consider a shared search-field primitive if the three compact controls change together; no refactor was needed for these styling changes.
+
+Flat theme review (2026-10-25): reused the existing shared surface/elevation tokens and one global keyboard-focus rule across controls. Flattened result/gallery composition rather than adding another panel abstraction. No new production rule-of-3 candidate.
+
+Line reduction (2026-10-25): removed decorative declarations in existing components rather than introducing a global border-hiding rule or another panel component. Data-row/control border behavior stays explicit. No new repeated behavior or shared-candidate promotion.
+
+Visibility correction (2026-10-25): chart labels reuse existing --text-secondary; dashboard and shell specimen share dashboard-workspace. No new repeated behavior needing extraction; imports/orphan references unchanged.
+
+Result-tab surfaces (2026-10-25): four result tabs reuse one ZoneResults.module.css panel rule instead of repeating backdrop/inset declarations. This shared presentation is resolved locally; no additional component abstraction is needed.
+
+Saved-results viewport (2026-10-25): reused Tabs, Modal, DataTable and the existing review panels. Viewport mode is scoped through ZoneResults/AnomalyReportTab props; regular Zones layout remains intact. No new production rule-of-3 candidate. Existing custom React test harness cache must be cleared between hook overrides.
+
+Zones workspace (2026-10-25): private RunConfiguration is shared between setup and the configuration dialog; CurrentResults reuses History's fitViewport mode, RunSaveStatus compact variant and global save controller. No additional process state/fetch abstraction or third focus-management implementation introduced (dialog-specific Tab handling remains local). No new production rule-of-3 promotion.
+
+Unsaved dashboard navigation (2026-10-25): reused the global save controller and existing guard; one optional allowContinue flag distinguishes navigation from destructive replacement. No copied modal, new storage layer or production rule-of-3 candidate.
+
+Confirmation layout (2026-10-25): removed duplicate raw button styling from ConfirmDialog in favor of shared Button variants. Dialog layout lives in one CSS module and is reused by actual confirmations/library examples; no new production rule-of-3 candidate.
+
+Focused run setup (2026-10-25): reused private RunConfiguration for setup/dialog and shared FileUpload for the gallery. No new abstraction or near-identical behavior in three places; no promotion needed.
+
+Setup hierarchy refinement (2026-10-25): idle and operational pipeline presentations use the same existing stage metadata; uploader and steps remain shared with the gallery. No copied process definitions or new rule-of-3 candidate.
+
+Processing refinement (2026-10-25): merged idle/running/completed step markup in PipelineDiagram and shared setup/processing surface rules in Zones.module.css. No new duplicated behavior or abstraction needed.
+
+Visible configuration redesign (2026-10-25): setup and result dialog reuse one container-responsive configuration grid; all zone identities are styled once in PipelineDiagram. No copied process definitions or new behavior duplicated in three places.
+
+Resolved spacing scale (2026-10-25): repeated spacing across Zones.module.css, FileUpload.module.css and PipelineDiagram.module.css now consumes --space-* primitives from globals.css. No duplicated local scale or additional layout abstraction introduced.
+
+Real stage progress (2026-10-25): reused existing service orchestration, locked job polling, ZonesContext and PipelineDiagram metadata. No new polling layer or duplicated process definitions. White-palette research (2026-10-26) proposes consistent surface roles before theme changes; no production abstraction or candidate promotion yet.
+
+Resolved shell body surface (2026-10-26): dashboard-content centralizes the rounded work-area background across dashboard pages and the shell specimen; no duplicated page-local surface rule added.
+
+
+Resolved search focus duplication (2026-10-26): common data-search-field CSS owns focus across seven search fields. Individual layouts stay local; no new component needed.
+
+
+Review save reuse (2026-10-26): local review CTA uses existing requestSave/controller; no duplicate save workflow or new extraction needed.
+
+
+Upload readability (2026-10-26): shared FileUpload supplies the same presentation to setup/dialog/gallery; no duplicated formatting or new rule-of-3 candidate.
+
+
+Review save layout stability (2026-10-26): fixed feedback in shared ReviewSaveStatus and footer geometry in shared AnomalyReportTab; no duplicated page-specific fixes needed.
+
+
+Map simplification (2026-10-26): one StationMap component owns tooltip visibility; one scoped tile filter is reused by all callers. No new duplicated behavior.
+
+
+Colored basemap (2026-10-26): provider URL/attribution live in existing shared StationMap; no new wrapper or duplicated map integration.
+
+
+Data quality help (2026-10-26): QualityReportCard now reuses shared accessible InfoTip instead of extending the older page-local hover helper. No new tooltip implementation.
+
+
+Station panel refinement (2026-10-26): retained existing panel components and shared HelpTip; no new duplicated behavior or additional abstraction.

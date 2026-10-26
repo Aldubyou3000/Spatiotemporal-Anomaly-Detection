@@ -36,11 +36,16 @@ const high = { station_id: "ExampleStation", latitude: 14.6, longitude: 121, sta
 const low = { ...high, zero_rate: 0.1, max_zero_streak: 2, events: [{ date: "2023-01-02", rainfall: 0, group_median: 20 }, { date: "2023-01-04", rainfall: 1, group_median: 20 }] };
 function fixture(h = high, l = low) {
   return {
+    neighbors: {},
     station_health: [h], station_stuck_health: [l], dry_stuck_summary: [{ station_id: high.station_id, stuck_count: l.events.length, events: l.events }],
     anomaly_summary: [{ station_id: high.station_id, latitude: 14.6, longitude: 121, anomaly_count: 12, events: Array.from({ length: 12 }, () => ({ is_low: false })) }],
     flagged_data: [{ station_id: high.station_id, latitude: 14.6, longitude: 121, is_anomaly: true }],
     summary: { total_rows: 100, total_stations: 1, total_anomalies: 14, anomalous_stations: 1, anomaly_rate: 14, processing_time_seconds: 1 },
-    quality_report: { total_input_rows: 100, total_input_stations: 1, stations_excluded: 0, rows_excluded: 0, rows_filled: 0, exclusion_details: {} },
+    quality_report: { total_input_rows: 100, total_input_stations: 1, stations_excluded: 0, rows_excluded: 0, rows_filled: 0, exclusion_details: {
+      multi_hour_gaps: 0, hourly_starts_with_nan: 0, hourly_ends_with_nan: 0, hourly_duplicates: 0,
+      incomplete_days: 0, multi_day_gaps: 0, starts_with_nan: 0, ends_with_nan: 0, duplicates: 0,
+      insufficient_readings_stations: 0, zero_valid_stations: 0,
+    } },
   };
 }
 
@@ -67,7 +72,7 @@ test("overview keeps flags visible alongside a neutral overall summary", () => {
   const card = html.slice(html.indexOf('aria-label="Station Review Summary"'));
   assert.match(card, /12 high/);
   assert.match(card, /2 low/);
-  assert.match(card, /Flagged days still need review/);
+  assert.match(card, /aria-label="About station summary"/);
   assert.match(card, /No overall warning/);
   assert.doesNotMatch(card, /Reliable|No drift|sensor fault, not just weather/);
 });
@@ -88,10 +93,10 @@ test("review workspace keeps zero-neighbor evidence, decisions and optional hist
   result.flagged_data = ["ExampleStation", "B", "C", "D"].map((station_id) => ({ station_id, date: "2023-01-01", rainfall: station_id === "ExampleStation" ? 70 : 0, is_anomaly: station_id === "ExampleStation" }));
   const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(AnomalyReportTab, { result, reviews: {}, reviewer: { id: "u1", full_name: "Analyst One", username: "one" }, onReview: () => {}, onCreateTicket: () => {} })));
   assert.match(html, /Nearby typical rainfall: 0 mm/);
-  assert.match(html, /Mark as anomaly/);
-  assert.match(html, /Mark as not anomaly/);
+  assert.match(html, /Anomaly/);
+  assert.match(html, /Not anomaly/);
   assert.match(html, /Skip for now/);
-  assert.match(html, /Review flagged readings/);
+  assert.doesNotMatch(html, /Review flagged readings/);
   assert.match(html, /Review decision/);
   assert.match(html, /Same-day rainfall/);
   assert.match(html, /aria-label="Show rainfall history"/);
@@ -187,7 +192,8 @@ test("review workspace handles no flags without claiming the sensors are accurat
 
 test("station guide stays compact with evidence in tooltips", () => {
   const html = renderToStaticMarkup(React.createElement(OverviewTab, { result: fixture({ ...high, status: "watch", bias_ratio: 1.26 }) }));
-  const card = html.slice(html.indexOf('aria-label="Station Review Summary"'));
+  const start = html.indexOf('aria-label="Station Review Summary"');
+  const card = html.slice(start, html.indexOf('</section>', start));
   const visible = card.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
   assert.match(visible, /Averages 26% higher/);
   assert.doesNotMatch(visible, /Average comparison|Highest in the group|How to read this summary|rainy days assessed/);
@@ -206,14 +212,14 @@ test("mixed warnings retain the peak and low-reading reason without repeating pa
   assert.doesNotMatch(visible, /High readings|Low readings|Longest low-reading run/);
 });
 
-test("warning rows stay visible while other stations are behind the compact toggle", () => {
+test("all stations remain visible with warnings first and no station toggle", () => {
   const result = fixture({ ...high, status: "watch" });
   result.station_health.push({ ...high, station_id: "OtherStation" });
   result.station_stuck_health.push({ ...low, station_id: "OtherStation" });
   const html = renderToStaticMarkup(React.createElement(OverviewTab, { result }));
   const card = html.slice(html.indexOf('aria-label="Station Review Summary"'));
   assert.match(card, /ExampleStation/);
-  assert.doesNotMatch(card, /OtherStation/);
-  assert.match(card, /aria-expanded="false"/);
-  assert.match(card, /Show 1 other station/);
+  assert.match(card, /OtherStation/);
+  assert.ok(card.indexOf("ExampleStation") < card.indexOf("OtherStation"));
+  assert.doesNotMatch(card, /(?:Show|Hide) 1 other station/);
 });

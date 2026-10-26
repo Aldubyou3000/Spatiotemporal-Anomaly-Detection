@@ -15,7 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 from ..core.dependencies import require_analyst_or_bearer
 from ..core.limiter import limiter
 from ..schemas.auth import UserProfile
-from ..schemas.zones import ProcessResult
+from ..schemas.zones import ProcessResult, PipelineProgress
 from ..schemas.history import SaveRunRequest
 from ..services.zones_service import ZoneProcessingError, run_pipeline_multi
 from ..services.history_service import describe_files, try_save_run
@@ -45,9 +45,14 @@ def _gc_jobs() -> None:
 
 
 def _run_job(job_id: str, payload: list[tuple[str, bytes]], user: UserProfile) -> None:
+    def report(progress: PipelineProgress) -> None:
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["progress"] = progress.model_dump(mode="json")
+
     try:
         logger.info("[zones] job %s start files=%d bytes=%d", job_id, len(payload), sum(len(b) for _, b in payload))
-        result = run_pipeline_multi(payload)
+        result = run_pipeline_multi(payload, on_progress=report)
         result = result.model_copy(update={"run_id": job_id, "history_saved": False, "history_error": None})
         with _jobs_lock:
             if job_id in _jobs:
@@ -158,7 +163,8 @@ async def process_zones(
     actor = UserProfile.model_validate(_user)
     with _jobs_lock:
         _jobs[job_id] = {"status": "processing", "result": None, "error": None, "created_at": time.time(),
-                         "user_id": actor.id, "user": actor, "files": describe_files(payload)}
+                         "user_id": actor.id, "user": actor, "files": describe_files(payload),
+                         "progress": PipelineProgress().model_dump(mode="json")}
     if prefer_async:
         # Run in background daemon thread (not threadpool, so it survives the 202)
         t = threading.Thread(target=_run_job, args=(job_id, payload, actor), daemon=True)
@@ -190,8 +196,9 @@ def get_zones_job(request: Request, job_id: str, _user: UserProfile = Depends(re
         status_val = job["status"]
         result = job.get("result")
         error = job.get("error")
+        progress = job.get("progress", PipelineProgress().model_dump(mode="json"))
     if status_val == "processing":
-        return {"job_id": job_id, "status": "processing"}
+        return {"job_id": job_id, "status": "processing", "progress": progress}
     if status_val == "done":
         return {"job_id": job_id, "status": "done", "result": result}
     return {"job_id": job_id, "status": "error", "detail": error or "Processing failed"}

@@ -26,10 +26,13 @@ const SHOW_TEXT_SIZE_PICKER = false;
 
 interface HeaderProps {
   title: string;
+  background?: string;
+  leading?: React.ReactNode;
+  parent?: React.ReactNode;
   actions?: React.ReactNode;
 }
 
-export function Header({ title, actions }: HeaderProps) {
+export function Header({ title, actions, leading, parent = "Workspace", background = "var(--bg)" }: HeaderProps) {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -73,9 +76,7 @@ export function Header({ title, actions }: HeaderProps) {
       <header
         style={{
           height: "var(--topbar-h)",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--surface-overlay)",
-          backdropFilter: "saturate(180%) blur(8px)",
+          background,
           display: "flex",
           alignItems: "center",
           padding: "0 28px",
@@ -86,11 +87,12 @@ export function Header({ title, actions }: HeaderProps) {
           flexShrink: 0,
         }}
       >
+        {leading && <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>{leading}</div>}
         {/* Breadcrumb — fills left */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, fontSize: "var(--font-sm)", color: "var(--text-muted)", minWidth: 0 }}>
-          <span>Workspace</span>
+          <span style={{ flexShrink: 0 }}>{parent}</span>
           <ChevronRight size={11} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
-          <h1 style={{ margin: 0, fontSize: "inherit", fontWeight: "inherit", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h1>
+          <h1 title={title} aria-current="page" style={{ margin: 0, fontSize: "inherit", fontWeight: "inherit", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h1>
         </div>
 
         {/* Right side controls */}
@@ -184,7 +186,7 @@ export function Header({ title, actions }: HeaderProps) {
                   boxShadow: "var(--shadow-lg)", zIndex: 50, transformOrigin: "top right",
                 }}
               >
-                <div style={{ padding: "8px 10px 10px", borderBottom: "1px solid var(--divider)", marginBottom: 4 }}>
+                <div style={{ padding: "8px 10px 10px", marginBottom: 4 }}>
                   <p style={{ margin: 0, fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" }}>
                     {user?.full_name || "—"}
                   </p>

@@ -12,7 +12,7 @@ interface ThemeContextValue {
 
 const STORAGE_KEY = "aws-sentinel-theme";
 const LEGACY_STORAGE_KEY = "aws-qc-theme";
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");

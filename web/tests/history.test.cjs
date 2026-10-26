@@ -127,6 +127,12 @@ test("unsaved runs wait for a leave choice while saved runs continue immediately
   render().cancelLeave();
   assert.equal(render().leaveRequest, null);
   assert.equal(continued, 0);
+  render().guardUnsaved(() => continued++, { allowContinue: true });
+  assert.equal(render().leaveRequest.allowContinue, true, "navigation can offer a non-destructive continue option");
+  render().cancelLeave();
+  render().guardUnsaved(() => continued++);
+  assert.equal(render().leaveRequest.allowContinue, undefined, "file replacement and reset still require saving or discarding");
+  render().cancelLeave();
   render().requestSave(() => continued++);
   assert.equal(continued, 0, "opening Save must not perform the pending navigation or ticket action");
   render().cancelSave();

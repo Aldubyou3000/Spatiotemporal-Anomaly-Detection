@@ -1,6 +1,13 @@
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, Field
+
+PipelineStage = Literal["preparing", "zone_a", "zone_b", "zone_c", "finalizing"]
+
+
+class PipelineProgress(BaseModel):
+    stage: PipelineStage = "preparing"
+    station_ids: list[str] = Field(default_factory=list)
 
 
 class DailyReading(BaseModel):
