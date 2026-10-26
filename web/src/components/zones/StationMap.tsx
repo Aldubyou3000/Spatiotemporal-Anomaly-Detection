@@ -28,10 +28,9 @@ interface StationMapProps {
   highlightedStationIds?: string[];
 }
 
-// shortcut: keyless tiles work on localhost; authorize the domain with Stadia before LAN or hosted use.
-const LIGHT_TILES = "https://tiles.stadiamaps.com/tiles/alidade_bright/{z}/{x}/{y}{r}.png";
+const LIGHT_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const DARK_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
-const LIGHT_ATTRIBUTION = '&copy; <a href="https://stadiamaps.com/attribution/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const LIGHT_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const DARK_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.esri.com/">Esri</a>';
 

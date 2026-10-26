@@ -153,3 +153,5 @@ Tickets dock cleanup (2026-10-26): removed unused dock-nudge/review-pulse/dock-p
 Sidebar logo anchoring (2026-10-27): expanded and collapsed logo slots are both 44 by 40px at a fixed 12px left/top inset. Removed expanded-only 2px row padding; collapsed brand uses a fixed left inset rather than centering in a differently sized slot. Toggle/navigation/tooltips and logo geometry retained.
 
 Sidebar toggle icons (2026-10-27): replaced lone chevrons with existing Lucide PanelLeftOpen/PanelLeftClose icons and matching native title hints. Existing button geometry, accessible labels and collapse state remain intact.
+
+Stable dashboard panels (2026-10-27): dashboard-page provides a constrained flex column; dashboard-content owns consistent gap-card inset, minimum dimensions, scrolling and rounded corners. History and Zones retain their existing equivalent page classes; Audit/Technicians no longer scroll the whole page outside the rounded panel. Removed the PageTransition fade so navigation does not flash the background.

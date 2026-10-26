@@ -685,3 +685,6 @@ Traced repeated _buildManifest.js.tmp ENOENT to the live dev server sharing .nex
 
 ## [2026-10-27] Remove result-tab selection animation
 Removed shared tab underline/color transitions and panel entry fade. Preserved selected state, accessible tab associations, content mounting and all handlers.
+
+## [2026-10-27] Stable page-panel geometry and deployed map authentication fix
+Unified main background-panel inset and constrained scroll geometry across dashboard routes; removed page fade and kept Audit corners clipped. Restored the original OSM light basemap after reproducing Stadia HTTP 401 with the hosted referrer; replacement tile returned HTTP 200 PNG. Updated the regression to fail on the unauthorized provider. No credentials, dependencies, schemas or detection algorithms changed.

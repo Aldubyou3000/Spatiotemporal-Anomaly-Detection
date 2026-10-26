@@ -175,14 +175,14 @@ test('map retains neutral permanent station names and fits closer to station bou
   } finally { h.cleanup(); h.close(); }
 });
 
-test('light map uses the simpler colored basemap with its provider attribution', () => {
+test('light map works without deployment credentials and credits the active provider', () => {
   const h = harness();
   try {
     for (const tile of h.tiles) {
-      assert.match(tile.url, /tiles.stadiamaps.com\/tiles\/alidade_bright\//);
-      assert.match(tile.options.attribution, /Stadia Maps/);
-      assert.match(tile.options.attribution, /OpenMapTiles/);
+      assert.equal(tile.url, 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+      assert.doesNotMatch(tile.url, /api[_-]?key|token|localhost|stadiamaps/i);
       assert.match(tile.options.attribution, /OpenStreetMap/);
+      assert.doesNotMatch(tile.options.attribution, /Stadia Maps|OpenMapTiles/);
     }
   } finally { h.cleanup(); h.close(); }
 });

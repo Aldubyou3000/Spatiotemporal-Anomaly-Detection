@@ -447,7 +447,7 @@ function TicketsWorkspace() {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+    <div className="dashboard-page">
       <Header title="Tickets" />
       <div className={`dashboard-content ${styles.workspace}`}>
 

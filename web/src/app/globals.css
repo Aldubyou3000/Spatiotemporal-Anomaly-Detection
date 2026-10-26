@@ -288,8 +288,20 @@ body {
   margin: 0 var(--gap-card) var(--gap-card) 0;
   background: var(--bg);
 }
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
 .dashboard-content {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--gap-card);
+  overflow: auto;
   background: var(--surface-alt);
   border-radius: var(--r-2xl);
 }

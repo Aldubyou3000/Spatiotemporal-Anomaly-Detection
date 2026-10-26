@@ -222,3 +222,5 @@ Sidebar logo anchoring (2026-10-27): matched the two existing brand slots locall
 Sidebar toggle icons (2026-10-27): reused installed Lucide icons and native title hints; no new shared candidate.
 
 Instant result tabs (2026-10-27): removed motion once in existing shared Tabs primitive for both callers; no new abstraction.
+
+Stable dashboard panels (2026-10-27): three page roots now reuse dashboard-page, and all background panels share dashboard-content spacing/scrolling. This resolves repeated per-page padding and sizing differences through existing CSS, without introducing a component. Map provider is defined once for both initialization and theme changes.

@@ -237,3 +237,5 @@ Sidebar logo anchoring (2026-10-27): styles only in existing Sidebar; no new mod
 Sidebar toggle icons (2026-10-27): removed unused Sidebar ChevronLeft/ChevronRight imports; no module/reference change.
 
 Instant result tabs (2026-10-27): removed animation-class references only; global fade utility remains used elsewhere. No orphan module.
+
+Stable panels/map correction (2026-10-27): removed obsolete Zones body overrides and PageTransition fade usage; both components/classes remain referenced. Replaced Stadia constants/attribution with the existing OSM provider; no new runtime modules or orphan references.

@@ -1,8 +1,6 @@
 .page, .body, .results { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .page > header { z-index: 1; height: auto !important; min-height: var(--topbar-h); flex-wrap: wrap; padding: var(--space-2) var(--space-6) !important; gap: var(--space-2) !important; }
 .page > header > div:last-child { flex-wrap: wrap; max-width: 100%; }
-.body { padding: var(--gap-card) var(--pad-x); }
-.body:has(.setup), .body:has(.processing) { margin: 0 var(--space-4) var(--space-4); padding: var(--space-8); background: var(--surface-alt); border-radius: var(--r-2xl); }
 .results > [role="status"] { flex-shrink: 0; }
 .setup, .processing { align-self: center; width: 100%; max-width: 1100px; overflow: auto; min-height: 0; background: var(--surface); border-radius: var(--r-xl); }
 .setupHeading { padding: var(--space-6) var(--space-6) 0; }
