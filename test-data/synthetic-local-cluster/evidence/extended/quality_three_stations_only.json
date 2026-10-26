@@ -1,0 +1,32 @@
+{
+  "daily_rows": 90,
+  "assessed": 0,
+  "unassessed": 90,
+  "unassessed_flags": 0,
+  "quality": {
+    "total_input_rows": 90,
+    "total_input_stations": 3,
+    "stations_excluded": 0,
+    "rows_excluded": 0,
+    "rows_filled": 0,
+    "exclusion_details": {
+      "zero_valid_stations": 0,
+      "insufficient_readings_stations": 0,
+      "multi_day_gaps": 0,
+      "incomplete_days": 0,
+      "starts_with_nan": 0,
+      "ends_with_nan": 0,
+      "duplicates": 0,
+      "multi_hour_gaps": 0,
+      "hourly_starts_with_nan": 0,
+      "hourly_ends_with_nan": 0,
+      "hourly_duplicates": 0
+    },
+    "summary_text": "Output: 90 daily rows from 3 station(s). Filled 0 single-hour gaps before daily exclusions. Excluded 0 incomplete daily totals and 0 station(s)."
+  },
+  "input_sha256": {
+    "SYNTHETIC-SyntheticQCA01_01Sep2023_30Sep2023.csv": "c1eb88572d0857bbec44e284b36f48189dfd628620b2d50d499eea15ecbd621e",
+    "SYNTHETIC-SyntheticQCA02_01Sep2023_30Sep2023.csv": "9ff2042d7fd508f5c8482ff494c3c326f4a5d82204dcedbfdb5d34733b45e501",
+    "SYNTHETIC-SyntheticQCA03_01Sep2023_30Sep2023.csv": "6dc9c928338a4a0d389b1417a462803b2b665f9e74d762d03024f380782f18ef"
+  }
+}

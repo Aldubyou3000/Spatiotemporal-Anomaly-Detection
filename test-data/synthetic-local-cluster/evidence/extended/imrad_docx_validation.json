@@ -1,0 +1,14 @@
+{
+  "main_sections": [
+    "Introduction",
+    "Methods",
+    "Results",
+    "Discussion"
+  ],
+  "editable_tables": 10,
+  "matrix_counts": "match recorded evidence",
+  "all_misclassifications": 11,
+  "ooxml_integrity": "passed",
+  "visual_pagination": "not verified",
+  "render_failure": "Canonical render_docx.py could not find LibreOffice soffice.exe; no Word engine or connected document session available"
+}

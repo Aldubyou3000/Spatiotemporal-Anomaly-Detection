@@ -1,0 +1,27 @@
+{
+  "verified_matrices": 12,
+  "backend_tests": 67,
+  "source_and_evidence_sha256": {
+    "api/app/zones/zone_c.py": "32d148d507387e9f4d79e4e5417e6eb0437da7947a7073db302342c7b9dc65d0",
+    "api/tests/test_zone_c.py": "ee7974cf8bb10021e91fac5cbf674b83075f1503af464585163c9cd060348596",
+    "docs/ZONE_C_IMPROVEMENT_PLAN.md": "35cc7e1d1d9cad4c33e71fad18688a81d846f38035613f4ddb305eb61ebdcf37",
+    "docs/references/science-garden-ridf-2026.png": "f2f17c71cd0d6b041844dc268f6c88c6738b4276fbfffe808df071ee1e98f84f",
+    "test-data/zone-c-improvement/backend-tests.txt": "aecae6e33dc6494d9d235bc6eb7ab23bc544eeb9ea3450cdcd0d7c139b38beae",
+    "test-data/zone-c-improvement/baseline_zone_c.py": "488f2e53cec3ba398cc15217a87f4a5b2ed3f68528bd17197b4c408f73084241",
+    "test-data/zone-c-improvement/comparison-run.txt": "3585d4dc71afca9f79f7905b48d400c39e6675cbc0f2c24fdbd7ae833d5fa961",
+    "test-data/zone-c-improvement/comparison.json": "e48bd35ae91179fb1c89d52c3bef7603c1eeeba22a333e202fbb203100b6fa41",
+    "test-data/zone-c-improvement/development_changed.csv": "197c87f34a38e950c84f0415679f38645d89e9559e9991c81d33a3b1cf7d0dae",
+    "test-data/zone-c-improvement/development_comparison.csv": "f867efdb037122fc563a71224e08b498f6841a2a8ef150fcd396ef55d5644519",
+    "test-data/zone-c-improvement/development_improved_result.json": "b421d7e37e98baf4ec76c2e138fdaab4353c7df5a6057a93bac630e52f0b695b",
+    "test-data/zone-c-improvement/evaluate.py": "0ab398d886e2db71c5cfd884af91db4fc93b522e89684d0dbb8cbaf15bfa4aae",
+    "test-data/zone-c-improvement/README.md": "e3293d28c0ee367f03f4d2a8d102f4a6821bb877ea12dca205e98333ba417273",
+    "test-data/zone-c-improvement/RESULTS.md": "912310509cde864d4cef40adbc1e467c2fd0eee9fb1ac28f627c45023a1101c2",
+    "test-data/zone-c-improvement/selection-first.json": "8be0d75d0e47cab0c28baa147548009e4f34887f0603ef1eedf8ba8eab04909e",
+    "test-data/zone-c-improvement/selection.json": "9456ae69065643e4b10597c8aa4be89a89200c7ec2f7a3ba5d61943581b8af6a",
+    "test-data/zone-c-improvement/validation_changed.csv": "43753a82f12cee05c8d81a51de73dfc3bafb4f4dc42000477bd0304ef7e6cc32",
+    "test-data/zone-c-improvement/validation_comparison.csv": "653cd35b697c68832de3d6e81aa854c9d20acc81728c6175e810f0b27ca55a31",
+    "test-data/zone-c-improvement/validation_daily.csv": "34a911a8d880e54f51e04f5d83315fe5685433771069db032ce73605344563cf",
+    "test-data/zone-c-improvement/validation_improved_result.json": "757f6ad2e12c8b86c6c7ede54761f09292bff569e2890a0a2c4905f0984d84ab",
+    "test-data/zone-c-improvement/validation_key.csv": "7cbcf927ae45ef01d8cba0faeecce77e11e9875513fdb6b18c89cdf391688fd5"
+  }
+}

@@ -224,3 +224,13 @@ Sidebar toggle icons (2026-10-27): reused installed Lucide icons and native titl
 Instant result tabs (2026-10-27): removed motion once in existing shared Tabs primitive for both callers; no new abstraction.
 
 Stable dashboard panels (2026-10-27): three page roots now reuse dashboard-page, and all background panels share dashboard-content spacing/scrolling. This resolves repeated per-page padding and sizing differences through existing CSS, without introducing a component. Map provider is defined once for both initialization and theme changes.
+
+Local synthetic cluster (2026-10-27): the second standalone synthetic fixture reuses the actual pipeline and dependencies. No third near-identical generator or production behavior was introduced; no new rule-of-3 promotion. Its CSV output helper is shared within the one manual script.
+
+Complete controlled evaluation (2026-10-27): extended runner imports the existing fixture's CSV and metric helpers and calls the actual service/router. Report renderer uses one shared matrix figure/table renderer for all four presentations. No new near-identical behavior in three production locations; no shared refactor required.
+
+IMRaD Word report (2026-10-27): source evidence and JSON metrics are reused without copying detector or evaluation logic. Word-specific paragraph/table formatting stays in its one report builder; no production rule-of-3 promotion.
+
+Simple IMRaD version (2026-10-27): shortened the existing Word builder and reused its table/paragraph helpers. No new wrapper or third duplicated implementation.
+
+Zone C improvement (2026-10-27): reused the production detector/service, existing fixture metric/CSV helpers and existing response projection. The source-hashed baseline copy is intentionally archival evidence, not a second production algorithm to refactor. Near-zero and partial-low predicates differ in reference median and scope; merging them would change semantics. No new rule-of-3 promotion.

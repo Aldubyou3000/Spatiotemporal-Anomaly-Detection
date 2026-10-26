@@ -1,0 +1,93 @@
+test_idle_streams_survive_heartbeats_and_deliver_later_events (test_events.EventStreamTests.test_idle_streams_survive_heartbeats_and_deliver_later_events) ... ok
+test_caller_cannot_forge_reviewer_or_submit_an_invalid_decision (test_history.HistoryTests.test_caller_cannot_forge_reviewer_or_submit_an_invalid_decision) ... ok
+test_cookie_review_write_requires_matching_csrf_token (test_history.HistoryTests.test_cookie_review_write_requires_matching_csrf_token) ... C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\slowapi\extension.py:717: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+  if asyncio.iscoroutinefunction(func):
+C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\slowapi\extension.py:717: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+  if asyncio.iscoroutinefunction(func):
+C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\slowapi\extension.py:717: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+  if asyncio.iscoroutinefunction(func):
+ok
+test_explicit_save_uses_original_server_result_and_submitted_title (test_history.HistoryTests.test_explicit_save_uses_original_server_result_and_submitted_title) ... C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\slowapi\extension.py:717: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+  if asyncio.iscoroutinefunction(func):
+C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\slowapi\extension.py:717: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+  if asyncio.iscoroutinefunction(func):
+C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\slowapi\extension.py:717: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+  if asyncio.iscoroutinefunction(func):
+ok
+test_follow_up_ticket_keeps_latest_submitted_inspection_visible (test_history.HistoryTests.test_follow_up_ticket_keeps_latest_submitted_inspection_visible) ... ok
+test_history_endpoints_reject_technicians_and_anonymous_callers (test_history.HistoryTests.test_history_endpoints_reject_technicians_and_anonymous_callers) ... [auth] No access_token cookie received from ip=testclient
+ok
+test_history_events_do_not_leak_to_mobile (test_history.HistoryTests.test_history_events_do_not_leak_to_mobile) ... ok
+test_job_progress_is_updated_by_pipeline_and_only_returned_to_its_owner (test_history.HistoryTests.test_job_progress_is_updated_by_pipeline_and_only_returned_to_its_owner) ... ok
+test_list_endpoint_validates_sort_choices (test_history.HistoryTests.test_list_endpoint_validates_sort_choices) ... ok
+test_list_sort_reaches_database_before_pagination (test_history.HistoryTests.test_list_sort_reaches_database_before_pagination) ... ok
+test_manual_save_records_title_without_changing_original_readings (test_history.HistoryTests.test_manual_save_records_title_without_changing_original_readings) ... ok
+test_manual_save_title_is_trimmed_and_required (test_history.HistoryTests.test_manual_save_title_is_trimmed_and_required) ... ok
+test_missing_run_still_returns_404_for_reviews_and_tickets (test_history.HistoryTests.test_missing_run_still_returns_404_for_reviews_and_tickets) ... ok
+test_only_flagged_station_dates_can_be_reviewed_or_linked_as_readings (test_history.HistoryTests.test_only_flagged_station_dates_can_be_reviewed_or_linked_as_readings) ... ok
+test_processing_is_temporary_and_never_saves_to_history_automatically (test_history.HistoryTests.test_processing_is_temporary_and_never_saves_to_history_automatically) ... ok
+test_retry_returns_the_original_saved_title_if_the_first_acknowledgment_was_lost (test_history.HistoryTests.test_retry_returns_the_original_saved_title_if_the_first_acknowledgment_was_lost) ... ok
+test_retry_uses_same_run_identity_without_changing_snapshot (test_history.HistoryTests.test_retry_uses_same_run_identity_without_changing_snapshot) ... ok
+test_review_endpoint_encodes_jsonb_with_real_postgrest_client (test_history.HistoryTests.test_review_endpoint_encodes_jsonb_with_real_postgrest_client) ... ok
+test_review_endpoint_normalizes_authenticated_profile (test_history.HistoryTests.test_review_endpoint_normalizes_authenticated_profile) ... ok
+test_review_reads_check_only_run_identity_and_keep_pagination (test_history.HistoryTests.test_review_reads_check_only_run_identity_and_keep_pagination) ... ok
+test_review_uses_authenticated_actor_and_revision_not_client_metadata (test_history.HistoryTests.test_review_uses_authenticated_actor_and_revision_not_client_metadata) ... ok
+test_search_h_uses_displayed_name_prefix_not_hidden_station_text (test_history.HistoryTests.test_search_h_uses_displayed_name_prefix_not_hidden_station_text) ... ok
+test_snapshot_preserves_flags_and_fingerprints_each_source (test_history.HistoryTests.test_snapshot_preserves_flags_and_fingerprints_each_source) ... ok
+test_stale_review_is_rejected (test_history.HistoryTests.test_stale_review_is_rejected) ... ok
+test_storage_failure_keeps_result_and_marks_it_unsaved (test_history.HistoryTests.test_storage_failure_keeps_result_and_marks_it_unsaved) ... ok
+test_ticket_cannot_link_to_a_different_station_in_run (test_history.HistoryTests.test_ticket_cannot_link_to_a_different_station_in_run) ... ok
+test_zero_flags_are_still_saved (test_history.HistoryTests.test_zero_flags_are_still_saved) ... ok
+test_search_count_pagination_and_export_use_same_filters (test_search.AuditSearchTests.test_search_count_pagination_and_export_use_same_filters) ... ok
+test_search_quotes_special_filter_characters (test_search.AuditSearchTests.test_search_quotes_special_filter_characters) ... ok
+test_average_warning_without_highest_frequency_warning (test_station_review.StationReviewTests.test_average_warning_without_highest_frequency_warning) ... ok
+test_fewer_than_five_rainy_days_is_insufficient (test_station_review.StationReviewTests.test_fewer_than_five_rainy_days_is_insufficient) ... ok
+test_flagged_day_remains_even_without_overall_warning (test_station_review.StationReviewTests.test_flagged_day_remains_even_without_overall_warning) ... ok
+test_identical_readings_do_not_warn (test_station_review.StationReviewTests.test_identical_readings_do_not_warn) ... ok
+test_individual_low_events_remain_without_overall_warning (test_station_review.StationReviewTests.test_individual_low_events_remain_without_overall_warning) ... ok
+test_large_flagged_peak_warns_even_with_limited_data (test_station_review.StationReviewTests.test_large_flagged_peak_warns_even_with_limited_data) ... ok
+test_missing_neighbor_days_are_not_assessed (test_station_review.StationReviewTests.test_missing_neighbor_days_are_not_assessed) ... ok
+test_run_counts_assessed_rainy_days_not_calendar_days (test_station_review.StationReviewTests.test_run_counts_assessed_rainy_days_not_calendar_days) ... ok
+test_strictly_highest_still_raises_warning (test_station_review.StationReviewTests.test_strictly_highest_still_raises_warning) ... ok
+test_tied_highest_does_not_count_as_strictly_highest (test_station_review.StationReviewTests.test_tied_highest_does_not_count_as_strictly_highest) ... ok
+test_absolute_and_relative_high_boundaries (test_zone_c.ZoneCScreeningTests.test_absolute_and_relative_high_boundaries) ... C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\joblib\externals\loky\backend\context.py:131: UserWarning: Could not find the number of physical cores for the following reason:
+found 0 physical cores < 1
+Returning the number of logical cores instead. You can silence this warning by setting LOKY_MAX_CPU_COUNT to the number of cores you want to use.
+  warnings.warn(
+  File "C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\joblib\externals\loky\backend\context.py", line 255, in _count_physical_cores
+    raise ValueError(f"found {cpu_count_physical} physical cores < 1")
+ok
+test_dry_and_equal_readings_have_finite_scores_and_no_flags (test_zone_c.ZoneCScreeningTests.test_dry_and_equal_readings_have_finite_scores_and_no_flags) ... ok
+test_gross_disagreement_is_reviewed_below_and_above_ridf (test_zone_c.ZoneCScreeningTests.test_gross_disagreement_is_reviewed_below_and_above_ridf) ... ok
+test_invalid_neighbor_parameters_are_rejected_clearly (test_zone_c.ZoneCScreeningTests.test_invalid_neighbor_parameters_are_rejected_clearly) ... ok
+test_low_ratio_and_deficit_boundaries (test_zone_c.ZoneCScreeningTests.test_low_ratio_and_deficit_boundaries) ... ok
+test_missing_neighbors_are_unassessed (test_zone_c.ZoneCScreeningTests.test_missing_neighbors_are_unassessed) ... ok
+test_partial_underreport_above_one_mm_is_reviewed (test_zone_c.ZoneCScreeningTests.test_partial_underreport_above_one_mm_is_reviewed) ... ok
+test_pipeline_counts_and_dry_flags_do_not_reintroduce_the_high_false_alarm (test_zone_c.ZoneCScreeningTests.test_pipeline_counts_and_dry_flags_do_not_reintroduce_the_high_false_alarm) ... ok
+test_rainfall_alias_and_empty_data_remain_supported (test_zone_c.ZoneCScreeningTests.test_rainfall_alias_and_empty_data_remain_supported) ... ok
+test_repeated_calls_and_row_order_are_identical (test_zone_c.ZoneCScreeningTests.test_repeated_calls_and_row_order_are_identical) ... ok
+test_reported_22_7_reading_is_not_flagged (test_zone_c.ZoneCScreeningTests.test_reported_22_7_reading_is_not_flagged) ... ok
+test_ridf_scale_coherent_storms_are_not_fault_cutoffs (test_zone_c.ZoneCScreeningTests.test_ridf_scale_coherent_storms_are_not_fault_cutoffs) ... ok
+test_sync_and_async_http_results_use_the_new_rules (test_zone_c.ZoneCScreeningTests.test_sync_and_async_http_results_use_the_new_rules) ... ok
+test_actual_outputs_against_independent_csv_and_decimal_reference (test_zones_quality.ActualDatasetTests.test_actual_outputs_against_independent_csv_and_decimal_reference) ... ok
+test_absent_timestamp_excludes_the_day (test_zones_quality.DailyQualityTests.test_absent_timestamp_excludes_the_day) ... ok
+test_complete_dry_days_are_valid (test_zones_quality.DailyQualityTests.test_complete_dry_days_are_valid) ... ok
+test_daily_and_hourly_stations_can_be_uploaded_together (test_zones_quality.DailyQualityTests.test_daily_and_hourly_stations_can_be_uploaded_together) ... ok
+test_daily_input_is_not_interpolated (test_zones_quality.DailyQualityTests.test_daily_input_is_not_interpolated) ... ok
+test_duplicate_or_extra_subhour_cannot_replace_a_missing_hour (test_zones_quality.DailyQualityTests.test_duplicate_or_extra_subhour_cannot_replace_a_missing_hour) ... ok
+test_duplicates_and_unsorted_input_do_not_inflate_totals (test_zones_quality.DailyQualityTests.test_duplicates_and_unsorted_input_do_not_inflate_totals) ... ok
+test_edge_gaps_are_not_extrapolated (test_zones_quality.DailyQualityTests.test_edge_gaps_are_not_extrapolated) ... ok
+test_invalid_rainfall_is_rejected_before_aggregation (test_zones_quality.DailyQualityTests.test_invalid_rainfall_is_rejected_before_aggregation) ... ok
+test_multi_hour_gap_excludes_the_day (test_zones_quality.DailyQualityTests.test_multi_hour_gap_excludes_the_day) ... ok
+test_no_complete_data_has_a_clear_error (test_zones_quality.DailyQualityTests.test_no_complete_data_has_a_clear_error) ... ok
+test_single_and_multi_file_paths_use_the_same_quality_checks (test_zones_quality.DailyQualityTests.test_single_and_multi_file_paths_use_the_same_quality_checks) ... ok
+test_single_hour_is_filled_and_reported (test_zones_quality.DailyQualityTests.test_single_hour_is_filled_and_reported) ... ok
+test_station_minimum_is_rechecked_after_completeness (test_zones_quality.DailyQualityTests.test_station_minimum_is_rechecked_after_completeness) ... ok
+test_progress_reports_real_zone_boundaries_and_station_ids (test_zones_quality.PipelineProgressTests.test_progress_reports_real_zone_boundaries_and_station_ids) ... ok
+
+----------------------------------------------------------------------
+Ran 67 tests in 40.401s
+
+OK
+
+Actual dataset verified: 3029 complete daily totals; 319 partial days excluded; 127 hours filled.

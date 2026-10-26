@@ -99,19 +99,23 @@ For each station, calculates the **Haversine distance** (great-circle distance i
 **File:** `api/app/zones/zone_c.py`
 **Entry point:** `zone_c_lof_anomaly_detection(cleaned_data, neighbors, n_neighbors=3)`
 
-Detects rainfall anomalies using **per-day, within-group Local Outlier Factor** — each calendar day is scored inside its 4-station local neighborhood (station + 3 Haversine neighbors), not globally. Deployed `ANOMALY_THRESHOLD=2.0` (`zone_c.py:35`, was 1.5 — stricter, extreme-only), `MIN_STATIONS_PER_DAY=4:30`, `MIN_ANOMALY_RAINFALL_MM=10.0:43`.
+Screens rainfall using **per-day, within-group Local Outlier Factor** plus meaningful-difference gates. Each calendar day is scored inside its four-station local neighborhood (station plus three Haversine neighbors), not globally. The 27 October 2026 user-authorized update changes Zone C only; Zones A/B remain unchanged. A flag is a review candidate, not proof of an instrument error.
 
 ### What it does
 
 For each station, for each day:
 1. Assembles that **day’s** rows for the station + its Zone B neighbors (`k=3` → group ≤4).
-2. If `n_today < 4` skip (need quorum); adds `1e-3` jitter to break ties.
-3. Fits `LocalOutlierFactor(n_neighbors=min(2, n_neighbors))` on that day’s `rainfall` values.
-4. Flags `is_anomaly` if `score <= -2.0` **and** the value is the high outlier on that day and `>=10 mm`.
-5. Also flags `is_low_anomaly` for silent vs wet-neighbor days. Repeats for all stations/days.
+2. If fewer than four report that day, leave the row unassessed (`lof_score` missing and both flags false).
+3. Sort each comparison by station ID and add deterministic offsets smaller than 0.001 mm to break ties. Scores no longer depend on an advancing process-global random generator.
+4. Fit `LocalOutlierFactor(n_neighbors=min(2, n_neighbors))`; reject a non-integer/bool neighbor parameter or one smaller than two.
+5. Flag `is_anomaly` only when the score is at most -2.0, rainfall is at least 10 mm and above the group median, and its excess over the **other stations' median** is at least both **5 mm and 30 percent of that neighbor median**.
+6. Retain the original near-zero low rule: own rainfall at most 1 mm, group median at least 10 mm, and own rainfall below 25 percent of the group median.
+7. Also screen a **partial low reading above 1 mm** when the other stations' median is at least 10 mm, own rainfall is strictly below 25 percent of that median, and the shortfall is at least 10 mm. These are low flags, not LOF classifications or near-zero/stuck events.
+
+The 5 mm/30 percent high tolerances are provisional engineering settings selected using the existing development fixture. They are not PAGASA/WMO standards, instrument accuracy specifications, or RIDF-derived limits. Near a threshold, small errors may be deliberately left unflagged. The low extension can flag valid localized dry weather; it improves sensitivity at a false-alarm cost that is reported separately.
 
 ### Why spatial context matters
-A heavy rainfall day at a coastal station is normal; the same reading at an inland station surrounded by dry neighbors is anomalous. Using geographic neighbors per-day captures this distinction.
+A reading that differs from concurrent nearby observations can merit review. Localized real weather and sensor errors can produce the same observed values, so neither LOF nor a difference threshold alone can confirm which occurred.
 
 ### Parameters
 | Parameter | Default | Description |
@@ -132,7 +136,13 @@ A heavy rainfall day at a coastal station is normal; the same reading at an inla
 )
 ```
 
-`anomaly_summary` contains only stations that have at least one anomalous reading.
+The pure Zone C `anomaly_summary` contains high events. The API normalizer combines those events with all daily low flags; counts and `is_low` distinguish the directions. `is_dry_stuck` and station low-pattern summaries continue to describe near-zero readings, so a partial low flag need not appear as a near-zero event.
+
+### RIDF and validation
+
+The supplied [Science Garden RIDF sheet](references/science-garden-ridf-2026.md) is used for explicit coherent extreme-rain regression cases at 159.4, 249.4, 308.9, 495.3 and 600 mm. Coherent heavy rainfall is not flagged merely for exceeding a listed depth. Gross spatial discrepancies below and above those values are still screened. No Science Garden return-period depth is used as a universal AWS cutoff or mapped onto fixed calendar-day totals as a formal return period.
+
+See [the implementation plan](ZONE_C_IMPROVEMENT_PLAN.md) and `test-data/zone-c-improvement/RESULTS.md` for selection and separate validation. Development false alarms fell from 7 to 3 and missed faults from 4 to 3. In the separate 480-row synthetic series, total false alarms fell from 13 to 11 and misses from 9 to 4; low-only false alarms rose from 2 to 6 as five additional low faults were detected. No labels or measurements were changed. Previously saved runs/reports remain historical snapshots; run the pipeline again to obtain the new classifications.
 
 ---
 

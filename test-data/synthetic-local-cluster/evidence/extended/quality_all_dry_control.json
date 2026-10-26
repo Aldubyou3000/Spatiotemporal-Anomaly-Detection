@@ -1,0 +1,37 @@
+{
+  "daily_rows": 240,
+  "assessed": 240,
+  "unassessed": 0,
+  "unassessed_flags": 0,
+  "quality": {
+    "total_input_rows": 240,
+    "total_input_stations": 8,
+    "stations_excluded": 0,
+    "rows_excluded": 0,
+    "rows_filled": 0,
+    "exclusion_details": {
+      "zero_valid_stations": 0,
+      "insufficient_readings_stations": 0,
+      "multi_day_gaps": 0,
+      "incomplete_days": 0,
+      "starts_with_nan": 0,
+      "ends_with_nan": 0,
+      "duplicates": 0,
+      "multi_hour_gaps": 0,
+      "hourly_starts_with_nan": 0,
+      "hourly_ends_with_nan": 0,
+      "hourly_duplicates": 0
+    },
+    "summary_text": "Output: 240 daily rows from 8 station(s). Filled 0 single-hour gaps before daily exclusions. Excluded 0 incomplete daily totals and 0 station(s)."
+  },
+  "input_sha256": {
+    "SYNTHETIC-SyntheticQCA01_01Sep2023_30Sep2023.csv": "28601560930f16f0bacb37fd9c60ea62c182b17542df498d261956c2c6e64e89",
+    "SYNTHETIC-SyntheticQCA02_01Sep2023_30Sep2023.csv": "6a6f3d8191e1447df92d7bd0261fa36bfa88f43a25cb8c1266da336b2be7f507",
+    "SYNTHETIC-SyntheticQCA03_01Sep2023_30Sep2023.csv": "fc0c4829119b0ede804cddad17052cfda16bb20ae7cdd9b950b6fee4ceb2fd29",
+    "SYNTHETIC-SyntheticQCA04_01Sep2023_30Sep2023.csv": "fe786bf3ce58e77f65febf2eca44fe55827fa53568e61fe3a7acc9e55c850d5f",
+    "SYNTHETIC-SyntheticQCB01_01Sep2023_30Sep2023.csv": "38d59304b631e80d999277fb721318e1e7edc78d6aa00d40eb0a2a5fc144d8cb",
+    "SYNTHETIC-SyntheticQCB02_01Sep2023_30Sep2023.csv": "ac8fcab75b20381eaa7c3c633f2e2d2a69f8f6c953b1c5ef70f494dd9e044d97",
+    "SYNTHETIC-SyntheticQCB03_01Sep2023_30Sep2023.csv": "5f5868135a5333f28f5b9fd0ddff146fac5a42778f84969ef5bd4ce47e7ddddd",
+    "SYNTHETIC-SyntheticQCB04_01Sep2023_30Sep2023.csv": "24b305278a8f4bca38dd24dceb207d9eb5b33e1ecdec479ead00ba80ede1b3eb"
+  }
+}

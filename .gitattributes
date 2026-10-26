@@ -1,0 +1,7 @@
+# Preserve exact evidence bytes so CSV/source hashes and PDF offsets survive checkout.
+test-data/synthetic-local-cluster/** -text whitespace=trailing-space,space-before-tab,cr-at-eol
+test-data/zone-c-improvement/** -text whitespace=trailing-space,space-before-tab,cr-at-eol
+test-data/synthetic-local-cluster/**/*.pdf binary
+api/app/zones/zone_c.py text eol=lf
+api/tests/test_zone_c.py text eol=lf
+docs/ZONE_C_IMPROVEMENT_PLAN.md text eol=lf

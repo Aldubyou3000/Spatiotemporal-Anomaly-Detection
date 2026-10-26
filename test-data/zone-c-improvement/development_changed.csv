@@ -1,0 +1,6 @@
+date,station_id,expected_daily_mm,baseline_mm,expected_high_flag,expected_low_flag,expected_label,scenario,baseline_label,improved_label
+2023-09-17,SyntheticQCA02,19.7,19.7,0,0,normal,shared_rain_with_variation,high,normal
+2023-09-19,SyntheticQCB03,26.7,26.7,0,0,normal,shared_rain_with_variation,high,normal
+2023-09-20,SyntheticQCA03,48.0,48.0,0,0,normal,shared_rain_with_variation,high,normal
+2023-09-20,SyntheticQCB02,9.4,47.0,0,1,low,partial_underreport,normal,low
+2023-09-29,SyntheticQCA01,22.7,22.7,0,0,normal,shared_rain_with_variation,high,normal

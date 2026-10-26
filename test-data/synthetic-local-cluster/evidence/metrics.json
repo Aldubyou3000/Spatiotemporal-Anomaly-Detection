@@ -1,0 +1,49 @@
+{
+  "combined": {
+    "TP": 12,
+    "FN": 4,
+    "FP": 7,
+    "TN": 217,
+    "precision": 0.631578947368421,
+    "recall": 0.75,
+    "f1": 0.6857142857142857,
+    "accuracy": 0.9541666666666667
+  },
+  "high": {
+    "TP": 6,
+    "FN": 2,
+    "FP": 6,
+    "TN": 226,
+    "precision": 0.5,
+    "recall": 0.75,
+    "f1": 0.6,
+    "accuracy": 0.9666666666666667
+  },
+  "low": {
+    "TP": 6,
+    "FN": 2,
+    "FP": 1,
+    "TN": 231,
+    "precision": 0.8571428571428571,
+    "recall": 0.75,
+    "f1": 0.8,
+    "accuracy": 0.9875
+  },
+  "direction_matrix": {
+    "normal": {
+      "normal": 217,
+      "high": 6,
+      "low": 1
+    },
+    "high": {
+      "normal": 2,
+      "high": 6,
+      "low": 0
+    },
+    "low": {
+      "normal": 2,
+      "high": 0,
+      "low": 6
+    }
+  }
+}

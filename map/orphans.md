@@ -239,3 +239,13 @@ Sidebar toggle icons (2026-10-27): removed unused Sidebar ChevronLeft/ChevronRig
 Instant result tabs (2026-10-27): removed animation-class references only; global fade utility remains used elsewhere. No orphan module.
 
 Stable panels/map correction (2026-10-27): removed obsolete Zones body overrides and PageTransition fade usage; both components/classes remain referenced. Replaced Stadia constants/attribution with the existing OSM provider; no new runtime modules or orphan references.
+
+- `test-data/synthetic-local-cluster/generate_and_evaluate.py` is a documented manual entry point, not an orphan: builds synchronized nearby fictional station uploads and evaluates the actual service into an evidence directory. All generated files are documented by the adjacent README; no production imports changed.
+
+- `test-data/synthetic-local-cluster/run_extended_testing.py` and `render_report.py` are README-documented manual evaluation/report entry points. The former reuses fixture helpers and the actual service/router; the latter reads saved evidence. Generated report/figures are deliverables, not runtime modules. No application imports removed.
+
+- `test-data/synthetic-local-cluster/build_imrad_docx.py` is a README-documented report builder reading existing evidence; its Word document is a deliverable, not an orphaned application module.
+
+- `api/tests/test_zone_c.py` is a unittest discovery entry point for the authorized Zone C change and local API routes.
+- `test-data/zone-c-improvement/evaluate.py` is a README-documented manual selection/validation entry point. Its `baseline_zone_c.py` is imported through importlib by that runner and retained as source-hashed historical evidence, not an orphan or production duplicate.
+- `docs/ZONE_C_IMPROVEMENT_PLAN.md` and the adjacent evidence README are linked by docs/zones.md and describe this implementation and its tradeoffs.

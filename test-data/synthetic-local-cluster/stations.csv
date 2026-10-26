@@ -1,0 +1,9 @@
+station_id,latitude,longitude,provenance
+SyntheticQCA01,14.65,121.05,hypothetical location; not an actual AWS
+SyntheticQCA02,14.65,121.054,hypothetical location; not an actual AWS
+SyntheticQCA03,14.654,121.05,hypothetical location; not an actual AWS
+SyntheticQCA04,14.654,121.054,hypothetical location; not an actual AWS
+SyntheticQCB01,14.65,121.075,hypothetical location; not an actual AWS
+SyntheticQCB02,14.65,121.079,hypothetical location; not an actual AWS
+SyntheticQCB03,14.654,121.075,hypothetical location; not an actual AWS
+SyntheticQCB04,14.654,121.079,hypothetical location; not an actual AWS

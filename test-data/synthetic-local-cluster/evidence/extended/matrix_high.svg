@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="600" height="320" preserveAspectRatio="xMinYMin meet" viewBox="0 0 600 320" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>...</title>
+	<desc>...</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="600" height="320"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-320)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="600" height="320" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="201.99" y="291" style="font-family: Helvetica-Bold; font-size: 18px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,582) scale(1,-1)">High-reading detection</text>
+			<text x="328.828" y="260" style="font-family: Times-Roman; font-size: 11px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,520) scale(1,-1)">Predicted classification</text>
+			<text x="291.5" y="237" style="font-family: Times-Roman; font-size: 11px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,474) scale(1,-1)">High</text>
+			<text x="434.9765" y="237" style="font-family: Times-Roman; font-size: 11px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,474) scale(1,-1)">Other</text>
+			<text x="20" y="173.5" style="font-family: Times-Roman; font-size: 12px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,347) scale(1,-1)">Actual high</text>
+			<rect x="230.0" y="135.0" width="145.0" height="85.0" style="stroke: rgb(72%,77%,81%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(88%,94%,90%); fill-rule: evenodd;"/>
+			<text x="295.55" y="177.5" style="font-family: Helvetica-Bold; font-size: 25px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,355) scale(1,-1)">6</text>
+			<text x="296.665" y="158.5" style="font-family: Times-Roman; font-size: 10px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,317) scale(1,-1)">TP</text>
+			<rect x="375.0" y="135.0" width="145.0" height="85.0" style="stroke: rgb(72%,77%,81%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(100%,94%,85%); fill-rule: evenodd;"/>
+			<text x="440.55" y="177.5" style="font-family: Helvetica-Bold; font-size: 25px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,355) scale(1,-1)">2</text>
+			<text x="441.11" y="158.5" style="font-family: Times-Roman; font-size: 10px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,317) scale(1,-1)">FN</text>
+			<text x="20" y="88.5" style="font-family: Times-Roman; font-size: 12px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,177) scale(1,-1)">Actual other</text>
+			<rect x="230.0" y="50.0" width="145.0" height="85.0" style="stroke: rgb(72%,77%,81%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(100%,94%,85%); fill-rule: evenodd;"/>
+			<text x="295.55" y="92.5" style="font-family: Helvetica-Bold; font-size: 25px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,185) scale(1,-1)">6</text>
+			<text x="296.94" y="73.5" style="font-family: Times-Roman; font-size: 10px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,147) scale(1,-1)">FP</text>
+			<rect x="375.0" y="50.0" width="145.0" height="85.0" style="stroke: rgb(72%,77%,81%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(88%,94%,90%); fill-rule: evenodd;"/>
+			<text x="426.65" y="92.5" style="font-family: Helvetica-Bold; font-size: 25px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,185) scale(1,-1)">226</text>
+			<text x="440.835" y="73.5" style="font-family: Times-Roman; font-size: 10px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,147) scale(1,-1)">TN</text>
+			<text x="198.315" y="19" style="font-family: Times-Roman; font-size: 10px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,38) scale(1,-1)">Controlled synthetic data | Counts, not percentages</text>
+		</g>
+	</g>
+</svg>

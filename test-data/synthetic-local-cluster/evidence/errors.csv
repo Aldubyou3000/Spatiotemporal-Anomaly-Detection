@@ -1,0 +1,12 @@
+date,station_id,expected_daily_mm,baseline_mm,expected_high_flag,expected_low_flag,expected_label,scenario,predicted_daily_mm,lof_score,predicted_high_flag,predicted_low_flag,is_dry_stuck,predicted_label,binary_outcome
+2023-09-09,SyntheticQCA01,38.6,38.6,0,0,normal,valid_localized_shower,38.6,-21.959,1,0,0,high,FP
+2023-09-15,SyntheticQCB03,0,3.8,0,1,low,zero_fault_on_light_rain,0.0,-6.667,0,0,0,normal,FN
+2023-09-16,SyntheticQCB04,93.2,71.7,1,0,high,progressive_overreport,93.2,-0.964,0,0,0,normal,FN
+2023-09-17,SyntheticQCA02,19.7,19.7,0,0,normal,shared_rain_with_variation,19.7,-6.187,1,0,0,high,FP
+2023-09-18,SyntheticQCB02,35.7,35.7,0,0,normal,valid_localized_shower,35.7,-5.146,1,0,0,high,FP
+2023-09-18,SyntheticQCB04,11.4,5.7,1,0,high,progressive_overreport,11.4,-0.981,0,0,0,normal,FN
+2023-09-19,SyntheticQCB03,26.7,26.7,0,0,normal,shared_rain_with_variation,26.7,-3.717,1,0,0,high,FP
+2023-09-20,SyntheticQCA03,48.0,48.0,0,0,normal,shared_rain_with_variation,48.0,-4.739,1,0,0,high,FP
+2023-09-20,SyntheticQCB02,9.4,47.0,0,1,low,partial_underreport,9.4,-7.656,0,0,0,normal,FN
+2023-09-21,SyntheticQCA04,0,0,0,0,normal,valid_localized_dry_patch,0.0,-4.207,0,1,1,low,FP
+2023-09-29,SyntheticQCA01,22.7,22.7,0,0,normal,shared_rain_with_variation,22.7,-2.275,1,0,0,high,FP

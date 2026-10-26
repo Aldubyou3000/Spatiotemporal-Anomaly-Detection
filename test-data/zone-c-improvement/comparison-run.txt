@@ -1,0 +1,150 @@
+C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\joblib\externals\loky\backend\context.py:131: UserWarning: Could not find the number of physical cores for the following reason:
+found 0 physical cores < 1
+Returning the number of logical cores instead. You can silence this warning by setting LOKY_MAX_CPU_COUNT to the number of cores you want to use.
+  warnings.warn(
+  File "C:\Users\lynni\Repository\Spatiotemporal-Anomaly-Detection\api\.venv\Lib\site-packages\joblib\externals\loky\backend\context.py", line 255, in _count_physical_cores
+    raise ValueError(f"found {cpu_count_physical} physical cores < 1")
+{
+  "selection": "high_5mm_0.3_partial_True",
+  "acceptance": {
+    "development": true,
+    "validation": true
+  },
+  "results": {
+    "development": {
+      "baseline": {
+        "combined": {
+          "TP": 12,
+          "FN": 4,
+          "FP": 7,
+          "TN": 217,
+          "precision": 0.631578947368421,
+          "recall": 0.75,
+          "f1": 0.6857142857142857,
+          "accuracy": 0.9541666666666667
+        },
+        "high": {
+          "TP": 6,
+          "FN": 2,
+          "FP": 6,
+          "TN": 226,
+          "precision": 0.5,
+          "recall": 0.75,
+          "f1": 0.6,
+          "accuracy": 0.9666666666666667
+        },
+        "low": {
+          "TP": 6,
+          "FN": 2,
+          "FP": 1,
+          "TN": 231,
+          "precision": 0.8571428571428571,
+          "recall": 0.75,
+          "f1": 0.8,
+          "accuracy": 0.9875
+        }
+      },
+      "improved": {
+        "combined": {
+          "TP": 13,
+          "FN": 3,
+          "FP": 3,
+          "TN": 221,
+          "precision": 0.8125,
+          "recall": 0.8125,
+          "f1": 0.8125,
+          "accuracy": 0.975
+        },
+        "high": {
+          "TP": 6,
+          "FN": 2,
+          "FP": 2,
+          "TN": 230,
+          "precision": 0.75,
+          "recall": 0.75,
+          "f1": 0.75,
+          "accuracy": 0.9833333333333333
+        },
+        "low": {
+          "TP": 7,
+          "FN": 1,
+          "FP": 1,
+          "TN": 231,
+          "precision": 0.875,
+          "recall": 0.875,
+          "f1": 0.875,
+          "accuracy": 0.9916666666666667
+        }
+      }
+    },
+    "validation": {
+      "baseline": {
+        "combined": {
+          "TP": 19,
+          "FN": 9,
+          "FP": 13,
+          "TN": 439,
+          "precision": 0.59375,
+          "recall": 0.6785714285714286,
+          "f1": 0.6333333333333333,
+          "accuracy": 0.9541666666666667
+        },
+        "high": {
+          "TP": 10,
+          "FN": 2,
+          "FP": 11,
+          "TN": 457,
+          "precision": 0.47619047619047616,
+          "recall": 0.8333333333333334,
+          "f1": 0.6060606060606061,
+          "accuracy": 0.9729166666666667
+        },
+        "low": {
+          "TP": 9,
+          "FN": 7,
+          "FP": 2,
+          "TN": 462,
+          "precision": 0.8181818181818182,
+          "recall": 0.5625,
+          "f1": 0.6666666666666666,
+          "accuracy": 0.98125
+        }
+      },
+      "improved": {
+        "combined": {
+          "TP": 24,
+          "FN": 4,
+          "FP": 11,
+          "TN": 441,
+          "precision": 0.6857142857142857,
+          "recall": 0.8571428571428571,
+          "f1": 0.7619047619047619,
+          "accuracy": 0.96875
+        },
+        "high": {
+          "TP": 10,
+          "FN": 2,
+          "FP": 5,
+          "TN": 463,
+          "precision": 0.6666666666666666,
+          "recall": 0.8333333333333334,
+          "f1": 0.7407407407407407,
+          "accuracy": 0.9854166666666667
+        },
+        "low": {
+          "TP": 14,
+          "FN": 2,
+          "FP": 6,
+          "TN": 458,
+          "precision": 0.7,
+          "recall": 0.875,
+          "f1": 0.7777777777777778,
+          "accuracy": 0.9833333333333333
+        }
+      }
+    }
+  },
+  "baseline_source_sha256": "488f2e53cec3ba398cc15217a87f4a5b2ed3f68528bd17197b4c408f73084241",
+  "current_source_sha256": "32d148d507387e9f4d79e4e5417e6eb0437da7947a7073db302342c7b9dc65d0",
+  "limitation": "Synthetic development and separately generated validation; not independently labeled real AWS accuracy"
+}

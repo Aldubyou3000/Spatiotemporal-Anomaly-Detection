@@ -1,0 +1,33 @@
+[
+  {
+    "case": "synchronous multipart upload",
+    "status": 200,
+    "daily_rows": 240
+  },
+  {
+    "case": "async upload and owner polling",
+    "status": 202,
+    "final_status": "done",
+    "polls": 90
+  },
+  {
+    "case": "non-CSV",
+    "status": 415
+  },
+  {
+    "case": "empty CSV",
+    "status": 400
+  },
+  {
+    "case": "oversized content length",
+    "status": 413
+  },
+  {
+    "case": "malformed CSV",
+    "status": 422
+  },
+  {
+    "case": "missing files",
+    "status": 422
+  }
+]

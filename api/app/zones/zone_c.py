@@ -1,3 +1,5 @@
+from numbers import Integral
+
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import LocalOutlierFactor
@@ -21,17 +23,13 @@ from sklearn.neighbors import LocalOutlierFactor
 # and free of the all-zeros degeneracy.
 
 # Minimum number of stations that must report on a day for a comparison to be
-# meaningful. LOF needs n_neighbors >= 2 to avoid a divide-by-zero on tied
-# values (two stations with equal rainfall is common — e.g. both 0 mm dry days);
-# and n_neighbors=2 only discriminates an outlier when there are >= 4 points
-# (with exactly 3 points it collapses to all ~-1). So a real per-day comparison
-# needs at least 4 stations reporting. Fewer than that → no anomaly judged.
-# Verified on real data across tie/outlier/normal cases. Tunable later.
+# meaningful under this model: target plus three concurrent neighbors.
+# Fewer reporting stations are unassessed, not confirmed normal.
 MIN_STATIONS_PER_DAY = 4
 
 # Anomaly cutoff on the LOF score. sklearn's negative_outlier_factor_ is ~ -1
 # for inliers and more negative for outliers; a value <= -ANOMALY_THRESHOLD is
-# flagged. 2.0 is strict — only extreme outliers flag, natural heavy days ignored. Tunable later.
+# screened further by rainfall magnitude/difference gates; the score alone is insufficient.
 ANOMALY_THRESHOLD = 2.0
 
 # Minimum rainfall (mm) for a station to be eligible as an anomaly. Below this,
@@ -42,21 +40,24 @@ ANOMALY_THRESHOLD = 2.0
 # all-dry, tie-jittered neighborhood and produce a meaningless flag. Tunable.
 MIN_ANOMALY_RAINFALL_MM = 10.0
 
+# Provisional engineering tolerances validated on synthetic cases, not RIDF or sensor-accuracy limits.
+HIGH_MIN_DIFFERENCE_MM = 5.0
+HIGH_RELATIVE_DIFFERENCE = 0.30
+
 # Low-side anomaly (silent) — single day, deterministic, no LOF.
 # A station that stays at ≤1 mm while its group median is ≥10 mm and is <25%
-# of that median is a low outlier for that day. This complements the LOF high
-# rule so both extremes are covered: high uses LOF, low uses a simple ratio.
+# of that median is a low outlier for that day. Partial readings above 1 mm
+# additionally use a neighbor-only median and a minimum 10 mm shortfall.
+# High uses LOF plus magnitude checks; low uses explicit screening rules.
 # Keeps the dataset limited (no new libs) and unbiased (same thresholds for all).
 LOW_MAX_RAIN_MM = 1.0
 LOW_MIN_MEDIAN_MM = 10.0
 LOW_RATIO = 0.25
+LOW_MIN_DEFICIT_MM = 10.0
 
-# Tie-breaking jitter (mm). Added to each day's values before LOF so no two are
-# exactly equal (which would cause divide-by-zero in LOF's density math). Kept
-# far below the 0.1 mm data precision so it cannot change any result. Seeded for
-# reproducible runs.
+# Deterministic tie offsets, below the 0.1 mm measurement resolution.
+# Sorting each group first keeps scores stable across calls and input order.
 _JITTER = 1e-3
-_rng = np.random.default_rng(0)
 
 
 def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
@@ -66,10 +67,9 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
     Zone C: Anomaly Detection using Local Outlier Factor (LOF), per day.
 
     For every calendar day, LOF compares the stations that reported that day
-    against each other (same-day, within-group). A station is flagged as an
-    anomaly only when its LOF score is worse than ANOMALY_THRESHOLD — the count
-    of anomalies is therefore *discovered* per day, never forced to a fixed
-    fraction.
+    against each other (same-day, within-group). High flags require LOF plus
+    rainfall magnitude/difference checks. Low flags screen near-zero or severe
+    partial deficits separately. None of these flags confirms a sensor fault.
 
     Parameters:
     -----------
@@ -93,9 +93,11 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
 
     Raises:
     -------
-    ValueError: If neighbors dict is None or empty.
+    ValueError: If neighbors dict is None or empty, or n_neighbors is not an integer >= 2.
     """
 
+    if isinstance(n_neighbors, bool) or not isinstance(n_neighbors, Integral) or n_neighbors < 2:
+        raise ValueError("n_neighbors must be an integer of at least 2.")
     if neighbors is None or not neighbors:
         raise ValueError(
             "Zone C requires spatial neighbors from Zone B. "
@@ -128,7 +130,7 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
             day = row['date']
 
             # That day's values across the spatial group.
-            day_rows = group_rows[group_rows['date'] == day]
+            day_rows = group_rows[group_rows['date'] == day].sort_values('station_id')
             n_today = len(day_rows)
 
             # Too few stations to judge an "odd one out" → leave as normal.
@@ -137,14 +139,8 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
 
             values = day_rows[[rain_col]].to_numpy(dtype=float)
 
-            # Break exact ties before LOF. Rainfall repeats heavily (esp. several
-            # stations at 0 mm on a dry day). Identical values are distance 0 from
-            # each other, and LOF divides by neighbor distance → divide-by-zero →
-            # nonsensical billion-scale scores. A microscopic positive nudge
-            # (<= 1e-3 mm, far below the 0.1 mm data precision) makes every value
-            # unique so distances are never zero, without changing which station
-            # is the outlier. Standard fix for LOF on data with duplicate values.
-            values = values + _rng.uniform(0.0, _JITTER, size=values.shape)
+            # Avoid zero-distance ties without introducing process-global random state.
+            values = values + np.arange(n_today).reshape(-1, 1) * (_JITTER / n_today)
 
             # n_neighbors = 2 (clamped): with >= 4 stations (MIN_STATIONS_PER_DAY)
             # this ranks a true outlier strongly negative while normal days stay
@@ -152,7 +148,7 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
             effective_n_neighbors = min(n_neighbors, 2)
 
             lof = LocalOutlierFactor(n_neighbors=effective_n_neighbors)
-            lof.fit_predict(values)
+            lof.fit(values)
             scores = lof.negative_outlier_factor_
 
             # Find this station's position within the day's rows and read its score.
@@ -162,13 +158,17 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
 
             station_value = float(day_rows.loc[global_idx, rain_col])
             day_median = float(day_rows[rain_col].median())
+            neighbor_median = float(day_rows.loc[day_rows['station_id'] != station_id, rain_col].median())
             is_high_outlier = station_value > day_median
 
             # Also require a meaningful amount of rain — a trace (e.g. 1 mm while
             # neighbors are dry) is the odd one out but not a real anomaly.
             is_meaningful = station_value >= MIN_ANOMALY_RAINFALL_MM
 
-            is_high = (score <= -ANOMALY_THRESHOLD and is_high_outlier and is_meaningful)
+            significant_difference = station_value - neighbor_median >= max(
+                HIGH_MIN_DIFFERENCE_MM, HIGH_RELATIVE_DIFFERENCE * neighbor_median
+            )
+            is_high = (score <= -ANOMALY_THRESHOLD and is_high_outlier and is_meaningful and significant_difference)
 
             # Low outlier: single day where station stayed ≤1 mm while area rained.
             # Deterministic, no LOF (LOF on 0 vs median is unstable with n=4).
@@ -178,10 +178,16 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
                 and day_median >= LOW_MIN_MEDIAN_MM
                 and station_value < day_median * LOW_RATIO
             )
+            partial_low = (
+                station_value > LOW_MAX_RAIN_MM
+                and neighbor_median >= LOW_MIN_MEDIAN_MM
+                and station_value < neighbor_median * LOW_RATIO
+                and neighbor_median - station_value >= LOW_MIN_DEFICIT_MM
+            )
 
             flagged_data.loc[global_idx, 'lof_score'] = score
             flagged_data.loc[global_idx, 'is_anomaly'] = is_high
-            flagged_data.loc[global_idx, 'is_low_anomaly'] = is_low_outlier
+            flagged_data.loc[global_idx, 'is_low_anomaly'] = is_low_outlier or partial_low
 
     # ========================================================================
     # Build anomaly summary: group anomalous records by station
