@@ -251,3 +251,5 @@ Stable panels/map correction (2026-10-27): removed obsolete Zones body overrides
 - `docs/ZONE_C_IMPROVEMENT_PLAN.md` and the adjacent evidence README are linked by docs/zones.md and describe this implementation and its tradeoffs.
 
 Detection reliability (2026-10-28): ApiError is exported by the existing API client and used by Zones retry classification. New test_pipeline_performance.py is a unittest-discovery entry point. No new runtime modules or orphan imports; all algorithms/evaluation artifacts retain their existing references.
+
+Bundled fonts (2026-10-28): root layout directly references Roboto-Latin.woff2 and JetBrainsMono-Latin.woff2; adjacent SIL OFL licenses document redistribution. No orphan modules.

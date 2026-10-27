@@ -1,17 +1,20 @@
 import type { Metadata } from "next";
-import { Roboto, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { ThemeProvider } from "@/context/ThemeContext";
 import "./globals.css";
 
-const roboto = Roboto({
-  subsets: ["latin"],
+const roboto = localFont({
+  src: "./fonts/Roboto-Latin.woff2",
   variable: "--font-roboto",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: "400 700",
+  style: "normal",
 });
 
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
+const jetbrains = localFont({
+  src: "./fonts/JetBrainsMono-Latin.woff2",
+  weight: "100 800",
+  style: "normal",
   variable: "--font-jetbrains",
   display: "swap",
 });

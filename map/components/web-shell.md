@@ -155,3 +155,5 @@ Sidebar logo anchoring (2026-10-27): expanded and collapsed logo slots are both 
 Sidebar toggle icons (2026-10-27): replaced lone chevrons with existing Lucide PanelLeftOpen/PanelLeftClose icons and matching native title hints. Existing button geometry, accessible labels and collapse state remain intact.
 
 Stable dashboard panels (2026-10-27): dashboard-page provides a constrained flex column; dashboard-content owns consistent gap-card inset, minimum dimensions, scrolling and rounded corners. History and Zones retain their existing equivalent page classes; Audit/Technicians no longer scroll the whole page outside the rounded panel. Removed the PageTransition fade so navigation does not flash the background.
+
+Font deployment repair (2026-10-28): release8cc68ce failed on Vercel with36Turbopack next/font/google errors while resolving Roboto font queries; the already-authorized bundled-font change now ships the exact deployed Latin Roboto/JetBrains WOFF2 files and OFL licenses through next/font/local. Existing weight variables and sizes remain. No Google font fetch or broad UI release.

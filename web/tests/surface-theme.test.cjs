@@ -34,3 +34,14 @@ for(const theme of ['light','dark']) test(`${theme} selected surfaces remain vis
   assert.ok(contrast(values['--brand-soft'],values['--surface'])>=1.2,'selected fill must stand out from its panel');
   assert.ok(contrast(values['--on-brand-soft'],values['--brand-soft'])>=4.5,'selected text must remain readable');
 });
+
+
+test('dashboard fonts are bundled locally so development cannot fall back after a failed Google download', () => {
+  const layout = fs.readFileSync(path.join(__dirname, '../src/app/layout.tsx'), 'utf8');
+  assert.match(layout, /from "next\/font\/local"/);
+  assert.doesNotMatch(layout, /next\/font\/google/);
+  for (const [, source] of layout.matchAll(/src: "(\.\/fonts\/[^"]+)"/g)) {
+    const font = fs.readFileSync(path.join(__dirname, '../src/app', source));
+    assert.equal(font.subarray(0, 4).toString(), 'wOF2');
+  }
+});
