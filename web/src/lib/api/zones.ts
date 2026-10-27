@@ -1,4 +1,4 @@
-import { apiClient, getDirectToken, setDirectToken } from "./client";
+import { ApiError, apiClient, getDirectToken, setDirectToken } from "./client";
 import type { ProcessResult, PipelineProgress } from "@/types/zones";
 
 type ProcessOptions = { signal?: AbortSignal | null; onProgress?: (progress: PipelineProgress) => void };
@@ -29,47 +29,56 @@ async function ensureDirectToken(): Promise<void> {
   }
 }
 
+function waitForPoll(delay: number, signal?: AbortSignal | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delay);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 async function pollJob(jobId: string, useDirect: boolean, opts?: ProcessOptions): Promise<ProcessResult> {
-  // Poll every 1.5s up to 180s (120 tries) — covers cold start 50s + 2.05 MB 4-file LOF 45s + margin.
-  // Handles both direct (Bearer) and proxied (cookie) naturally; if direct token expired mid-poll,
-  // fall back to proxied polling so the job isn't lost.
-  for (let i = 0; i < 120; i++) {
-    if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    await new Promise((r) => setTimeout(r, 1500));
-    if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  let delay = 1500;
+  // A healthy processing job has no client deadline; Stop cancels this polling loop.
+  while (true) {
+    await waitForPoll(delay, opts?.signal);
     let data: JobStatus;
     try {
       data = useDirect
         ? await apiClient.getDirect<JobStatus>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal })
         : await apiClient.get<JobStatus>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal });
     } catch (err) {
-      if (opts?.signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
-      // If direct Bearer was rejected (401) or CORS-blocked, try proxied once as fallback
-      if (useDirect && (msg.includes("401") || msg.includes("CORS") || msg.includes("Failed to fetch") || msg.includes("Not authenticated"))) {
-        try {
-          data = await apiClient.get<JobStatus>(`/api/zones/jobs/${jobId}`, { timeoutMs: 30_000, signal: opts?.signal });
-        } catch {
-          // transient — keep polling
-          continue;
-        }
-      } else {
-        // Transient network/CORS hiccup — don't abort the whole poll, just retry next tick
-        // (Render may be briefly overloaded). Log and continue.
-        if (msg.includes("timed out") || msg.includes("Network error") || msg.includes("Failed to fetch") || msg.includes("aborted")) {
-          continue;
-        }
-        throw err;
+      if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const networkFailure = err instanceof TypeError || (err instanceof Error &&
+        (err.name === "AbortError" || /timed out|network error|failed to fetch|load failed/i.test(err.message)));
+      if (useDirect && (networkFailure || (err instanceof ApiError && [401, 403].includes(err.status)))) {
+        if (err instanceof ApiError && err.status === 401) setDirectToken(null);
+        useDirect = false;
+        continue;
       }
+      if (err instanceof ApiError && [404, 410].includes(err.status)) {
+        throw new Error("This processing job is no longer available. The server may have restarted or the job expired. Run detection again.");
+      }
+      if (networkFailure || (err instanceof ApiError && [408, 429, 500, 502, 503, 504].includes(err.status))) {
+        delay = Math.min(delay * 2, 15_000);
+        continue;
+      }
+      throw err;
     }
     if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    delay = 1500;
     if (data.progress) opts?.onProgress?.(data.progress);
     if (data.status === "done" && data.result) return data.result;
     if (data.status === "error") throw new Error(data.detail || "Processing failed — the server rejected the file. Please check the format.");
-    if (data.status === "processing") continue;
-    // Unknown status — keep polling
+    if (data.status !== "processing") throw new Error("Invalid processing response. Please contact support.");
   }
-  throw new Error("Processing is taking longer than expected (server may be busy). Please keep this tab open and try again in 30s — your job may still be finishing.");
 }
 
 export const zonesApi = {
@@ -102,7 +111,7 @@ export const zonesApi = {
       if (opts?.signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       // If async endpoint missing (old deploy) or direct CORS blocked, fallback intelligently
-      if (msg.includes("404") || msg.includes("Not Found") || msg.includes("not found")) {
+      if ((err instanceof ApiError && err.status === 404) || msg.includes("404") || msg.includes("Not Found") || msg.includes("not found")) {
         // Try sync direct first if we have a token, else proxied
         if (useDirect) {
           try {
@@ -114,7 +123,8 @@ export const zonesApi = {
         return apiClient.upload<ProcessResult>("/api/zones/process", form, { signal: opts?.signal });
       }
       // Direct path failed due to CORS / auth — retry via proxied path once
-      if (useDirect && (msg.includes("CORS") || msg.includes("Failed to fetch") || msg.includes("401") || msg.includes("Not authenticated"))) {
+      if (useDirect && ((err instanceof ApiError && err.status === 401) || msg.includes("CORS") || msg.includes("Failed to fetch") || msg.includes("401") || msg.includes("Not authenticated"))) {
+        if (err instanceof ApiError && err.status === 401) setDirectToken(null);
         console.warn("[zones] direct upload failed, retrying via proxied path:", msg);
         const res2 = await apiClient.upload<{ job_id: string; status: string }>(asyncPath, form, { headers: preferHeader, signal: opts?.signal });
         const jobId2 = (res2 as unknown as { job_id?: string }).job_id;

@@ -104,13 +104,6 @@ export default function ZonesPage() {
     } catch (err) {
       if (controller.signal.aborted || abortRef.current !== controller) return;
       let msg = err instanceof Error ? err.message : "Failed to process file.";
-      // Friendly cold-start hint: the 90s client timeout + 1 retry can still trip on a
-      // just-woken Render instance (50s boot + 40s LOF >90s window). The server's async
-      // 202 path avoids this, but if we're here it means the 202 itself timed out.
-      // Nudge the user to retry immediately — second hit is warm and returns 202 in <1s.
-      if (msg.includes("timed out") || msg.includes("waking up")) {
-        msg = msg + " The server was waking up — please click Run detection again right now (the next attempt is usually instant).";
-      }
       // Multi-file specific hint
       if (files.length > 1 && msg.toLowerCase().includes("only one")) {
         msg = msg + " All files were sent; if only one station appears, check that the other CSVs are valid HMDAS or combined files (station_id, date, rainfall).";

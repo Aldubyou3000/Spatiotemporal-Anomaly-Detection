@@ -9,10 +9,12 @@ import io
 import math
 import time
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Callable
 
 import pandas as pd
 import numpy as np
+from threadpoolctl import threadpool_limits
 
 from ..zones import (
     process_zone_a,
@@ -44,7 +46,10 @@ try:
 except Exception:  # pragma: no cover
     _psutil = None  # type: ignore[assignment]
 
-logger = _logging.getLogger("zones.service")
+logger = _logging.getLogger("uvicorn.error.zones.service")
+
+# Native limits affect shared libraries; concurrent jobs must not restore each other's limits.
+_detection_lock = Lock()
 
 def _log_mem(stage: str) -> None:
     try:
@@ -256,11 +261,13 @@ def _run_from_dataframe(
     report("zone_b", cleaned)
     neighbors_dict = zone_b_haversine_grouping(cleaned)  # type: ignore[arg-type]
     report("zone_c", cleaned)
-    flagged, anomaly_dict = zone_c_lof_anomaly_detection(
-        cleaned,  # type: ignore[arg-type]
-        neighbors=neighbors_dict,
-        n_neighbors=3,
-    )
+    # Tiny same-day comparisons are slower when BLAS/OpenMP starts many threads.
+    with _detection_lock, threadpool_limits(limits=1):
+        flagged, anomaly_dict = zone_c_lof_anomaly_detection(
+            cleaned,  # type: ignore[arg-type]
+            neighbors=neighbors_dict,
+            n_neighbors=3,
+        )
     # Ensure is_low_anomaly exists (back-compat for old zone_c)
     report("finalizing", flagged)
     if "is_low_anomaly" not in flagged.columns:

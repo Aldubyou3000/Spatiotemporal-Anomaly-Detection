@@ -20,7 +20,7 @@ from ..schemas.history import SaveRunRequest
 from ..services.zones_service import ZoneProcessingError, run_pipeline_multi
 from ..services.history_service import describe_files, try_save_run
 
-logger = logging.getLogger("zones.router")
+logger = logging.getLogger("uvicorn.error.zones")
 
 router = APIRouter(prefix="/api/zones", tags=["zones"])
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB

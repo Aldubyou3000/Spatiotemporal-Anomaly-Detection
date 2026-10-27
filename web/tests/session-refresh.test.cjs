@@ -35,3 +35,27 @@ test('realtime recovery and concurrent REST 401s share one cookie rotation', asy
   finishRefresh();
   assert.equal(await next, true);
 });
+
+
+test('HTTP failures preserve their status for job retry decisions', async () => {
+  const filename = path.join(__dirname, '../src/lib/api/client.ts');
+  const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2017}}).outputText;
+  const mod = {exports:{}};
+  new Function('exports','fetch',code)(mod.exports,async()=>({ok:false,status:503,json:async()=>({detail:'Temporarily unavailable'})}));
+  for(const method of ['get','getDirect']) {
+    await assert.rejects(mod.exports.apiClient[method]('/api/zones/jobs/test'),error=>error instanceof mod.exports.ApiError && error.status===503 && error.message==='Temporarily unavailable');
+  }
+});
+
+test('long job polling cleans up the outer abort listener after every request', async () => {
+  const {getEventListeners} = require('node:events');
+  const filename = path.join(__dirname, '../src/lib/api/client.ts');
+  const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2017}}).outputText;
+  const mod = {exports:{}};
+  new Function('exports','fetch',code)(mod.exports,async()=>({ok:true,status:200,json:async()=>({status:'processing'})}));
+  const controller=new AbortController();
+  for(let i=0;i<150;i++) {
+    await mod.exports.apiClient.get('/api/zones/jobs/test',{signal:controller.signal});
+    assert.equal(getEventListeners(controller.signal,'abort').length,0);
+  }
+});

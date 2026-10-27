@@ -32,6 +32,13 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   params?: Record<string, string | number | boolean | undefined>;
 };
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
 // Timeout defaults — 20s normal, 90s heavy (zones 4-file LOF + cold start), 10s for refresh. Render free-tier cold start is 40-60s so login uses 60s.
@@ -64,15 +71,17 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   let signal: AbortSignal = controller.signal as AbortSignal;
+  const onAbort = () => controller.abort();
   if (outerSignal) {
     if (outerSignal.aborted) controller.abort();
-    else outerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    else outerSignal.addEventListener("abort", onAbort, { once: true });
     signal = controller.signal as AbortSignal;
   }
   try {
     return await fetch(input, { ...rest, signal });
   } finally {
     clearTimeout(timeoutId);
+    outerSignal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -158,7 +167,7 @@ async function request<T>(path: string, init: RequestInit & { timeoutMs?: number
       }
       if (!retryRes.ok) {
         const body = await retryRes.json().catch(() => ({ detail: "Request failed" }));
-        throw new Error(body?.detail ?? body?.message ?? "Request failed");
+        throw new ApiError(body?.detail ?? body?.message ?? "Request failed", retryRes.status);
       }
       if (retryRes.status === 204) return undefined as T;
       return retryRes.json() as Promise<T>;
@@ -168,7 +177,7 @@ async function request<T>(path: string, init: RequestInit & { timeoutMs?: number
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(body?.detail ?? body?.message ?? "Request failed");
+    throw new ApiError(body?.detail ?? body?.message ?? "Request failed", res.status);
   }
 
   if (res.status === 204) return undefined as T;
@@ -228,7 +237,7 @@ export const apiClient = {
     const res = await fetchWithTimeout(url, { method: "GET", headers, credentials: "omit", timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, signal: opts.signal });
     if (!res.ok) {
       const body = await res.json().catch(() => ({ detail: "Request failed" }));
-      throw new Error(body?.detail ?? body?.message ?? "Request failed");
+      throw new ApiError(body?.detail ?? body?.message ?? "Request failed", res.status);
     }
     return res.json() as Promise<T>;
   },
@@ -266,7 +275,7 @@ export const apiClient = {
     if (!res.ok) {
       const body = await res.json().catch(() => ({ detail: "Request failed" }));
       // Surface 503 from tickets workload as friendly retry message; SWR will retry
-      throw new Error(body?.detail ?? body?.message ?? "Request failed");
+      throw new ApiError(body?.detail ?? body?.message ?? "Request failed", res.status);
     }
     return res.json() as Promise<T>;
   },

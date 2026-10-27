@@ -249,3 +249,5 @@ Stable panels/map correction (2026-10-27): removed obsolete Zones body overrides
 - `api/tests/test_zone_c.py` is a unittest discovery entry point for the authorized Zone C change and local API routes.
 - `test-data/zone-c-improvement/evaluate.py` is a README-documented manual selection/validation entry point. Its `baseline_zone_c.py` is imported through importlib by that runner and retained as source-hashed historical evidence, not an orphan or production duplicate.
 - `docs/ZONE_C_IMPROVEMENT_PLAN.md` and the adjacent evidence README are linked by docs/zones.md and describe this implementation and its tradeoffs.
+
+Detection reliability (2026-10-28): ApiError is exported by the existing API client and used by Zones retry classification. New test_pipeline_performance.py is a unittest-discovery entry point. No new runtime modules or orphan imports; all algorithms/evaluation artifacts retain their existing references.

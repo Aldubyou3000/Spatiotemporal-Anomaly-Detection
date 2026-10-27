@@ -225,3 +225,12 @@ test('processing errors return to setup with files and retry available; Reset st
   find(h.render(), node => node.props?.title === 'Reset process?').props.onConfirm();
   assert.equal(h.state.files.length, 0); assert.equal(h.state.error, null);
 });
+
+
+test('an upload timeout does not encourage blindly starting a duplicate job', async () => {
+  const h=harness();
+  button(h.configurationTree(h.render()),'Run detection').props.onClick();
+  h.requests[0].reject(new Error('Request timed out'));await settle();
+  assert.equal(h.state.error,'Request timed out');
+  assert.doesNotMatch(h.state.error,/usually instant|again right now|was waking up/);
+});

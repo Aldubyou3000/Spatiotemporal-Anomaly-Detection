@@ -131,3 +131,8 @@ Ticket cache stability (2026-10-27): ticket list/detail/report/attachment hooks 
 
 ## History performance (2026-10-27)
 `usePrefetchHistoryResults` starts SWR preload directly on navigation intent, first checking the provider cache for the immutable snapshot. Repeated intent shares the pending preload; revisits reuse cached results. Summaries/reviews still revalidate. `client.ts` exports its existing `refreshSession` for SSE and REST to share one in-flight rotation.
+
+## Long-running detection jobs (2026-10-28)
+Zones API polling retains the accepted job ID until done/error/Stop, without the former 120-check cutoff. Healthy polls remain 1.5s apart; network/timeouts and retryable HTTP failures back off to 15s. A failed direct auth/network path switches to the existing cookie path once; missing/expired jobs and invalid responses terminate clearly rather than being swallowed. Shared ApiError retains HTTP status, and each fetch removes its outer abort listener. Poll waits are abortable. ZonesContext warns before reload/close during processing, and Zones page no longer appends an unverified instant-rerun cold-start claim. No SWR/database/browser-storage layer added; backend jobs remain memory-only.
+
+Direct upload recovery (2026-10-28): production401 detail is Invalid or expired token, which lacked the old message-based fallback keywords. Both upload and poll recovery now use ApiError.status; a rejected401 clears cached direct credentials before the existing cookie path handles session refresh. No auth provider, token issuance, role guard or Supabase policy change.

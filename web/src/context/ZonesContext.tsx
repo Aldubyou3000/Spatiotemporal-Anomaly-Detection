@@ -67,14 +67,14 @@ export function ZonesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!result || (result.history_saved && !Object.keys(reviews).length)) return;
+    if (!running && (!result || (result.history_saved && !Object.keys(reviews).length))) return;
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warnBeforeLeaving);
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [reviews, result]);
+  }, [reviews, result, running]);
 
   function resetSession() {
     abortRef.current?.abort();
