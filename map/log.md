@@ -745,3 +745,8 @@ Traced 361 deployed versus 462 local synthetic flags to the uncommitted 65% part
 ## [2026-11-10] Export the selected Data table
 
 Replaced ambiguous export choices with one contextual CSV action using the active table and current search/filters across all pages. Preserved review-save gating and explicit raw-preview limits. Removed obsolete dropdown code/CSS. Reviewed shared candidates and orphans; no new duplicated behavior or module references.
+
+
+## [2026-11-10] Remove LOF scores from website outputs
+
+Removed score display and help text in Data and Review Readings. Filtered website CSVs and legacy ticket details and PDFs, and added regression coverage. Shared candidates and orphans reviewed. Web callers reuse one output filter and the analyst PDF applies its equivalent at generation time.

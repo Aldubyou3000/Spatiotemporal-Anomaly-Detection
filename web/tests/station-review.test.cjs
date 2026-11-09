@@ -147,12 +147,7 @@ test("detection details separate selected-day evidence from useful station histo
   const period = html.split('aria-label="Station pattern across uploaded dates"')[1]?.split("</section>")[0] ?? "";
   const periodText = period.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
   assert.match(day, /Why flagged/);
-  assert.match(day, /-3.167/);
-  assert.match(day, /Local Outlier Factor/);
-  assert.match(day, /near -1/);
-  assert.match(day, /-3 stands out more than -1/);
-  assert.match(day, /-2 or lower/);
-  assert.match(day, /not an accuracy percentage/);
+  assert.doesNotMatch(html, /-3\.167|Local Outlier Factor|Detection score|LOF score/);
   assert.doesNotMatch(day, /775\.5|2023-07-09/);
   assert.match(periodText, /64/);
   assert.match(periodText, /6% lower/);

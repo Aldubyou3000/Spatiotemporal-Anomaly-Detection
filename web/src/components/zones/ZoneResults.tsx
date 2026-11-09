@@ -8,7 +8,7 @@ import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { DataTable, type FilterField } from "@/components/zones/DataTable";
 import { AnomalyReportTab } from "@/components/zones/AnomalyReportTab";
 import { InfoTip } from "@/components/zones/InfoTip";
-import { DECISION_LABEL, exportReviewedReadings, flaggedReadings, type AnomalyReview, type AnomalyReviews } from "@/lib/anomalyReview";
+import { DECISION_LABEL, exportReviewedReadings, flaggedReadings, omitLofScores, type AnomalyReview, type AnomalyReviews } from "@/lib/anomalyReview";
 import type { ProcessResult } from "@/types/zones";
 import styles from './ZoneResults.module.css';
 
@@ -34,6 +34,8 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
   const [dataView, setDataView] = useState<"raw" | "cleaned" | "flagged">(defaultTab === "raw" ? "raw" : "cleaned");
   const reportRows = useMemo(() => dataVisited && dataView === "flagged"
     ? exportReviewedReadings(flaggedReadings(result.flagged_data), reviews) : [], [result.flagged_data, reviews, dataVisited, dataView]);
+  const rawRows = useMemo(() => dataVisited && dataView === "raw"
+    ? result.raw_preview.map(omitLofScores) : [], [result.raw_preview, dataVisited, dataView]);
   const cleanedColumns = useMemo(() => [
     { key: "station_id" as const, header: "Station", width: "20%" },
     { key: "date" as const, header: "Date", width: "16%" },
@@ -53,10 +55,6 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
     { key: "date" as const, header: "Date", width: "14%" },
     { key: "rainfall" as const, header: "Rainfall (mm)", mono: true, align: "right" as const, width: "14%" },
     {
-      key: "lof_score" as const, header: "LOF score", mono: true, align: "right" as const,
-      render: (v: unknown) => typeof v === "number" ? v.toFixed(3) : <span style={{ color: "var(--text-tertiary)" }}>—</span>,
-    },
-    {
       key: "is_anomaly" as const, header: "System flag", align: "center" as const,
       render: (v: unknown) => v
         ? <Badge tone="danger">High</Badge>
@@ -66,8 +64,8 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
   ], []);
 
   const rawColumns = useMemo(() => {
-    if (result.raw_preview.length === 0) return [];
-    const sample = result.raw_preview[0];
+    if (rawRows.length === 0) return [];
+    const sample = rawRows[0];
     const HEADER_MAP: Record<string, string> = {
       station_id: "Station",
       date: "Date",
@@ -81,7 +79,7 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
       header: HEADER_MAP[k] ?? k,
       align: ["latitude", "longitude", "rainfall", "rainfall_mm"].includes(k) || typeof sample[k] === "number" ? ("right" as const) : ("left" as const),
     }));
-  }, [result.raw_preview]);
+  }, [rawRows]);
 
   const cleanedFilterFields = useMemo<FilterField[]>(() => [
     {
@@ -131,10 +129,11 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
               <p>{dataView === "raw" ? "Uploaded readings before cleaning." : dataView === "cleaned" ? "Validated daily readings used for detection." : "System-flagged readings and analyst decisions."}</p>
             </div>
             <DataTable<Record<string, unknown>>
-              data={(dataView === "raw" ? result.raw_preview : dataView === "cleaned" ? result.cleaned_data : reportRows) as unknown as Record<string, unknown>[]}
+              data={(dataView === "raw" ? rawRows : dataView === "cleaned" ? result.cleaned_data : reportRows) as unknown as Record<string, unknown>[]}
               columns={dataView === "raw" ? rawColumns : dataView === "cleaned" ? cleanedColumns : flaggedColumns} pageSize={10}
               onDownload={activeTab === "data" ? rows => import("@/lib/csv").then(m => m.downloadCsv(
-                dataView === "raw" ? "raw_preview.csv" : dataView === "cleaned" ? "cleaned_data.csv" : "flagged_readings.csv", rows,
+                dataView === "raw" ? "raw_preview.csv" : dataView === "cleaned" ? "cleaned_data.csv" : "flagged_readings.csv",
+                dataView === "cleaned" ? rows.map(omitLofScores) : rows,
               )) : undefined}
               downloadLabel={`Export ${dataView === "raw" ? "raw preview" : dataView === "cleaned" ? "cleaned" : "flagged readings"} CSV`}
               downloadDisabled={dataView === "flagged" && (!reviewsReady || reviewBusy)}

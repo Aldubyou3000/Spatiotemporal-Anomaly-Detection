@@ -38,7 +38,7 @@ test("CSV preserves dismissed system flags and includes pending and unflagged ro
   const exported = exportReviewedReadings(rows, reviews);
   assert.equal(exported.length, 3);
   assert.equal(exported[0].is_anomaly, true);
-  assert.equal(exported[0].lof_score, -8);
+  assert.ok(exported.every(row => !Object.hasOwn(row, "lof_score")));
   assert.equal(exported[0].review_status, "not_anomaly");
   assert.equal(exported[0].review_note, "Nearby storm confirmed");
   assert.equal(exported[0].reviewed_by, "Analyst One");

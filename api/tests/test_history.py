@@ -36,6 +36,28 @@ def result():
 
 
 class HistoryTests(unittest.TestCase):
+    def test_ticket_pdf_omits_legacy_lof_scores(self):
+        from app.routers import tickets
+        from reportlab import rl_config
+
+        ticket = {
+            "id": RUN, "title": "Inspect rain gauge", "status": "assigned", "station_id": "A",
+            "anomaly_data": {"LOF score": -812.345, "rainfall": 37.1},
+        }
+        app = FastAPI()
+        app.include_router(tickets.router)
+        app.dependency_overrides[tickets.require_analyst] = lambda: USER
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+        with patch.object(tickets, "get_supabase", return_value=sb), \
+             patch.object(tickets, "get_ticket", return_value=ticket), \
+             patch.object(rl_config, "pageCompression", 0):
+            response = TestClient(app).get(f"/api/tickets/{RUN}/pdf")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"37.1000", response.content)
+        self.assertNotIn(b"LOF score", response.content)
+        self.assertNotIn(b"-812.3450", response.content)
+
     def test_list_sort_reaches_database_before_pagination(self):
         from datetime import date
         requests = []

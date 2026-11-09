@@ -169,6 +169,14 @@ test('report density groups earlier records under History and retains exact date
   for (const text of [model.stationId,model.report.notes,model.report.rootCause,model.report.correctiveAction,'Previous Technician','Round 1']) assert.ok(html.includes(text),text);
 });
 
+test('legacy ticket reading details omit LOF scores even in fallback metrics', () => {
+  const {TicketDetailBody} = load('components/tickets/TicketDetailBody');
+  const model = {...load('../tests/fixtures').detail, anomalyData:{lof_score:-812.345, source:'Station upload'}};
+  const html = renderToStaticMarkup(React.createElement(TicketDetailBody,{model}));
+  assert.match(html, /Station upload/);
+  assert.doesNotMatch(html, /lof.score|-812\.35/i);
+});
+
 test('report density retains follow-up instructions and cancellation reasons in their own states', () => {
   const {TicketDetailBody} = load('components/tickets/TicketDetailBody');
   const base = {...load('../tests/fixtures').detail,refId:'24'};

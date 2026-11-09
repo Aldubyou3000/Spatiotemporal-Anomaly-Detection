@@ -44,3 +44,7 @@ Migration 0008 adds optional run_id/reading_date. TicketCreate validates the sta
 
 
 Stable list pagination (2026-10-26): list_tickets adds id as a secondary order after created_at, allowing the web board to page through tied timestamps deterministically.
+
+
+## Ticket PDF score filtering (2026-11-10)
+The analyst PDF download omits LOF score fields in legacy ticket anomaly metadata while retaining the other fields. The web detail view applies the same filter. No ticket persistence or mobile PDF behavior changes.

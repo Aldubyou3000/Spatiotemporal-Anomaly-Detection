@@ -468,3 +468,7 @@ Shared StationMap now uses a 10px radius, fully opaque fill and 3px outline for 
 
 ## Export selected Data table (2026-11-10)
 Removed ZoneResults ExportMenu and its unused portal styling. DataTable owns a single contextual CSV button for the active Raw preview, Cleaned or Flagged readings view. Downloads include all matching rows across pages and respect the current search/filters. Raw is explicitly preview-only. Flagged exports preserve review metadata and remain disabled while reviews load/save; empty results cannot export. Shared Zones and History results inherit the behavior.
+
+
+## Remove LOF score from website results (2026-11-10)
+The Data table and Review Readings details omit LOF scores in fresh runs and reopened History runs. Legacy ticket details also filter LOF fields before the fallback metric cards render. Rainfall, flags, and analyst decisions remain available.

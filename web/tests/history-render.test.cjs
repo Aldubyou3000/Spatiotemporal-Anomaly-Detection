@@ -117,7 +117,7 @@ test("Data defaults to Cleaned and preserves search and cleaned filters across v
     find(table, n => n.type?.name === "Select").props.onChange("true");
     find(tree, n => n.type === "button" && n.props.children === "Raw").props.onClick();
     tree = renderResults(); table = renderTable(tree);
-    assert.equal(tableElement(tree).props.data, result.raw_preview);
+    assert.deepEqual(tableElement(tree).props.data, result.raw_preview);
     assert.equal(tableElement(tree).props.filterFields, undefined);
     assert.equal(find(table, n => n.type === "input" && n.props["aria-label"] === "Search table").props.value, "station");
     find(table, n => n.type === "input" && n.props["aria-label"] === "Search table").props.onChange({ target: { value: "" } });
@@ -164,6 +164,7 @@ test("review opens the flagged Data view and keeps exports out of review", () =>
       const table = find(tree, n => n.type?.name === "DataTable");
       assert.equal(typeof table.props.onDownload, "function");
       assert.deepEqual(table.props.data.map(row => row.station_id), ["A", "B"]);
+      assert.ok(table.props.columns.every(column => column.key !== "lof_score"));
       assert.equal(table.props.data[0].review_status, "anomaly");
       assert.equal(table.props.data[1].review_status, "needs_review");
       assert.equal(table.props.filterFields[0].key, "review_status");
@@ -416,7 +417,11 @@ test("Data exports only the selected table and gates review exports while loadin
     const high = { station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true };
     const low = { station_id: "B", date: "2023-01-01", rainfall: 0, is_low_anomaly: true };
     const normal = { station_id: "C", date: "2023-01-01", rainfall: 3 };
-    const result = { ...fixture, flagged_data: [high, low, normal] };
+    const result = {
+      ...fixture,
+      raw_preview: [{ ...fixture.raw_preview[0], "LOF score": -812.345 }],
+      flagged_data: [{ ...high, lof_score: -812.345 }, low, normal],
+    };
     const reviews = { '["A","2023-01-01"]': { status: "not_anomaly", note: "Checked" } };
     const render = (props = {}) => { cursor = 0; return ZoneResults({ result, reviews, defaultTab: "data", ...props }); };
     for (const [view, label, filename] of [["Cleaned", "cleaned", "cleaned_data.csv"], ["Raw", "raw preview", "raw_preview.csv"], ["Flagged readings", "flagged readings", "flagged_readings.csv"]]) {
@@ -428,7 +433,10 @@ test("Data exports only the selected table and gates review exports while loadin
       assert.equal(table.props.downloadDisabled, false);
       await table.props.onDownload(table.props.data);
       assert.equal(downloads.at(-1).name, filename);
-      assert.deepEqual(downloads.at(-1).rows, table.props.data);
+      assert.equal(downloads.at(-1).rows.length, table.props.data.length);
+      const output = csv.toCsv(downloads.at(-1).rows);
+      assert.doesNotMatch(output, /lof[ _]score|-812\.345/i);
+      assert.ok(table.props.columns.every(column => !/lof[ _]score/i.test(column.key)));
       if (view === "Flagged readings") {
         assert.deepEqual(table.props.data.map(r => r.station_id), ["A", "B"]);
         assert.equal(table.props.data[0].review_note, "Checked");

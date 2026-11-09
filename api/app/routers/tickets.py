@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from io import BytesIO
+import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -553,7 +554,13 @@ def download_ticket_pdf(
         story.append(Paragraph(ticket["description"], body_style))
 
     # ── Section 3: Anomaly data (always if present) ───────────────────────────
-    anomaly = ticket.get("anomaly_data") or {}
+    anomaly = {
+        key: value
+        for key, value in (ticket.get("anomaly_data") or {}).items()
+        if re.sub(r"[^a-z0-9]", "", key.lower()) not in {
+            "lof", "lofscore", "localoutlierfactor", "localoutlierfactorscore", "negativeoutlierfactor",
+        }
+    }
     if anomaly:
         story.append(Paragraph("ANOMALY DATA", section_style))
         anomaly_rows_kv: list[tuple[str, str]] = []

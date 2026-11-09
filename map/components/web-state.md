@@ -140,3 +140,7 @@ Direct upload recovery (2026-10-28): production401 detail is Invalid or expired 
 
 ## Selected-table CSV downloads (2026-11-10)
 ZoneResults passes the active table rows to DataTable; onDownload receives its filtered rows across all pages. CSV serialization and escaping stay in lib/csv.ts. Flagged-only rows still use exportReviewedReadings and wait for review readiness. Data no longer offers an unrelated full-results download; the History run-summary full-results download remains available. Raw exports contain only the returned preview and are named accordingly.
+
+
+## LOF score output boundary (2026-11-10)
+The shared omitLofScores helper removes score fields from Data raw previews, Data CSV downloads, History results CSVs, and legacy ticket detail output. Review metadata is still added through exportReviewedReadings. API response types continue to mirror the existing wire format.

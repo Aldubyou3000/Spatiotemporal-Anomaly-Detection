@@ -22,6 +22,7 @@ import {
 import styles from "@/components/tickets/Tickets.module.css";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { omitLofScores } from "@/lib/anomalyReview";
 import { STATUS_LABEL, STATUS_TONE, PRIORITY_TONE, SEVERITY_TONE } from "@/lib/ticketStatus";
 
 // ─── Normalized model ─────────────────────────────────────────────────────────
@@ -326,10 +327,9 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
 
 function AnomalyMetrics({ data, zone }: { data: Record<string, unknown> | null | undefined; zone: string | null | undefined }) {
   if (!data && !zone) return null;
-  const entries = data ? Object.entries(data).filter(([, v]) => v !== null && v !== undefined) : [];
+  const entries = data ? Object.entries(omitLofScores(data)).filter(([, v]) => v !== null && v !== undefined) : [];
 
   const pick = (keys: string[]) => entries.find(([k]) => keys.some((q) => k.toLowerCase().includes(q)));
-  const zEntry     = pick(["zscore", "z_score", "lof", "score"]);
   const rainEntry  = pick(["rainfall", "rain", "value", "reading", "mm"]);
   const neighEntry = pick(["neighbor", "neighbour", "median", "avg", "mean"]);
   const confEntry  = pick(["conf", "probability", "prob"]);
@@ -338,7 +338,6 @@ function AnomalyMetrics({ data, zone }: { data: Record<string, unknown> | null |
 
   const rain = rainEntry ? Number(rainEntry[1]) : null;
   const neigh = neighEntry ? Number(neighEntry[1]) : null;
-  const z = zEntry ? Number(zEntry[1]) : null;
   const confRaw = confEntry ? Number(confEntry[1]) : null;
   const confPct = confRaw !== null ? (confRaw <= 1 ? confRaw * 100 : confRaw) : null;
 

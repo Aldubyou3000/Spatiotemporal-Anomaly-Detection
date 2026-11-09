@@ -34,12 +34,19 @@ export function nextPendingReading(rows: DailyReading[], reviews: AnomalyReviews
   return null;
 }
 
+export function omitLofScores<T extends object>(row: T): Omit<T, "lof_score"> {
+  return Object.fromEntries(Object.entries(row).filter(([key]) => {
+    const field = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return !/^(?:lof(?:score)?|localoutlierfactor(?:score)?|negativeoutlierfactor)$/.test(field);
+  })) as Omit<T, "lof_score">;
+}
+
 export function exportReviewedReadings(rows: DailyReading[], reviews: AnomalyReviews) {
   return rows.map((row) => {
     const flagged = isFlaggedReading(row);
     const review = flagged ? reviews[readingKey(row)] : undefined;
     return {
-      ...row,
+      ...omitLofScores(row),
       review_status: review?.status ?? (flagged ? "needs_review" : "not_flagged"),
       review_note: review?.note ?? "",
       reviewed_by: review?.reviewed_by ?? "",

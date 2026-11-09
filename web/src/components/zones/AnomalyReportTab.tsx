@@ -17,7 +17,6 @@ import styles from "./AnomalyReportTab.module.css";
 
 type Reviewer = Pick<UserProfile, "id" | "full_name" | "username">;
 type ReviewFilter = "pending" | "reviewed" | "all";
-const LOF_HELP = "LOF (Local Outlier Factor) compares same-day rainfall at nearby stations. Scores near -1 are typical. More negative means more unusual: -3 stands out more than -1. A high reading may be flagged at -2 or lower after other rainfall checks. This is not an accuracy percentage or proof of a faulty sensor.";
 const AVERAGE_HELP = "Shows whether this station tends to record more or less rain than its group on checked rainy days. We compare each day, then average the comparisons. The group includes this station and nearby stations. This covers the uploaded period, not just the selected day. It is not an accuracy rating.";
 const HIGHEST_HELP = "How often this station recorded more rain than every other station in its group on checked rainy days. Equal readings do not count. For example, 25% means it was highest on about 1 in 4 rainy days checked. Being highest does not automatically mean an anomaly.";
 interface AnomalyReportTabProps {
@@ -208,7 +207,6 @@ export function AnomalyReportTab({ result, reviews = {}, reviewer, onReview, onC
               <h4>Selected day · {selected.date}</h4>
               <dl className={styles.detectionFacts}>
                 <div className={styles.fullFact}><dt>Why flagged</dt><dd>{mode === "high" ? "High reading that stood out from nearby stations." : "Very little rain recorded while nearby stations reported rain."}</dd></div>
-                {mode === "high" && <div><dt className={styles.helpLabel} title={renderTip ? undefined : LOF_HELP}>Detection score (LOF){renderTip?.(LOF_HELP, "Explain LOF and the detection score")}</dt><dd>{selected.lof_score?.toFixed(3) ?? "Unavailable"}</dd></div>}
               </dl>
             </section>
             <section className={styles.detectionGroup} aria-label="Station pattern across uploaded dates">
