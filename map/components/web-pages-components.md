@@ -476,3 +476,7 @@ The Data table and Review Readings details omit LOF scores in fresh runs and reo
 
 ## Ticket creation without zone choices (2026-11-10)
 The shared CreateTicketModal omits the Zone selector and dispatch summary field. Station ID spans the form width, and the submitted ticket still includes its station and any linked run and reading date. New web tickets omit optional anomaly_zone metadata.
+
+
+## Consistent flagged-day totals (2026-11-10)
+OverviewTab counts high and low daily flags once for the map popup and Station summary. The summary shows the total and split, including partial low flags. Overall warning badges still reflect the separate station pattern checks. MarikinaYouthCamp has 8 high and 21 low flags in the reproduced 2021–2023 run, including 3 near-zero lows.

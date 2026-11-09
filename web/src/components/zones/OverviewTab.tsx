@@ -252,16 +252,17 @@ function QualityReportCard({
 }
 
 // ── Station review: keep daily flags separate from the overall warning ──────
-function StationReviewCard({ result, selectedStationId, onSelectStation }: {
+type StationFlagCounts = { high: number; low: number };
+
+function StationReviewCard({ result, flagCounts, selectedStationId, onSelectStation }: {
   result: ProcessResult;
+  flagCounts: Map<string, StationFlagCounts>;
   selectedStationId?: string;
   onSelectStation?: (stationId: string) => void;
 }) {
   const rows = useMemo(() => {
     const highs = new Map((result.station_health ?? []).map((h) => [h.station_id, h]));
     const lows = new Map((result.station_stuck_health ?? []).map((h) => [h.station_id, h]));
-    const highCounts = new Map((result.anomaly_summary ?? []).map((s) => [s.station_id, s.events.filter((e) => !e.is_low).length]));
-    const lowCounts = new Map((result.dry_stuck_summary ?? []).map((s) => [s.station_id, s.stuck_count]));
     const ids = new Set(result.flagged_data.map((r) => r.station_id));
     for (const id of highs.keys()) ids.add(id);
     for (const id of lows.keys()) ids.add(id);
@@ -270,9 +271,10 @@ function StationReviewCard({ result, selectedStationId, onSelectStation }: {
       const high = highs.get(id);
       const low = lows.get(id);
       const status = overallReviewStatus(high?.status, low?.status);
-      return { id, high, low, status, highCount: highCounts.get(id) ?? high?.times_flagged ?? 0, lowCount: lowCounts.get(id) ?? low?.events.length ?? 0 };
+      const counts = flagCounts.get(id);
+      return { id, high, low, status, highCount: counts?.high ?? 0, lowCount: counts?.low ?? 0 };
     }).sort((a, b) => order[a.status] - order[b.status] || a.id.localeCompare(b.id));
-  }, [result]);
+  }, [result, flagCounts]);
   const warnings = rows.filter((r) => r.status === "watch" || r.status === "suspect").length;
   const limited = rows.filter((r) => r.status === "insufficient_data").length;
 
@@ -302,7 +304,7 @@ function StationReviewCard({ result, selectedStationId, onSelectStation }: {
                   aria-label={`Locate ${r.id} on map`} onClick={() => onSelectStation?.(r.id)}>{r.id}</button>
                 <Badge tone={badge.tone}>{badge.label}</Badge>
               </div>
-              <p className={styles.stationCounts}>Flagged days: {r.highCount} high · {r.lowCount} low</p>
+              <p className={styles.stationCounts}>Flagged days: {r.highCount + r.lowCount} ({r.highCount} high · {r.lowCount} low)</p>
               <p className={styles.rowDescription}>{detail}</p>
             </div>
           </div>
@@ -336,6 +338,18 @@ export function OverviewTab({ result, fillHeight = false, onReviewReadings, defa
     }).length;
   }, [result.station_health, result.station_stuck_health]);
 
+  const flagCounts = useMemo(() => {
+    const counts = new Map<string, StationFlagCounts>();
+    for (const row of flagged_data) {
+      if (!row.is_anomaly && !row.is_low_anomaly) continue;
+      const station = counts.get(row.station_id) ?? { high: 0, low: 0 };
+      if (row.is_anomaly) station.high += 1;
+      else station.low += 1;
+      counts.set(row.station_id, station);
+    }
+    return counts;
+  }, [flagged_data]);
+
   const stationPoints = useMemo(() => {
     // Sensor status per station — same rule as the card, so dot + badge share one hue.
     const healthById = new Map<string, HealthStatus>();
@@ -345,20 +359,22 @@ export function OverviewTab({ result, fillHeight = false, onReviewReadings, defa
     function gaugeFor(id: string): "suspect" | "watch" | "normal" | "insufficient_data" {
       return overallReviewStatus(healthById.get(id), stuckById.get(id));
     }
-    const totals = new Map<string, { lat: number; lon: number; readings: number; anomalies: number }>();
+    const totals = new Map<string, { lat: number; lon: number; readings: number }>();
     for (const row of flagged_data) {
       if (!Number.isFinite(row.latitude) || !Number.isFinite(row.longitude)) continue;
-      const t = totals.get(row.station_id) ?? { lat: row.latitude, lon: row.longitude, readings: 0, anomalies: 0 };
+      const t = totals.get(row.station_id) ?? { lat: row.latitude, lon: row.longitude, readings: 0 };
       t.readings += 1;
-      if (row.is_anomaly || (row as any).is_low_anomaly) t.anomalies += 1;
       totals.set(row.station_id, t);
     }
-    return Array.from(totals, ([station_id, v]) => ({
-      station_id, latitude: v.lat, longitude: v.lon,
-      total_readings: v.readings, anomaly_count: v.anomalies,
-      gaugeStatus: gaugeFor(station_id),
-    }));
-  }, [flagged_data, result.station_health, result.station_stuck_health]);
+    return Array.from(totals, ([station_id, v]) => {
+      const counts = flagCounts.get(station_id);
+      return {
+        station_id, latitude: v.lat, longitude: v.lon,
+        total_readings: v.readings, anomaly_count: (counts?.high ?? 0) + (counts?.low ?? 0),
+        gaugeStatus: gaugeFor(station_id),
+      };
+    });
+  }, [flagged_data, flagCounts, result.station_health, result.station_stuck_health]);
 
   const statCards: {
     label: string;
@@ -385,7 +401,7 @@ export function OverviewTab({ result, fillHeight = false, onReviewReadings, defa
       label: "Anomalies",
       value: summary.total_anomalies.toLocaleString(),
       hint: `${summary.anomaly_rate}% of readings`,
-      tip: "Readings flagged as notably high vs neighbors that same day.",
+      tip: "Readings flagged as unusually high or low compared with nearby stations on the same day.",
       Icon: AlertTriangle,
     },
     {
@@ -481,7 +497,7 @@ export function OverviewTab({ result, fillHeight = false, onReviewReadings, defa
           </div>
           </TabPanel>
           <TabPanel value="stations" keepMounted className={styles.sectionContent}>
-            <StationReviewCard result={result} selectedStationId={selectedStationId} onSelectStation={setSelectedStationId} />
+            <StationReviewCard result={result} flagCounts={flagCounts} selectedStationId={selectedStationId} onSelectStation={setSelectedStationId} />
           </TabPanel>
           <TabPanel value="neighbors" keepMounted className={styles.sectionContent}>
             <NeighborGroupsTab neighbors={result.neighbors} selectedStationId={neighborStation} onSelectStation={setSelectedStationId} />

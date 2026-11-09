@@ -755,3 +755,8 @@ Removed score display and help text in Data and Review Readings. Filtered websit
 ## [2026-11-10] Remove ticket creation zone choices
 
 Removed the Zone field and confirmation row from the shared Zones and History ticket wizard. Kept the station and source reading link. Reviewed shared candidates and orphans. No module references changed.
+
+
+## [2026-11-10] Align map and station summary flagged-day counts
+
+Reproduced MarikinaYouthCamp at 959 readings and 29 flagged days. Station summary counted only near-zero lows, omitting 18 partial lows. Shared the daily high/low count with the map and added a regression for the 8 high and 21 low split. Reviewed shared candidates and orphans. No module references changed.

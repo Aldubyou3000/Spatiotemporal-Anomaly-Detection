@@ -18,7 +18,8 @@ function load(source) {
   const compiled = ts.transpileModule(fs.readFileSync(file, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true, target: ts.ScriptTarget.ES2017 },
   }).outputText;
-  const localRequire = (name) => name.endsWith(".css") ? {} : name === "next/dynamic" ? () => () => null
+  const localRequire = (name) => name.endsWith(".css") ? {} : name === "next/dynamic" ? () => ({ stations }) =>
+    React.createElement("div", { "data-map-flag-count": stations?.[0]?.anomaly_count })
     : name.startsWith("@/") ? load(name.slice(2))
     : name.startsWith(".") ? load(path.relative(path.resolve(__dirname, "../src"), path.resolve(path.dirname(file), name))) : require(name);
   new Function("require", "module", "exports", compiled)(localRequire, mod, mod.exports);
@@ -67,11 +68,21 @@ test("wording distinguishes low recorded rain, missing data, and assessed-day ru
   assert.doesNotMatch(JSON.stringify([highReview(high), lowReview(low)]), /Reliable|No drift|no reading/);
 });
 
-test("overview keeps flags visible alongside a neutral overall summary", () => {
-  const html = renderToStaticMarkup(React.createElement(OverviewTab, { result: fixture() }));
+test("station summary and map count partial low flags as well as near-zero lows", () => {
+  const result = fixture();
+  result.anomaly_summary[0].events = Array.from({ length: 8 }, () => ({ is_low: false }));
+  result.dry_stuck_summary[0].stuck_count = 3;
+  result.flagged_data = Array.from({ length: 30 }, (_, i) => ({
+    ...result.flagged_data[0],
+    date: `2023-01-${String(i + 1).padStart(2, "0")}`,
+    is_anomaly: i < 8,
+    is_low_anomaly: i >= 8 && i < 29,
+    is_dry_stuck: i >= 8 && i < 11,
+  }));
+  const html = renderToStaticMarkup(React.createElement(OverviewTab, { result }));
   const card = html.slice(html.indexOf('aria-label="Station Review Summary"'));
-  assert.match(card, /12 high/);
-  assert.match(card, /2 low/);
+  assert.match(html, /data-map-flag-count="29"/);
+  assert.match(card, /Flagged days: 29 \(8 high · 21 low\)/);
   assert.match(card, /aria-label="About station summary"/);
   assert.match(card, /No overall warning/);
   assert.doesNotMatch(card, /Reliable|No drift|sensor fault, not just weather/);
