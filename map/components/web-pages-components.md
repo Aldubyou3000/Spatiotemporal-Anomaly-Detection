@@ -464,3 +464,7 @@ Detection wait behavior (2026-10-28): Zones keeps its existing processing view a
 
 ## Consistent station dots (2026-11-09)
 Shared StationMap now uses a 10px radius, fully opaque fill and 3px outline for all station dots; labels share the same vertical offset. Selection changes outline emphasis only, preserving marker radius and viewport. Flagged halos remain separate. Applies to Zones and saved History results through OverviewTab. All 10 map regression checks and TypeScript pass.
+
+
+## Export selected Data table (2026-11-10)
+Removed ZoneResults ExportMenu and its unused portal styling. DataTable owns a single contextual CSV button for the active Raw preview, Cleaned or Flagged readings view. Downloads include all matching rows across pages and respect the current search/filters. Raw is explicitly preview-only. Flagged exports preserve review metadata and remain disabled while reviews load/save; empty results cannot export. Shared Zones and History results inherit the behavior.

@@ -28,7 +28,8 @@ interface DataTableProps<T> {
   columns: Column<T>[];
   pageSize?: number;
   emptyMessage?: string;
-  onDownload?: () => void;
+  onDownload?: (rows: T[]) => void;
+  downloadDisabled?: boolean;
   downloadLabel?: string;
   caption?: React.ReactNode;
   searchPlaceholder?: string;
@@ -45,6 +46,7 @@ export function DataTable<T>({
   emptyMessage = "No rows.",
   onDownload,
   downloadLabel = "Download CSV",
+  downloadDisabled = false,
   caption,
   searchPlaceholder = "Search readings…",
   searchKeys,
@@ -123,7 +125,8 @@ export function DataTable<T>({
         {isFiltered && <Button variant="ghost" size="sm"
           onClick={() => { handleSearchChange(""); setDropdowns({}); }}>Clear filters</Button>}
         {caption && <div className={styles.caption}>{caption}</div>}
-        {onDownload && <Button variant="secondary" size="sm" onClick={onDownload}>
+        {onDownload && <Button variant="secondary" size="sm" onClick={() => onDownload(filtered)}
+          disabled={downloadDisabled || filtered.length === 0} title={`Download all ${filtered.length.toLocaleString()} matching rows as CSV`}>
           <Download size={14} />{downloadLabel}
         </Button>}
       </div>

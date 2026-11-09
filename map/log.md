@@ -740,3 +740,8 @@ Unified normal and flagged station marker radius, opacity, outline and label off
 ## [2026-11-10] Align deployment with evaluated partial-low rule
 
 Traced 361 deployed versus 462 local synthetic flags to the uncommitted 65% partial-low ratio. Reproduced both totals on frozen trace-neighbor data and checked local outputs against recorded confusion-matrix evidence without rewriting artifacts. All 75 backend tests passed for the scoped Zone C release. Shared candidates and orphans reviewed; no new runtime references or duplicate rules.
+
+
+## [2026-11-10] Export the selected Data table
+
+Replaced ambiguous export choices with one contextual CSV action using the active table and current search/filters across all pages. Preserved review-save gating and explicit raw-preview limits. Removed obsolete dropdown code/CSS. Reviewed shared candidates and orphans; no new duplicated behavior or module references.

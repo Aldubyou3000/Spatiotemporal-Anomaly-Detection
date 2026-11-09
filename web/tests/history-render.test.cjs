@@ -160,8 +160,9 @@ test("review opens the flagged Data view and keeps exports out of review", () =>
       find(tree, n => n.type?.name === "AnomalyReportTab").props.onOpenData();
       tree = render();
       assert.equal(find(tree, n => n.type?.name === "Tabs").props.value, "data");
-      assert.ok(find(tree, n => n.type?.name === "ExportMenu"));
+      assert.equal(find(tree, n => n.type?.name === "ExportMenu"), null);
       const table = find(tree, n => n.type?.name === "DataTable");
+      assert.equal(typeof table.props.onDownload, "function");
       assert.deepEqual(table.props.data.map(row => row.station_id), ["A", "B"]);
       assert.equal(table.props.data[0].review_status, "anomaly");
       assert.equal(table.props.data[1].review_status, "needs_review");
@@ -392,39 +393,52 @@ test("Reviewed and All show status badges while Needs review stays compact", () 
   } finally { reactOverride = undefined; cache.delete(reportPath); }
 });
 
-test("Data exports remain neutral and results are unavailable while reviews load or save", () => {
-  const source = path.resolve(__dirname, "../src/components/zones/ZoneResults.tsx");
-  cache.delete(source);
-  reactOverride = { ...React, useMemo: fn => fn(), useState: initial => [initial, () => {}] };
-  function find(node) {
+test("Data exports only the selected table and gates review exports while loading or saving", async () => {
+  cache.clear();
+  let cursor = 0; const values = [];
+  reactOverride = { ...React, useMemo: fn => fn(), useState(initial) {
+    const i = cursor++;
+    if (!(i in values)) values[i] = typeof initial === "function" ? initial() : initial;
+    return [values[i], next => { values[i] = next; }];
+  } };
+  function find(node, match) {
     if (!node || typeof node !== "object") return null;
-    if (node.type === "button" && node.props.children === "Results with reviews CSV") return node;
-    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child); if (found) return found; }
+    if (match(node)) return node;
+    for (const child of React.Children.toArray(node.props?.children)) { const found = find(child, match); if (found) return found; }
     return null;
   }
   try {
     const { ZoneResults } = load("components/zones/ZoneResults");
     const { result: fixture } = load("../tests/fixtures");
+    const csv = load("lib/csv");
+    const downloads = [];
+    csv.downloadCsv = (name, rows) => downloads.push({ name, rows });
     const high = { station_id: "A", date: "2023-01-01", rainfall: 30, is_anomaly: true };
-    const low = { station_id: "B", date: "2023-01-01", rainfall: 0, is_anomaly: false, is_low_anomaly: true };
-    const result = { ...fixture, run_id: "saved-run", history_saved: true, flagged_data: [high, low] };
-    const highReview = { '["A","2023-01-01"]': { status: "anomaly" } };
-    const complete = { ...highReview, '["B","2023-01-01"]': { status: "not_anomaly" } };
-    for (const [props, primary, disabled] of [
-      [{ reviews: {} }, false, false],
-      [{ reviews: highReview }, false, false],
-      [{ reviews: complete }, true, false],
-      [{ reviews: complete, reviewBusy: true }, false, true],
-      [{ reviews: complete, reviewsReady: false }, false, true],
-      [{ result: { ...result, history_saved: false }, reviews: complete }, false, false],
-      [{ result: { ...result, run_id: undefined, history_saved: false }, reviews: complete }, true, false],
-      [{ result: { ...result, flagged_data: [] }, reviews: complete }, false, false],
-    ]) {
-      const button = find(ZoneResults({ result, ...props, defaultTab: "data" }));
-      assert.equal(button.props.className, "menu-item");
-      assert.equal(button.props.disabled, disabled);
+    const low = { station_id: "B", date: "2023-01-01", rainfall: 0, is_low_anomaly: true };
+    const normal = { station_id: "C", date: "2023-01-01", rainfall: 3 };
+    const result = { ...fixture, flagged_data: [high, low, normal] };
+    const reviews = { '["A","2023-01-01"]': { status: "not_anomaly", note: "Checked" } };
+    const render = (props = {}) => { cursor = 0; return ZoneResults({ result, reviews, defaultTab: "data", ...props }); };
+    for (const [view, label, filename] of [["Cleaned", "cleaned", "cleaned_data.csv"], ["Raw", "raw preview", "raw_preview.csv"], ["Flagged readings", "flagged readings", "flagged_readings.csv"]]) {
+      let tree = render();
+      find(tree, n => n.type === "button" && n.props.children === view).props.onClick();
+      tree = render();
+      const table = find(tree, n => n.type?.name === "DataTable");
+      assert.equal(table.props.downloadLabel, `Export ${label} CSV`);
+      assert.equal(table.props.downloadDisabled, false);
+      await table.props.onDownload(table.props.data);
+      assert.equal(downloads.at(-1).name, filename);
+      assert.deepEqual(downloads.at(-1).rows, table.props.data);
+      if (view === "Flagged readings") {
+        assert.deepEqual(table.props.data.map(r => r.station_id), ["A", "B"]);
+        assert.equal(table.props.data[0].review_note, "Checked");
+      }
+      for (const props of [{ reviewBusy: true }, { reviewsReady: false }]) {
+        const gated = find(render(props), n => n.type?.name === "DataTable");
+        assert.equal(gated.props.downloadDisabled, view === "Flagged readings");
+      }
     }
-  } finally { reactOverride = undefined; cache.delete(source); }
+  } finally { reactOverride = undefined; cache.clear(); }
 });
 
 
@@ -506,15 +520,22 @@ test("Data search finds numeric values beyond the current page and combines word
   try {
     const { DataTable } = load("components/zones/DataTable");
     const data = Array.from({ length: 25 }, (_, i) => ({ station: "Mandaluyong", date: "2023-12-31", rainfall: i === 24 ? 775.5 : i, flag: i === 24 ? "high" : "low" }));
-    const props = { data, columns: ["station", "date", "rainfall"].map(key => ({ key, header: key })), filterFields: [{ key: "flag", label: "Flag", options: [] }] };
+    let downloaded;
+    const props = { data, onDownload: rows => { downloaded = rows; }, columns: ["station", "date", "rainfall"].map(key => ({ key, header: key })), filterFields: [{ key: "flag", label: "Flag", options: [] }] };
     const renderTable = () => { cursor = 0; return DataTable(props); };
     let tree = renderTable();
+    const exportButton = tree => find(tree, n => n.props?.children?.[1] === "Download CSV");
+    exportButton(tree).props.onClick();
+    assert.equal(downloaded.length, 25, "export includes matching rows beyond the current page");
     find(tree, n => n.props?.["aria-label"] === "Search table").props.onChange({ target: { value: " mandaluyong 775.5 " } });
     tree = renderTable();
     assert.match(renderToStaticMarkup(tree), /775.5/);
     assert.match(renderToStaticMarkup(tree), /1–1 of 1 rows/);
+    exportButton(tree).props.onClick();
+    assert.deepEqual(downloaded, [data[24]], "export respects the current search");
     find(tree, n => n.type?.name === "Select").props.onChange("low");
     tree = renderTable(); assert.match(renderToStaticMarkup(tree), /0 rows/);
+    assert.equal(exportButton(tree).props.disabled, true, "empty filtered tables cannot export");
     find(tree, n => n.props?.children === "Clear filters").props.onClick();
     tree = renderTable(); assert.match(renderToStaticMarkup(tree), /1–10 of 25 rows/);
     data.push({ station: "Napindan_II", date: "2023-12-31", rainfall: 42, flag: "low" });

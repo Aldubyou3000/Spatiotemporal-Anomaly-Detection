@@ -1,11 +1,9 @@
 "use client";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { AlertTriangle, ChevronDown, Download, LayoutGrid, Table2 } from "lucide-react";
+import { AlertTriangle, LayoutGrid, Table2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { createPortal } from "react-dom";
 import { Tab, TabPanel, Tabs, TabsList } from "@/components/ui/Tabs";
 import { DataTable, type FilterField } from "@/components/zones/DataTable";
 import { AnomalyReportTab } from "@/components/zones/AnomalyReportTab";
@@ -17,47 +15,6 @@ import styles from './ZoneResults.module.css';
 const OverviewTab = dynamic(() => import("@/components/zones/OverviewTab").then(module => module.OverviewTab), {
   loading: () => <div role="status">Loading overview…</div>,
 });
-
-function ExportMenu({ children }: { children: React.ReactNode }) {
-  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const popup = useRef<HTMLDivElement>(null);
-  const id = useId();
-  useEffect(() => {
-    if (!position) return;
-    popup.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
-    function outside(event: Event) {
-      if (!popup.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) setPosition(null);
-    }
-    function escape(event: KeyboardEvent) {
-      if (event.key === "Escape") { setPosition(null); trigger.current?.focus(); }
-    }
-    function close() { setPosition(null); }
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("focusin", outside);
-    document.addEventListener("keydown", escape);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("focusin", outside);
-      document.removeEventListener("keydown", escape);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [position]);
-  return <div className={styles.exportControl}>
-    <Button ref={trigger} type="button" variant="secondary" size="md" aria-expanded={!!position} aria-controls={position ? id : undefined}
-      onClick={() => {
-        const rect = trigger.current!.getBoundingClientRect();
-        setPosition(position ? null : { top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
-      }}><Download size={16} aria-hidden="true" /><span>Export</span><ChevronDown size={14} aria-hidden="true" /></Button>
-    {position && createPortal(<div ref={popup} id={id} role="group" aria-label="CSV exports" className={styles.exportMenu} style={position}
-      onClick={event => {
-        if ((event.target as HTMLElement).closest('button:not(:disabled)')) { setPosition(null); trigger.current?.focus(); }
-      }}>{children}</div>, document.body)}
-  </div>;
-}
 
 export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, onSaveRun, defaultTab = "overview", reviewBusy = false, reviewsReady = true, fitViewport = false }: {
   result: ProcessResult; reviews?: AnomalyReviews;
@@ -172,16 +129,15 @@ export function ZoneResults({ result, reviews = {}, onReview, onCreateTicket, on
                 </button>)}
               </div>
               <p>{dataView === "raw" ? "Uploaded readings before cleaning." : dataView === "cleaned" ? "Validated daily readings used for detection." : "System-flagged readings and analyst decisions."}</p>
-              {activeTab === "data" && <ExportMenu>
-                <button type="button" className="menu-item" onClick={() => import("@/lib/csv").then(m => m.downloadCsv("cleaned_data.csv", result.cleaned_data as unknown as Record<string, unknown>[]))}>Cleaned data CSV</button>
-                <button type="button" className="menu-item" disabled={!reviewsReady || reviewBusy}
-                  title="All daily readings, original system flags, and analyst review decisions"
-                  onClick={() => import("@/lib/csv").then(m => m.downloadCsv("reviewed_results.csv", exportReviewedReadings(result.flagged_data, reviews)))}>Results with reviews CSV</button>
-              </ExportMenu>}
             </div>
             <DataTable<Record<string, unknown>>
               data={(dataView === "raw" ? result.raw_preview : dataView === "cleaned" ? result.cleaned_data : reportRows) as unknown as Record<string, unknown>[]}
               columns={dataView === "raw" ? rawColumns : dataView === "cleaned" ? cleanedColumns : flaggedColumns} pageSize={10}
+              onDownload={activeTab === "data" ? rows => import("@/lib/csv").then(m => m.downloadCsv(
+                dataView === "raw" ? "raw_preview.csv" : dataView === "cleaned" ? "cleaned_data.csv" : "flagged_readings.csv", rows,
+              )) : undefined}
+              downloadLabel={`Export ${dataView === "raw" ? "raw preview" : dataView === "cleaned" ? "cleaned" : "flagged readings"} CSV`}
+              downloadDisabled={dataView === "flagged" && (!reviewsReady || reviewBusy)}
               caption={dataView === "raw"
                 ? `${result.raw_preview.length.toLocaleString()} of ${result.raw_total_rows.toLocaleString()} uploaded rows (preview only)`
                 : dataView === "cleaned" ? `After Zone A — ${result.cleaned_data.length.toLocaleString()} validated daily readings`
