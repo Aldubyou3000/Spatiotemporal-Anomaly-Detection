@@ -34,6 +34,15 @@ def hourly(station="A", days=3):
 
 
 class DailyQualityTests(unittest.TestCase):
+    def test_one_usable_day_is_retained_for_hourly_and_daily_input(self):
+        for raw in [hourly(days=1), hourly(days=1).iloc[[0]]]:
+            for rainfall in [0.0, 1.0]:
+                with self.subTest(rows=len(raw), rainfall=rainfall):
+                    cleaned, report = _clean_daily_readings(raw.assign(rainfall=rainfall))
+                    self.assertEqual(cleaned.rainfall.tolist(), [rainfall * len(raw)])
+                    self.assertEqual(report["stations_excluded"], 0)
+                    self.assertEqual(report["exclusion_details"]["insufficient_readings_stations"], 0)
+
     def test_complete_dry_days_are_valid(self):
         raw = hourly()
         raw["rainfall"] = 0.0
@@ -100,10 +109,10 @@ class DailyQualityTests(unittest.TestCase):
         empty["rainfall"] = np.nan
         raw = pd.concat([hourly(), short, empty], ignore_index=True)
         cleaned, report = _clean_daily_readings(raw)
-        self.assertEqual(cleaned.station_id.unique().tolist(), ["A"])
-        self.assertEqual(report["stations_excluded"], 2)
+        self.assertEqual(cleaned.groupby("station_id").size().to_dict(), {"A": 3, "B": 1})
+        self.assertEqual(report["stations_excluded"], 1)
         self.assertEqual(report["exclusion_details"]["zero_valid_stations"], 1)
-        self.assertEqual(report["exclusion_details"]["insufficient_readings_stations"], 1)
+        self.assertEqual(report["exclusion_details"]["insufficient_readings_stations"], 0)
 
     def test_daily_input_is_not_interpolated(self):
         raw = hourly().iloc[[0, 24, 48]].copy()
@@ -127,10 +136,31 @@ class DailyQualityTests(unittest.TestCase):
                     _clean_daily_readings(raw)
 
     def test_no_complete_data_has_a_clear_error(self):
-        for raw in [hourly(days=1), hourly().iloc[[1, 25, 49]], hourly().assign(rainfall=np.nan)]:
+        for raw in [hourly(days=1).drop(index=10), hourly().iloc[[1, 25, 49]], hourly().assign(rainfall=np.nan)]:
             with self.subTest(rows=len(raw)):
-                with self.assertRaisesRegex(ZoneProcessingError, "two usable days"):
+                with self.assertRaisesRegex(ZoneProcessingError, "one usable day"):
                     _clean_daily_readings(raw)
+
+    def test_single_day_detection_still_requires_four_reporting_stations(self):
+        for daily in [False, True]:
+            for count in [3, 4]:
+                for target_rain in [0.0, 100.0]:
+                    raw = pd.concat([
+                        hourly(station, days=1).assign(rainfall=(target_rain if station == "A" else 20.0) / (1 if daily else 24))
+                        for station in "ABCD"[:count]
+                    ], ignore_index=True)
+                    if daily:
+                        raw = raw[raw.date.dt.hour.eq(0)]
+                    content = raw.to_csv(index=False).encode()
+                    for multi in [False, True]:
+                        with self.subTest(daily=daily, stations=count, target_rain=target_rain, multi=multi):
+                            result = run_pipeline_multi([("stations.csv", content)]) if multi else run_pipeline(content)
+                            self.assertEqual(result.summary.total_rows, count)
+                            self.assertEqual(result.quality_report.stations_excluded, 0)
+                            target = next(row for row in result.flagged_data if row.station_id == "A")
+                            self.assertEqual(target.is_anomaly, count == 4 and target_rain == 100.0)
+                            self.assertEqual(target.is_low_anomaly, count == 4 and target_rain == 0.0)
+                            self.assertEqual(target.lof_score is not None, count == 4)
 
     def test_single_and_multi_file_paths_use_the_same_quality_checks(self):
         raw = hourly()

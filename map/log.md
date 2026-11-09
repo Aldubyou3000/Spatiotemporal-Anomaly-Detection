@@ -725,3 +725,8 @@ Isolated detection-only release verification: exported staged API/web source exc
 ## [2026-10-28] Remove failing hosted-font build dependency
 
 Vercel8cc68ce failed with36Turbopack next/font/google Roboto query errors, confirmed via authenticated CLI build logs. Releasing the prior user-authorized bundled-font fix through next/font/local with the exact deployed Latin font bytes/licenses; component sizes/weights remain unchanged. This resolves the discovered release blocker without including pending skeleton/data/algorithm work. Shared candidates rechecked: font ownership stays in root layout.
+
+
+## [2026-11-09] Ship one-day processing fix
+
+Prepared the existing one-day eligibility changes as an isolated API release, excluding unrelated local edits. All 72 committed backend tests pass with the updated quality regressions; exact one-day uploads succeed and multi-day processing values match baseline. Reviewed shared candidates and orphans: no new duplication or changed runtime references.

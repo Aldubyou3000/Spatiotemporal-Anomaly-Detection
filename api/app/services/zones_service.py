@@ -201,10 +201,10 @@ def _clean_daily_readings(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str,
     )
     usable_days = coverage[~coverage["hourly"] | (coverage["readings"].eq(24) & coverage["hours"].eq(24))]
     counts = usable_days.groupby(level="station_id").size().reindex(raw["station_id"].unique(), fill_value=0)
-    usable_stations = counts[counts.ge(2)].index
+    usable_stations = counts[counts.ge(1)].index
     if len(usable_stations) == 0:
         raise ZoneProcessingError(
-            "No station has at least two usable days. Hourly data needs all 24 hours per day; "
+            "No station has at least one usable day. Hourly data needs all 24 hours per day; "
             "only isolated single-hour gaps can be interpolated."
         )
 
@@ -222,11 +222,11 @@ def _clean_daily_readings(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str,
 
     report["rows_filled"] = int(filled.sum())
     report["rows_excluded"] = report["total_input_rows"] - len(cleaned)
-    report["stations_excluded"] = int(counts.lt(2).sum())
+    report["stations_excluded"] = int(counts.eq(0).sum())
     report["exclusion_details"].update(
         incomplete_days=incomplete_days,
         zero_valid_stations=int(counts.eq(0).sum()),
-        insufficient_readings_stations=int(counts.eq(1).sum()),
+        insufficient_readings_stations=0,
         hourly_duplicates=duplicates,
     )
     report["summary_text"] = (

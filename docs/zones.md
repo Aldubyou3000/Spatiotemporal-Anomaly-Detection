@@ -10,7 +10,7 @@ Execution order is always **Zone A → Zone B → Zone C**.
 **File:** `api/app/zones/zone_a.py`
 **Entry point:** `process_zone_a(raw_data)`
 
-Transforms raw hourly station data into daily rainfall. The reference algorithm is frozen. Both API upload paths call it through `services/zones_service.py::_clean_daily_readings`, which enforces complete daily totals and corrects its quality reporting before Zones B/C.
+Transforms raw hourly station data into daily rainfall. The user-authorized 27 October 2026 change accepts one valid day per station; the other cleaning rules are unchanged. Both API upload paths call it through `services/zones_service.py::_clean_daily_readings`, which enforces complete daily totals and corrects its quality reporting before Zones B/C.
 
 ### Processing steps (in order)
 
@@ -20,7 +20,7 @@ Transforms raw hourly station data into daily rainfall. The reference algorithm 
 | 2 | **Single-hour interpolation** — linearly fills exactly 1 missing hour between two valid readings (`limit=1, limit_area='inside'`); marks filled rows with `interpolated_flag = True` |
 | 3 | **Hourly → daily downmap** — sums rainfall per station per calendar day; `interpolated_flag` is carried as `True` if any hour in that day was interpolated |
 | 4 | **Input validation** — checks required columns (`station_id`, `date`, `latitude`, `longitude`, `rainfall`/`rainfall_mm`), parses types, validates coordinate ranges, rejects negative rainfall, removes duplicate `(station_id, date)` rows |
-| 5 | **Station-level filtering** — excludes entire stations with 0 valid daily readings or fewer than 2 valid readings |
+| 5 | **Station-level filtering** — excludes entire stations with no valid daily readings; one valid day is enough |
 | 6 | **Daily gap exclusion** — drops daily rows in gaps ≥ 2 consecutive missing days, or at series edges; no interpolation at the daily level |
 | 7 | **Rounding** — rounds all rainfall values to 1 decimal place |
 | 8 | **Quality report** — returns a dict with full exclusion statistics and a human-readable summary string |
@@ -28,19 +28,20 @@ Transforms raw hourly station data into daily rainfall. The reference algorithm 
 ### Key rules
 - Hourly input needs **24 usable readings in 24 distinct hourly slots per calendar day**. Partial days are excluded, including when a timestamp is absent entirely. Extra readings in one hour cannot replace another missing hour.
 - An isolated missing hourly row is recoverable only if valid readings exist exactly one hour before and after it. No interpolation across longer or irregular time gaps.
-- A station needs **at least 2 usable daily totals after completeness filtering**, not two hourly records.
+- A station needs **at least 1 usable daily total after completeness filtering**. Same-day detection still requires the target and all three geographic neighbors to report on that date; otherwise the reading is unassessed.
 - No extrapolation: NaN values at the start or end of a series are always excluded, never estimated.
 - Already-daily station input (all timestamps at midnight) retains its supplied daily totals; missing daily values are excluded, not interpolated. Hourly completeness cannot be inferred from a pre-aggregated daily total.
 - Hourly/daily detection is per station; one daily-format station can be uploaded alongside hourly stations.
 - Negative or infinite rainfall is rejected before summation, so a positive daily sum cannot hide a negative hourly value.
-- Pipeline output contains **no missing rainfall values**. Direct calls to the frozen Zone A function do not carry the service's completeness guarantees.
+- Pipeline output contains **no missing rainfall values**. Direct calls to Zone A do not carry the service's completeness guarantees.
 
 ### Quality reporting and verification
 - `exclusion_details.incomplete_days`: daily rows produced by Zone A that are excluded for lacking a complete usable total.
 - `rows_filled`: number of permitted single-hour estimates made **before** daily exclusions. Includes estimates in days later excluded; it is not the number of retained interpolated days.
 - `rows_excluded`: difference between the report's post-aggregation input daily-row count and final retained daily-row count. It does not count fully missing calendar days that vanished during hourly cleaning.
 - Station exclusion counters are recalculated after completeness checks. Timestamp duplicates are reported for both single-combined and multi-file uploads.
-- The hourly gap and additional daily-gap counters still come from the frozen algorithm. A zero additional daily-gap count does not establish complete calendar coverage; hourly cleaning can already have removed all readings for a day.
+- `insufficient_readings_stations` remains in the response for compatibility with older saved runs, but is zero for new runs; stations with no usable days count under `zero_valid_stations`.
+- The hourly gap and additional daily-gap counters still come from the unchanged gap-cleaning rules. A zero additional daily-gap count does not establish complete calendar coverage; hourly cleaning can already have removed all readings for a day.
 - Regression suite: from the repository root, run `api/.venv/Scripts/python.exe -m unittest discover -s api/tests -v`. It includes independent CSV/Decimal recalculation of the four supplied HMDAS files: **3,029 complete daily totals**, **319 partial daily totals excluded**, **127 hourly gaps filled**. This verifies cleaning arithmetic and completeness, not LOF accuracy or sensor health.
 
 ### Inputs required

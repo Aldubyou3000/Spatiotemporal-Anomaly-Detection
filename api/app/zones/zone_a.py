@@ -165,7 +165,7 @@ def process_zone_a(raw_data: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]
     3. Hourly to daily downmapping (sum per station per day; interpolated_flag carried)
     4. Input validation (columns, types, ranges)
     5. Remove duplicate (station_id + date) rows
-    6. Station-level filtering (aggressive: 0 valid or <2 valid readings)
+    6. Station-level filtering (exclude stations with no valid readings)
     7. Daily row-level gap detection & filtering (no interpolation at daily level)
     8. Numeric rounding (1 decimal place)
     9. Quality report generation
@@ -312,7 +312,7 @@ def _validate_input(raw_data: pd.DataFrame) -> pd.DataFrame:
 
 def _filter_stations_by_validity(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Exclude entire stations with 0% valid daily readings or fewer than 2 valid readings.
+    Exclude entire stations with no valid daily readings; one valid day is enough.
 
     Valid reading: rainfall is non-NaN.
 
@@ -329,14 +329,13 @@ def _filter_stations_by_validity(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[s
     valid_counts = df.groupby('station_id')['_is_valid_reading'].sum()
 
     zero_valid = valid_counts[valid_counts == 0].index.tolist()
-    insufficient = valid_counts[(valid_counts > 0) & (valid_counts < 2)].index.tolist()
 
     exclusion_stats = {
         'zero_valid_stations': len(zero_valid),
-        'insufficient_readings_stations': len(insufficient),
+        'insufficient_readings_stations': 0,
     }
 
-    stations_to_exclude = set(zero_valid + insufficient)
+    stations_to_exclude = set(zero_valid)
     if stations_to_exclude:
         df = df[~df['station_id'].isin(stations_to_exclude)].copy()
 
@@ -505,8 +504,7 @@ def _generate_quality_report(
         f"series-start: {hour_gap_exclusions['starts_with_nan']}, "
         f"series-end: {hour_gap_exclusions['ends_with_nan']}. "
         f"Station exclusions: {total_stations_excluded} "
-        f"({station_exclusions['zero_valid_stations']} with 0% valid, "
-        f"{station_exclusions['insufficient_readings_stations']} with <2 readings). "
+        f"({station_exclusions['zero_valid_stations']} with no valid readings). "
         f"Daily exclusions — gaps ≥2d: {gap_exclusions['multi_day_gaps']}, "
         f"series-start: {gap_exclusions['starts_with_nan']}, "
         f"series-end: {gap_exclusions['ends_with_nan']}, "
