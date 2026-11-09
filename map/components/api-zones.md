@@ -15,7 +15,7 @@ The flagship feature: CSV upload → clean → group → anomaly-detect. The API
 | `services/hmdas_converter.py` | Reformats PAGASA/HMDAS exports (one file per station, 6-line metadata header) into the combined pipeline frame. **Does not judge data quality — Zone A still does QC.** Auto-detects raw HMDAS vs already-combined CSV. |
 | `zones/zone_a.py` | Removes edge/multi-row missing gaps, interpolates isolated rows, sums hourly rainfall to daily, and excludes stations with no valid daily readings. Does not itself enforce hourly completeness; use the pipeline service. |
 | `zones/zone_b.py` | **Frozen.** Selects the three closest stations using Haversine distance; no radius cutoff or `neighbor_group_id`. |
-| `zones/zone_c.py` | Per-day LOF (score <= -2, >=10 mm) plus a >=5 mm / >=30% excess over neighbor median. Original near-zero low rule plus severe partial deficits above 1 mm. Four-station gate and deterministic offsets below 0.001 mm. |
+| `zones/zone_c.py` | Per-day LOF (score <= -2, >=10 mm) plus a >=5 mm / >=30% excess over neighbor median. Near-zero low ratio 25%; partial readings above 1 mm use a separate 65% neighbor ratio with >=10 mm shortfall. Four-station gate and deterministic offsets below 0.001 mm. |
 | `schemas/zones.py` | `ProcessResult` and supporting Pydantic models. |
 | `api/tests/test_zones_quality.py` | Stdlib unittest regression suite, including independent CSV/Decimal verification of every complete daily output from the supplied HMDAS dataset. |
 
@@ -43,7 +43,7 @@ The flagship feature: CSV upload → clean → group → anomaly-detect. The API
 - Zone C requires at least four reporting station-days in that group. Otherwise `lof_score` stays missing and both daily flags stay false: this is unassessed, not proof of normal rainfall.
 - High readings: rainfall-only, one-dimensional LOF; no RobustScaler. The service passes `n_neighbors=3`, but Zone C clamps it to two rainfall neighbors. Geographic grouping and LOF rainfall neighbors are different steps.
 - A high flag needs negative LOF score <= -2, rainfall above the same-day group median and >=10 mm, plus excess over the **neighbor-only** median >=5 mm and >=30% of that median. These new tolerances are empirical development choices, not RIDF-derived or agency-approved limits. No fixed flag quota is used.
-- Low screening uses explicit rules, not LOF. Near-zero events retain rainfall <=1 mm, group median >=10 mm and rainfall <25% of that median. Partial low events additionally allow own rainfall >1 mm, neighbor-only median >=10 mm, own rainfall strictly <25% of it, and shortfall >=10 mm. The four-station gate applies to both.
+- Low screening uses explicit rules, not LOF. Near-zero events retain rainfall <=1 mm, group median >=10 mm and rainfall <25% of that median. Partial low events additionally allow own rainfall >1 mm, neighbor-only median >=10 mm, own rainfall strictly <65% of it, and shortfall >=10 mm. The four-station gate applies to both.
 - Ties use deterministic offsets `rank * (0.001 / group_size)` after sorting station IDs. No process-global random state remains. Repeated calls and shuffled input rows reproduce exact scores; the displayed rainfall/neighbor ratio is still not the LOF score.
 - API daily low flags and unified anomaly summaries include partial deficits; `is_dry_stuck`, dry summaries and low station-pattern evidence continue to describe near-zero behavior. Their narrower scope is intentional. Existing shapes and history fingerprinting remain compatible.
 
@@ -106,3 +106,7 @@ Render verification (2026-10-28): workspace tea-da688ov10e5c73eh7om0 and single 
 
 ## One-day deployment fix (2026-11-09)
 Both the service eligibility check and Zone A station filter now accept one usable day. Hourly completeness still requires 24 distinct hours; same-day anomaly screening still requires four reporting stations. The legacy insufficient_readings_stations field remains zero for new runs. The isolated release passed all 72 backend tests and processed the four one-day HMDAS uploads. Existing multi-day observations, scores and flags match the prior version. No schema or database migration is needed.
+
+
+## Align deployed partial-low screening with recorded evaluation (2026-11-10)
+The local, previously uncommitted Zone C partial-low ratio is 0.65; main used the near-zero ratio 0.25 for partial readings as well. On the frozen trace-neighbor fixture this explains 361 versus 462 flags: high247 unchanged, low114 to215 (101 additional partial lows). Fresh local processing matches every saved daily record, score, flag and all 4384 evaluation classifications, preserving the recorded low/high/normal confusion matrix [[154,6,53],[13,177,32],[48,64,3661]]. Input and evaluation artifacts remain unchanged. Publish Zone C and its boundary/summary regressions together. Existing saved snapshots require rerunning input to reflect updated rules.

@@ -111,7 +111,7 @@ For each station, for each day:
 4. Fit `LocalOutlierFactor(n_neighbors=min(2, n_neighbors))`; reject a non-integer/bool neighbor parameter or one smaller than two.
 5. Flag `is_anomaly` only when the score is at most -2.0, rainfall is at least 10 mm and above the group median, and its excess over the **other stations' median** is at least both **5 mm and 30 percent of that neighbor median**.
 6. Retain the original near-zero low rule: own rainfall at most 1 mm, group median at least 10 mm, and own rainfall below 25 percent of the group median.
-7. Also screen a **partial low reading above 1 mm** when the other stations' median is at least 10 mm, own rainfall is strictly below 25 percent of that median, and the shortfall is at least 10 mm. These are low flags, not LOF classifications or near-zero/stuck events.
+7. Also screen a **partial low reading above 1 mm** when the other stations' median is at least 10 mm, own rainfall is strictly below **65 percent** of that median, and the shortfall is at least 10 mm. These are low flags, not LOF classifications or near-zero/stuck events.
 
 The 5 mm/30 percent high tolerances are provisional engineering settings selected using the existing development fixture. They are not PAGASA/WMO standards, instrument accuracy specifications, or RIDF-derived limits. Near a threshold, small errors may be deliberately left unflagged. The low extension can flag valid localized dry weather; it improves sensitivity at a false-alarm cost that is reported separately.
 

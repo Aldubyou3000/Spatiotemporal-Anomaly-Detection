@@ -735,3 +735,8 @@ Prepared the existing one-day eligibility changes as an isolated API release, ex
 ## [2026-11-09] Enlarge and align station map dots
 
 Unified normal and flagged station marker radius, opacity, outline and label offset in shared StationMap. Map tests (10) and TypeScript pass. Reviewed shared candidates and orphans; no new duplication or changed references.
+
+
+## [2026-11-10] Align deployment with evaluated partial-low rule
+
+Traced 361 deployed versus 462 local synthetic flags to the uncommitted 65% partial-low ratio. Reproduced both totals on frozen trace-neighbor data and checked local outputs against recorded confusion-matrix evidence without rewriting artifacts. All 75 backend tests passed for the scoped Zone C release. Shared candidates and orphans reviewed; no new runtime references or duplicate rules.

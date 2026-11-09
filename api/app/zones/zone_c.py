@@ -47,12 +47,13 @@ HIGH_RELATIVE_DIFFERENCE = 0.30
 # Low-side anomaly (silent) — single day, deterministic, no LOF.
 # A station that stays at ≤1 mm while its group median is ≥10 mm and is <25%
 # of that median is a low outlier for that day. Partial readings above 1 mm
-# additionally use a neighbor-only median and a minimum 10 mm shortfall.
+# additionally use a neighbor-only median, a separate 65% ratio and a minimum 10 mm shortfall.
 # High uses LOF plus magnitude checks; low uses explicit screening rules.
 # Keeps the dataset limited (no new libs) and unbiased (same thresholds for all).
 LOW_MAX_RAIN_MM = 1.0
 LOW_MIN_MEDIAN_MM = 10.0
 LOW_RATIO = 0.25
+PARTIAL_LOW_RATIO = 0.65
 LOW_MIN_DEFICIT_MM = 10.0
 
 # Deterministic tie offsets, below the 0.1 mm measurement resolution.
@@ -181,7 +182,7 @@ def zone_c_lof_anomaly_detection(cleaned_data: pd.DataFrame,
             partial_low = (
                 station_value > LOW_MAX_RAIN_MM
                 and neighbor_median >= LOW_MIN_MEDIAN_MM
-                and station_value < neighbor_median * LOW_RATIO
+                and station_value < neighbor_median * PARTIAL_LOW_RATIO
                 and neighbor_median - station_value >= LOW_MIN_DEFICIT_MM
             )
 
