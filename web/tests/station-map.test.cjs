@@ -63,7 +63,8 @@ test('station selection highlights its marker without refitting or enlarging cir
     h.select();
     assert.equal(h.markers[3].options.weight, 4);
     assert.equal(h.markers[2].options.weight, 3);
-    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 5]);
+    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 10]);
+    assert.ok(h.markers.slice(2).every(marker => marker.options.fillOpacity === 1));
     assert.equal(h.calls.filter(call => call[0] === 'fit').length, fits);
   } finally { h.cleanup(); h.close(); }
 });
@@ -77,7 +78,7 @@ test('neighbor emphasis changes outlines without changing fill colors or zoom', 
     assert.equal(h.markers[2].options.color, '#3C4043', 'neighbors must not look like blue selections');
     assert.equal(h.markers[3].options.weight, 4);
     assert.deepEqual(h.markers.map(marker => marker.options.fillColor), fills);
-    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 5]);
+    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 10]);
     assert.equal(h.calls.filter(call => call[0] === 'fit').length, fits);
   } finally { h.cleanup(); h.close(); }
 });
@@ -94,9 +95,9 @@ test('rapid station changes and clearing selection restore every previous outlin
     assert.equal(h.markers[3].options.color, '#1E6FD9');
     h.render({ selectedStationId: undefined, highlightedStationIds: [] }); h.select();
     assert.equal(h.markers[3].options.color, '#ffffff');
-    assert.equal(h.markers[3].options.weight, 2);
+    assert.equal(h.markers[3].options.weight, 3);
     assert.equal(h.calls.filter(call => call[0] === 'fit').length, fits);
-    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 5]);
+    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 10]);
   } finally { h.cleanup(); h.close(); }
 });
 
@@ -122,7 +123,7 @@ test('development effect remount fits the new map and restores its current selec
     assert.equal(h.calls.filter(call => call[0] === 'fit').length, 2);
     assert.equal(h.markers.at(-1).options.color, '#1E6FD9');
     assert.equal(h.markers.at(-2).options.color, '#3C4043');
-    assert.equal(h.markers.at(-1).options.radius, 5);
+    assert.equal(h.markers.at(-1).options.radius, 10);
   } finally { h.cleanup(); h.close(); }
 });
 
@@ -135,7 +136,7 @@ test('station bounds use a single measured fit without a second implicit zoom', 
     assert.equal(h.calls.find(call => call[0] === 'fit')[1].animate, false);
     assert.deepEqual(h.calls.filter(call => call[0] === 'min').at(-1), ['min', 10]);
     assert.equal(h.calls.some(call => call[0] === 'implicitZoom'), false);
-    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 5]);
+    assert.deepEqual(h.markers.map(marker => marker.options.radius), [20, 14, 10, 10]);
     assert.ok(h.markers.slice(0, 2).every(marker => marker.options.className === 'station-map-halo'), 'only flagged halos should pulse');
     assert.ok(h.markers.slice(2).every(marker => !marker.options.className), 'station dots must stay still');
   } finally { h.cleanup(); h.close(); }
@@ -146,7 +147,7 @@ test('station updates replace marker layers without changing their pixel radii',
   try {
     h.updateStations();
     assert.ok(h.markers.slice(0, 4).every(marker => marker.removed));
-    assert.deepEqual(h.markers.slice(4).map(marker => marker.options.radius), [20, 14, 10, 5]);
+    assert.deepEqual(h.markers.slice(4).map(marker => marker.options.radius), [20, 14, 10, 10]);
     assert.equal(h.calls.some(call => call[0] === 'implicitZoom'), false);
   } finally { h.cleanup(); h.close(); }
 });
@@ -168,6 +169,7 @@ test('map retains neutral permanent station names and fits closer to station bou
     assert.equal(h.markers[2].tooltip.options.permanent, true);
     assert.equal(h.markers[2].tooltip.text, 'Flagged');
     assert.equal(h.markers[3].tooltip.text, 'Typical');
+    assert.equal(h.markers[3].tooltip.options.offset.y, -14);
     h.select();
     assert.deepEqual(h.calls.find(call => call[0] === 'fit')[1].padding, [24, 24]);
     assert.equal(h.calls.find(call => call[0] === 'fit')[1].maxZoom, 12);

@@ -163,12 +163,12 @@ export function StationMap({ stations, className, height = 480, style, selectedS
       }
 
       const marker = L.circleMarker([station.latitude, station.longitude], {
-        radius: isAnomalous ? 10 : 5,
-        // White stroke keeps the dot crisp; flagged gets thicker stroke and full opacity
+        radius: 10,
+        // Keep every station equally visible; color and halos indicate flagged readings.
         color: "#ffffff",
-        weight: isAnomalous ? 3 : 2,
+        weight: 3,
         fillColor: baseColor,
-        fillOpacity: isAnomalous ? 1 : 0.62,
+        fillOpacity: 1,
       }).addTo(map);
 
       const gaugeLabel = status ? REVIEW_STATUS[status].label : "Not assessed";
@@ -212,7 +212,7 @@ export function StationMap({ stations, className, height = 480, style, selectedS
       marker.bindTooltip(label, {
         permanent: true,
         direction: "top",
-        offset: L.point(0, isAnomalous ? -14 : -9),
+        offset: L.point(0, -14),
         className: "station-label",
       });
 
@@ -239,7 +239,7 @@ export function StationMap({ stations, className, height = 480, style, selectedS
     stationMarkersRef.current.forEach((marker, id) => {
       const selected = id === selectedStationId;
       const nearby = highlightedStationIds?.includes(id);
-      marker.setStyle({ color: selected ? getCssVar("--brand") : nearby ? getCssVar("--text-secondary") : "#ffffff", weight: selected ? 4 : (marker.options.radius === 10 ? 3 : 2) });
+      marker.setStyle({ color: selected ? getCssVar("--brand") : nearby ? getCssVar("--text-secondary") : "#ffffff", weight: selected ? 4 : 3 });
       if (selected) marker.bringToFront();
     });
   }, [selectedStationId, highlightedStationIds, stations, theme]);

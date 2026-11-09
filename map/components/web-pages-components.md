@@ -460,3 +460,7 @@ History, Tickets, Technicians and Audit now use viewport-constrained flex pages 
 Deployment map hotfix (supersedes Stadia basemap choice): restored the original OpenStreetMap Standard light tiles and attribution. Stadia allowed unauthenticated localhost but returned HTTP 401 with the Vercel referrer because the production domain was not authorized. No Stadia account/key is now needed. Dark Esri tiles, station selection, labels and viewport behavior remain unchanged. Follow OSM tile policy: visible attribution, normal browser cache/referrer, no bulk downloads. Live single-tile verification returned HTTP 200 image/png from OSM versus 401 from Stadia.
 
 Detection wait behavior (2026-10-28): Zones keeps its existing processing view and disables Run for the full healthy job lifetime. Removed the generic claim that every timeout is a cold start and an immediate rerun will be instant. Existing progress, Stop confirmation, terminal error/setup and result rendering remain; running sessions now receive native beforeunload protection through ZonesContext.
+
+
+## Consistent station dots (2026-11-09)
+Shared StationMap now uses a 10px radius, fully opaque fill and 3px outline for all station dots; labels share the same vertical offset. Selection changes outline emphasis only, preserving marker radius and viewport. Flagged halos remain separate. Applies to Zones and saved History results through OverviewTab. All 10 map regression checks and TypeScript pass.

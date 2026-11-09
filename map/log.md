@@ -730,3 +730,8 @@ Vercel8cc68ce failed with36Turbopack next/font/google Roboto query errors, confi
 ## [2026-11-09] Ship one-day processing fix
 
 Prepared the existing one-day eligibility changes as an isolated API release, excluding unrelated local edits. All 72 committed backend tests pass with the updated quality regressions; exact one-day uploads succeed and multi-day processing values match baseline. Reviewed shared candidates and orphans: no new duplication or changed runtime references.
+
+
+## [2026-11-09] Enlarge and align station map dots
+
+Unified normal and flagged station marker radius, opacity, outline and label offset in shared StationMap. Map tests (10) and TypeScript pass. Reviewed shared candidates and orphans; no new duplication or changed references.
