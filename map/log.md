@@ -750,3 +750,8 @@ Replaced ambiguous export choices with one contextual CSV action using the activ
 ## [2026-11-10] Remove LOF scores from website outputs
 
 Removed score display and help text in Data and Review Readings. Filtered website CSVs and legacy ticket details and PDFs, and added regression coverage. Shared candidates and orphans reviewed. Web callers reuse one output filter and the analyst PDF applies its equivalent at generation time.
+
+
+## [2026-11-10] Remove ticket creation zone choices
+
+Removed the Zone field and confirmation row from the shared Zones and History ticket wizard. Kept the station and source reading link. Reviewed shared candidates and orphans. No module references changed.

@@ -472,3 +472,7 @@ Removed ZoneResults ExportMenu and its unused portal styling. DataTable owns a s
 
 ## Remove LOF score from website results (2026-11-10)
 The Data table and Review Readings details omit LOF scores in fresh runs and reopened History runs. Legacy ticket details also filter LOF fields before the fallback metric cards render. Rainfall, flags, and analyst decisions remain available.
+
+
+## Ticket creation without zone choices (2026-11-10)
+The shared CreateTicketModal omits the Zone selector and dispatch summary field. Station ID spans the form width, and the submitted ticket still includes its station and any linked run and reading date. New web tickets omit optional anomaly_zone metadata.

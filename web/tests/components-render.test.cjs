@@ -22,6 +22,7 @@ function load(source) {
     : name==='@/context/AuthContext' ? {useAuth:()=>({user:load('../tests/fixtures').analyst,loading:false,logout:async()=>{}})}
     : name==='@/context/ThemeContext' ? {useTheme:()=>({theme:'light',setTheme(){}})}
     : name==='@/components/ui/Toast' ? {useToast:()=>notices}
+    : name==='@/components/ui/Modal' && source==='components/zones/CreateTicketModal' ? {Modal:({children})=>children,ModalFooter:({children})=>children}
     : name==='swr' ? {__esModule:true,default:key=>({data:load('../tests/fixtures').fixtureFor(key),mutate:async()=>{},isLoading:false}),mutate:async()=>{}}
     : name.startsWith('@/') ? load(name.slice(2))
     : name.startsWith('.') ? load(path.relative(root,path.resolve(path.dirname(file),name))) : require(name);
@@ -42,6 +43,18 @@ test('upload uses an accessible browse button and keeps selected files removable
   assert.match(hmdas,/>NapindanII<\/p>/);
   for (const name of names) assert.ok(hmdas.includes('aria-label="Remove '+name+'"'), 'removal keeps the original filename');
 
+});
+
+test('ticket creation shows station and priority without asking for a zone', () => {
+  const { CreateTicketModal } = load('components/zones/CreateTicketModal');
+  const html = renderToStaticMarkup(React.createElement(CreateTicketModal, {
+    stationId: 'ScienceGarden', runId: 'saved-run', readingDate: '2025-09-01',
+    technicians: [], file: null, onClose() {},
+  }));
+  assert.match(html, />Station ID/);
+  assert.match(html, /<input(?=[^>]*readonly="")(?=[^>]*value="ScienceGarden")/i);
+  assert.match(html, />Priority</);
+  assert.doesNotMatch(html, />Zone<|>Zone [ABC]</);
 });
 
 test('idle detection steps stay visible without placeholder counts; results keep real counts',()=>{

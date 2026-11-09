@@ -13,7 +13,7 @@ import { byWorkload } from "@/lib/technicianWorkload";
 import { ticketsApi } from "@/lib/api/tickets";
 import { invalidateTicketLists } from "@/hooks/useTickets";
 import { invalidateHistory } from "@/hooks/useHistory";
-import type { AnomalyZone, Technician, TicketPriority } from "@/types/tickets";
+import type { Technician, TicketPriority } from "@/types/tickets";
 export function CreateTicketModal({
   stationId,
   technicians,
@@ -36,7 +36,6 @@ export function CreateTicketModal({
   const [stationInput, setStationInput] = useState(stationId);
   const [priority, setPriority] = useState<TicketPriority>("medium");
   const [selectedTechIds, setSelectedTechIds] = useState<string[]>([]);
-  const [zone, setZone] = useState("C");
   const [attachFile, setAttachFile] = useState(!!file);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,7 +63,6 @@ export function CreateTicketModal({
         description: description.trim() || undefined,
         station_id: stationInput.trim(),
         priority,
-        anomaly_zone: (zone || undefined) as AnomalyZone | undefined,
         technician_ids: selectedTechIds,
         run_id: runId,
         reading_date: readingDate,
@@ -148,22 +146,7 @@ export function CreateTicketModal({
         {step === 1 && (
           <>
             <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Describe the anomaly or issue" required autoFocus />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Input label="Station ID" readOnly={!!runId} value={stationInput} onChange={(e) => setStationInput(e.target.value)} required />
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Zone</label>
-                <Select
-                  value={zone}
-                  onChange={setZone}
-                  options={[
-                    { value: "", label: "— none —" },
-                    { value: "A", label: "Zone A" },
-                    { value: "B", label: "Zone B" },
-                    { value: "C", label: "Zone C" },
-                  ]}
-                />
-              </div>
-            </div>
+            <Input label="Station ID" readOnly={!!runId} value={stationInput} onChange={(e) => setStationInput(e.target.value)} required />
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label style={{ fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text-secondary)" }}>Priority</label>
               <Select
@@ -242,7 +225,6 @@ export function CreateTicketModal({
                 { label: "Title", value: title.trim() || "—" },
                 { label: "Station", value: stationInput.trim() || "—" },
                 { label: "Priority", value: priority.charAt(0).toUpperCase() + priority.slice(1) },
-                { label: "Zone", value: zone || "—" },
                 {
                   label: selectedTechs.length === 1 ? "Technician" : "Technicians",
                   value: selectedTechs.length ? selectedTechs.map((t) => t.full_name).join(", ") : "—",
